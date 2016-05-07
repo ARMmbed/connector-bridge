@@ -852,7 +852,9 @@ public class MQTTTransport extends Transport {
             this.m_connect_host = null;
             this.m_connect_port = 0;
             this.m_connect_client_id = null;
-            Utils.deleteKeystore(this.errorLogger(),this.m_keystore_filename,this.m_keystore_basename);
+            if (this.m_use_pki == true && this.m_keystore_filename != null) {
+                Utils.deleteKeystore(this.errorLogger(),this.m_keystore_filename,this.m_keystore_basename);
+            }
             this.m_keystore_filename = null;
         }
     }
