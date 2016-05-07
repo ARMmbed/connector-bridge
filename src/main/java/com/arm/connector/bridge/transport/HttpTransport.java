@@ -600,7 +600,7 @@ public class HttpTransport extends BaseClass {
             //    this.errorLogger().info("HTTP(" + verb +") URL: " + url_str + " Data: " + data + " Response code: " + ((HttpURLConnection)connection).getResponseCode());
         }
         catch (IOException ex) {
-            this.errorLogger().warning("Caught Exception in doHTTP(" + verb + "): " + ex.getMessage());
+            this.errorLogger().info("Caught Exception in doHTTP(" + verb + "): " + ex.getMessage());
             result = null;
         }
 

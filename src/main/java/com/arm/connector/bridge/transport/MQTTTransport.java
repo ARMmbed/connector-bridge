@@ -640,7 +640,7 @@ public class MQTTTransport extends Transport {
         }
         else {
             // unable to subscribe - not connected... 
-            this.errorLogger().warning("MQTTTransport: unable to subscribe. Connection is missing and/or NULL");
+            this.errorLogger().info("MQTTTransport: unable to subscribe. Connection is missing and/or NULL");
         }
     }
     
@@ -656,11 +656,11 @@ public class MQTTTransport extends Transport {
             catch (Exception ex) {
                 if (this.retriesExceeded()) {
                     // unable to unsubscribe from topic (final)
-                    this.errorLogger().critical("MQTTTransport: unable to unsubscribe from topic (final)", ex);
+                    this.errorLogger().info("MQTTTransport: unable to unsubscribe from topic (final)", ex);
                 }
                 else {
                     // unable to subscribe to topic
-                    this.errorLogger().warning("MQTTTransport: unable to unsubscribe to topic (" + this.m_num_retries + " of " + this.m_max_retries + ")", ex);
+                    this.errorLogger().info("MQTTTransport: unable to unsubscribe to topic (" + this.m_num_retries + " of " + this.m_max_retries + ")", ex);
 
                     // attempt reset
                     this.resetConnection();
@@ -672,7 +672,7 @@ public class MQTTTransport extends Transport {
         }
         else {
             // unable to subscribe - not connected... 
-            this.errorLogger().warning("MQTTTransport: unable to unsubscribe. Connection is missing and/or NULL");
+            this.errorLogger().info("MQTTTransport: unable to unsubscribe. Connection is missing and/or NULL");
         }
     }
 
@@ -840,7 +840,7 @@ public class MQTTTransport extends Transport {
         }
         
         // DEBUG
-        this.errorLogger().info("MQTT: disconnected from MQTT Broker. Cleaning up...");
+        this.errorLogger().warning("MQTT: disconnected. Cleaning up...");
         
         // clean up...
         super.disconnect();
@@ -866,7 +866,7 @@ public class MQTTTransport extends Transport {
         }
         else {
             // no initial connect() has succeeded... so no cached creds available
-            this.errorLogger().warning("reconnect: unable to reconnect() prior to initial connect() success...");
+            this.errorLogger().info("reconnect: unable to reconnect() prior to initial connect() success...");
             return false;
         }
     }

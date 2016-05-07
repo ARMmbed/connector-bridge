@@ -360,10 +360,10 @@ public class Utils {
            // DEBUG
            if (status != 0) {
                // non-zero exit status
-               logger.warning("AWS CLI: Invoked: " + cmd);
-               logger.warning("AWS CLI: Response: " + response);
-               logger.warning("AWS CLI: Errors: " + error);
-               logger.warning("AWS CLI: Exit Code: " + status);
+               logger.info("AWS CLI: Invoked: " + cmd);
+               logger.info("AWS CLI: Response: " + response);
+               logger.info("AWS CLI: Error: " + error);
+               logger.info("AWS CLI: Exit Code: " + status);
            }
            else {
                // successful exit status

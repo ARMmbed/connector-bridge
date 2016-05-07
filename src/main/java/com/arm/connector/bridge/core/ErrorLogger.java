@@ -230,8 +230,8 @@ public class ErrorLogger extends BaseClass {
             if (this.m_exception != null) {
                 if (this.m_message != null) {
                     // log the message
-                    System.out.println(this.prettyLevel() + this.m_message + " Exception: " + this.m_exception + ". StackTrace: " + this.stackTraceToString(this.m_exception));
-                    this.buffer(this.m_message + " Exception: " + this.m_exception + ". StackTrace: " + this.stackTraceToString(this.m_exception));                   
+                    System.out.println(this.prettyLevel() + this.m_message + " Exception: " + this.m_exception + ".\n\nStackTrace: " + this.stackTraceToString(this.m_exception));
+                    this.buffer(this.m_message + " Exception: " + this.m_exception + ".\n\nStackTrace: " + this.stackTraceToString(this.m_exception));                   
                  }
                 else {
                     // log the exception
