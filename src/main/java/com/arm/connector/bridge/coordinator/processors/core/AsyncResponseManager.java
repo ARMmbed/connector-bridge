@@ -114,9 +114,11 @@ public class AsyncResponseManager {
             // construct the reply message value
             String reply = proc.formatAsyncResponseAsReply(response,verb);
             if (reply != null) {
-                // GETs come back over as observations...
+                // Get the reply MQTT topic...default is the response topic
                 String target_topic = response_topic;
-                if (verb.equalsIgnoreCase("get") == true && record.get("reply_topic") != null) {
+                
+                // If the reply topic is different that the response topic... it takes preference...
+                if (record.get("reply_topic") != null) {
                     target_topic = (String)record.get("reply_topic");
                 }
                 

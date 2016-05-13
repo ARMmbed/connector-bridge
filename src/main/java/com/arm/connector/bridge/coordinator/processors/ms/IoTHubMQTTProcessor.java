@@ -586,7 +586,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
             
             // AsyncResponse detection and recording...
             if (this.isAsyncResponse(response) == true) {
-                if (coap_verb.equalsIgnoreCase("get") == true) {
+                // CoAP GET and PUT provides AsyncResponses...
+                if (coap_verb.equalsIgnoreCase("get") == true || coap_verb.equalsIgnoreCase("put") == true) {
                     // its an AsyncResponse.. so record it...
                     this.recordAsyncResponse(response,coap_verb,this.mqtt(ep_name),this,topic,message,ep_name,uri);
                 }
@@ -607,7 +608,9 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 
                 // send the observation (GET reply)...
                 if (this.mqtt(ep_name) != null) {
-                    boolean status = this.mqtt(ep_name).sendMessage(this.customizeTopic(this.m_iot_hub_observe_notification_topic,ep_name,null),observation,QoS.AT_MOST_ONCE); 
+                    String reply_topic = this.customizeTopic(this.m_iot_hub_observe_notification_topic,ep_name,null);
+                    reply_topic = reply_topic.replace(this.m_observation_type,this.m_async_response_type);
+                    boolean status = this.mqtt(ep_name).sendMessage(reply_topic,observation,QoS.AT_MOST_ONCE); 
                     if (status == true) {
                         // success
                         this.errorLogger().info("IoTHub(CoAP Command): CoAP observation(get) sent. SUCCESS");
@@ -656,6 +659,9 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // default formatter for AsyncResponse replies
     @Override
     public String formatAsyncResponseAsReply(Map async_response,String verb) {
+        // DEBUG
+        this.errorLogger().info("IoTHub(" + verb + ") AsyncResponse: " + async_response);
+        
         if (verb != null && verb.equalsIgnoreCase("GET") == true) {           
             try {
                 // DEBUG
@@ -676,11 +682,11 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                         String uri = this.getURIFromAsyncID((String)async_response.get("id"));
                         String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
 
-                        // build out the 
+                        // build out the observation
                         String message = this.createObservation(verb, ep_name, uri, value);
 
                         // DEBUG
-                        this.errorLogger().info("IoTHub: Created(" + verb + ") observation: " + message);
+                        this.errorLogger().info("IoTHub: Created(" + verb + ") GET observation: " + message);
 
                         // return the message
                         return message;
@@ -689,9 +695,63 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
             }
             catch (Exception ex) {
                 // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("formatAsyncResponseAsReply(IoTHub): Exception during GET reply -> observation creation. Not sending GET as observation...",ex);
+                this.errorLogger().warning("IoTHub(GET): Exception in formatAsyncResponseAsReply(): ",ex);
             }
         }
+        
+        // Handle AsyncReplies that are CoAP PUTs
+        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
+            try {    
+                // check to see if we have a payload or not... 
+                String payload = (String)async_response.get("payload");
+                if (payload != null) {
+                    // trim 
+                    payload = payload.trim();
+
+                    // parse if present
+                    if (payload.length() > 0) {
+                        // Base64 decode
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
+                        
+                        // DEBUG
+                        this.errorLogger().info("IoTHub: Created(" + verb + ") PUT Observation: " + message);
+
+                        // return the message
+                        return message;
+                    }
+                }
+                else {
+                    // no payload... so we simply return the async-id
+                    String value = (String)async_response.get("async-id");
+                  
+                    // build out the response
+                    String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                    String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                    // build out the observation
+                    String message = this.createObservation(verb, ep_name, uri, value);
+                    
+                    // DEBUG
+                    this.errorLogger().info("IoTHub: Created(" + verb + ") PUT Observation: " + message);
+
+                    // return message
+                    return message;
+                }
+            }
+            catch (Exception ex) {
+                // Error in creating the observation message from the AsyncResponse PUT reply... 
+                this.errorLogger().warning("IoTHub(PUT): Exception in formatAsyncResponseAsReply(): ",ex);
+            }
+        }
+        
+        // return null message
         return null;
     }
     

@@ -463,8 +463,8 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             
                 // AsyncResponse detection and recording...
                 if (this.isAsyncResponse(json) == true) {
-                    if (verb.equalsIgnoreCase("get") == true) {
-                        // its an AsyncResponse to a GET.. so record it... 
+                    if (verb.equalsIgnoreCase("get") == true || verb.equalsIgnoreCase("put") == true) {
+                        // its an AsyncResponse to a GET or a PUT.. so record it... 
                         String endpoint = this.getElementFromTopic(topic,4);                        // topic position SENSITIVE
                         String uri = this.buildURIFromTopic(topic,endpoint);
                         this.recordAsyncResponse(json,verb,this.mqtt(),this,response_topic,message,endpoint,uri);
@@ -741,12 +741,13 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     
     // default formatter for AsyncResponse replies
     public String formatAsyncResponseAsReply(Map async_response,String verb) {
+        // DEBUG
+        this.errorLogger().info("MQTT-STD(" + verb + ") AsyncResponse: " + async_response);
+
+        // Handle AsyncReplies that are CoAP GETs
         if (verb != null && verb.equalsIgnoreCase("GET") == true) {
             try {
-                // DEBUG
-                this.errorLogger().info("MQTT-STD: CoAP AsyncResponse for GET: " + async_response);
-                    
-                // get the payload from the ith entry
+                // check to see if we have a payload or not...
                 String payload = (String)async_response.get("payload");
                 if (payload != null) {
                     // trim 
@@ -764,12 +765,56 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
                         return message;
                     }
                 }
+                else {
+                    // GET should always have a payload
+                    this.errorLogger().warning("MQTT-STD (" + verb + "): GET Observation has NULL payload... Ignoring...");
+                }
             }
             catch (Exception ex) {
                 // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("formatAsyncResponseAsReply(IoTF): Exception during GET reply -> observation creation. Not sending GET as observation...",ex);
+                this.errorLogger().warning("MQTT-STD(GET): Exception in formatAsyncResponseAsReply(): ",ex);
             }
         }
+                
+        // Handle AsyncReplies that are CoAP PUTs
+        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
+            try {    
+                // check to see if we have a payload or not... 
+                String payload = (String)async_response.get("payload");
+                if (payload != null) {
+                    // trim 
+                    payload = payload.trim();
+
+                    // parse if present
+                    if (payload.length() > 0) {
+                        // Base64 decode
+                        String message = Utils.decodeCoAPPayload(payload);
+                        
+                        // DEBUG
+                        this.errorLogger().info("MQTT-STD: Created(" + verb + ") PUT Observation: " + message);
+
+                        // return the message
+                        return message;
+                    }
+                }
+                else {
+                    // no payload... so we simply return the async-id
+                    String message = (String)async_response.get("async-id");
+                    
+                    // DEBUG
+                    this.errorLogger().info("MQTT-STD: Created(" + verb + ") PUT Observation: " + message);
+
+                    // return message
+                    return message;
+                }
+            }
+            catch (Exception ex) {
+                // Error in creating the observation message from the AsyncResponse PUT reply... 
+                this.errorLogger().warning("MQTT-STD(PUT): Exception in formatAsyncResponseAsReply(): ",ex);
+            }
+        }
+        
+        // return null message
         return null;
     }
     

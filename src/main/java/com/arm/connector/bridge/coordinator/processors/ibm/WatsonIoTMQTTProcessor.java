@@ -650,7 +650,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             
             // AsyncResponse detection and recording...
             if (this.isAsyncResponse(response) == true) {
-                if (coap_verb.equalsIgnoreCase("get") == true) {
+                // CoAP GET and PUT provides AsyncResponses...
+                if (coap_verb.equalsIgnoreCase("get") == true || coap_verb.equalsIgnoreCase("put") == true) {
                     // its an AsyncResponse.. so record it...
                     this.recordAsyncResponse(response,coap_verb,this.mqtt(),this,topic,message,ep_name,uri);
                 }
@@ -671,7 +672,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                 
                 // send the observation (GET reply)...
                 if (this.mqtt() != null) {
-                    boolean status = this.mqtt().sendMessage(this.customizeTopic(this.m_watson_iot_observe_notification_topic,ep_name,this.m_watson_iot_device_manager.getDeviceType(ep_name)),observation,QoS.AT_MOST_ONCE); 
+                    String reply_topic = this.customizeTopic(this.m_watson_iot_observe_notification_topic,ep_name,this.m_watson_iot_device_manager.getDeviceType(ep_name));
+                    reply_topic = reply_topic.replace(this.m_observation_type,this.m_async_response_type);
+                    boolean status = this.mqtt().sendMessage(reply_topic,observation,QoS.AT_MOST_ONCE); 
                     if (status == true) {
                         // success
                         this.errorLogger().info("WatsonIoT(CoAP Command): CoAP observation(get) sent. SUCCESS");
@@ -726,6 +729,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     // default formatter for AsyncResponse replies
     @Override
     public String formatAsyncResponseAsReply(Map async_response,String verb) {
+        // DEBUG
+        this.errorLogger().info("WatsonIoT(" + verb + ") AsyncResponse: " + async_response);
+        
         if (verb != null && verb.equalsIgnoreCase("GET") == true) {           
             try {
                 // DEBUG
@@ -746,11 +752,11 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                         String uri = this.getURIFromAsyncID((String)async_response.get("id"));
                         String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
 
-                        // build out the 
+                        // build out the observation
                         String message = this.createObservation(verb, ep_name, uri, value);
 
                         // DEBUG
-                        this.errorLogger().info("WatsonIoT: Created(" + verb + ") observation: " + message);
+                        this.errorLogger().info("WatsonIoT: Created(" + verb + ") GET observation: " + message);
 
                         // return the message
                         return message;
@@ -759,9 +765,63 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             }
             catch (Exception ex) {
                 // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("formatAsyncResponseAsReply(WatsonIoT): Exception during GET reply -> observation creation. Not sending GET as observation...",ex);
+                this.errorLogger().warning("WatsonIoT(GET): Exception in formatAsyncResponseAsReply(): ",ex);
             }
         }
+        
+        // Handle AsyncReplies that are CoAP PUTs
+        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
+            try {    
+                // check to see if we have a payload or not... 
+                String payload = (String)async_response.get("payload");
+                if (payload != null) {
+                    // trim 
+                    payload = payload.trim();
+
+                    // parse if present
+                    if (payload.length() > 0) {
+                        // Base64 decode
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
+                        
+                        // DEBUG
+                        this.errorLogger().info("WatsonIoT: Created(" + verb + ") PUT Observation: " + message);
+
+                        // return the message
+                        return message;
+                    }
+                }
+                else {
+                    // no payload... so we simply return the async-id
+                    String value = (String)async_response.get("async-id");
+                    
+                    // build out the response
+                    String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                    String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                    // build out the observation
+                    String message = this.createObservation(verb, ep_name, uri, value);
+                    
+                    // DEBUG
+                    this.errorLogger().info("WatsonIoT: Created(" + verb + ") PUT Observation: " + message);
+
+                    // return message
+                    return message;
+                }
+            }
+            catch (Exception ex) {
+                // Error in creating the observation message from the AsyncResponse PUT reply... 
+                this.errorLogger().warning("WatsonIoT(PUT): Exception in formatAsyncResponseAsReply(): ",ex);
+            }
+        }
+        
+        // return null message
         return null;
     }
     

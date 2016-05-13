@@ -58,6 +58,8 @@ public class WatsonIoTDeviceManager extends BaseClass {
     
     private String m_watson_iot_gw_key = null;
     private String m_gw_iotf_auth_token = null;
+    
+    private String m_watson_iot_def_type = null;
        
     private String m_suffix = null;
     
@@ -98,6 +100,9 @@ public class WatsonIoTDeviceManager extends BaseClass {
         this.m_watson_iot_gw_key = "g-" + this.m_watson_iot_org_id + "-" + this.m_watson_iot_gw_type_id + "-" + this.m_watson_iot_gw_id;
         this.m_watson_iot_auth_token = this.preferences().valueOf("iotf_auth_token",this.m_suffix);
         this.m_watson_iot_gw_auth_token = Utils.createURLSafeToken(this.m_watson_iot_auth_token);
+        
+        // default device type in case we need it
+        this.m_watson_iot_def_type = this.preferences().valueOf("iotf_device_type",this.m_suffix);
     }
     
     // update the OrgID and APIKey
@@ -171,7 +176,17 @@ public class WatsonIoTDeviceManager extends BaseClass {
     
     // get the associated device type from the device name
     public String getDeviceType(String device) {
-        return this.m_device_types.get(device);
+        String type = this.m_device_types.get(device);
+        if (type == null || type.length() == 0) {
+            // DEBUG
+            this.errorLogger().info("WatsonIoT: WARNING Defaulting Device Type to: " + this.m_watson_iot_def_type + " for Device: " + device);
+            
+            // default the type
+            type = this.m_watson_iot_def_type;
+        }
+        
+        // return the type
+        return type;
     }
     
     // ensure we have a gateway device type

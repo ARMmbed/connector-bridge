@@ -553,7 +553,7 @@ public class MQTTTransport extends Transport {
         if (this.isConnected()) {
             try {
                 // receive the MQTT message and process it...
-                this.errorLogger().info("MQTTTransport: in receiveAndProcess(). Calling receiveAndProcessMessage()...");
+                //this.errorLogger().info("MQTTTransport: in receiveAndProcess(). Calling receiveAndProcessMessage()...");
                 this.receiveAndProcessMessage();
             }
             catch (Exception ex) {
