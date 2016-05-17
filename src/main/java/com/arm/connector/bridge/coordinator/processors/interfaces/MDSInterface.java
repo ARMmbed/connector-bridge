@@ -61,7 +61,7 @@ public interface MDSInterface {
     public void resetNotificationCallbackURL();
     
     // Device Metadata extraction
-    public void pullDeviceMetadata(Map endpoint);
+    public void pullDeviceMetadata(Map endpoint,AsyncResponseProcessor processor);
     
     // Begin mDS/mDS webhook and subscription validation polling...
     public void beginValidationPolling();

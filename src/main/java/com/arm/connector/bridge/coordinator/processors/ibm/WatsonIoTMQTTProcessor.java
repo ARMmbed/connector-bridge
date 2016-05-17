@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.ibm;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -41,7 +42,7 @@ import org.fusesource.mqtt.client.Topic;
  * IBM WatsonIoT peer processor based on MQTT with MessageSight
  * @author Doug Anson
  */
-public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface {
+public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     public static int               NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
     
     private String                  m_observation_type = "observation";
@@ -392,29 +393,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                     this.m_subscriptions.addSubscription(this.m_mds_domain,(String)endpoint.get("ep"),(String)endpoint.get("ept"),(String)resource.get("path"));
                 }
             }    
-            
-            // pre-populate the new endpoint with initial values for registration
-            this.orchestrator().pullDeviceMetadata(endpoint);
-            
-            try {
-                // create the device in WatsonIoT
-                this.errorLogger().info("processRegistration: calling registerNewDevice(): " + endpoint);
-                this.registerNewDevice(endpoint);
-                this.errorLogger().info("processRegistration: registerNewDevice() completed");
-            }
-            catch (Exception ex) {
-                this.errorLogger().warning("processRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
-            }
-            
-            try {
-                // subscribe for WatsonIoT as well..
-                this.errorLogger().info("processRegistration: calling subscribe(): " + endpoint);
-                this.subscribe((String)endpoint.get("ep"),(String)endpoint.get("ept"));
-                this.errorLogger().info("processRegistration: subscribe() completed");
-            }
-            catch (Exception ex) {
-                this.errorLogger().warning("processRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
-            }
+                        
+            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            this.retrieveEndpointAttributes(endpoint);
         }
     }
     
@@ -841,5 +822,50 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             return this.m_watson_iot_device_manager.deregisterDevice(device);
         }
         return false;
+    }
+    
+    // AsyncResponse response processor
+    @Override
+    public boolean processAsyncResponse(Map endpoint) { 
+        // DEBUG
+        this.errorLogger().info("Watson IoT: Completing Creating New Device: " + endpoint);
+        
+        // with the attributes added, we finally create the device in Watson IoT
+        this.completeNewDeviceRegistration(endpoint);
+        
+        // return our processing status
+        return true;
+    }
+    
+    // discover the endpoint attributes
+    private void retrieveEndpointAttributes(Map endpoint) {
+        // DEBUG
+        this.errorLogger().info("Watson IoT: Creating New Device: " + endpoint);
+        
+        // pre-populate the new endpoint with initial values for registration
+        this.orchestrator().pullDeviceMetadata(endpoint,this); 
+    }
+    
+    // complete processing of adding the new device
+    private void completeNewDeviceRegistration(Map endpoint) {
+        try {
+            // create the device in WatsonIoT
+            this.errorLogger().info("completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);
+            this.registerNewDevice(endpoint);
+            this.errorLogger().info("completeNewDeviceRegistration: registerNewDevice() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
+        }
+
+        try {
+            // subscribe for WatsonIoT as well..
+            this.errorLogger().info("completeNewDeviceRegistration: calling subscribe(): " + endpoint);
+            this.subscribe((String)endpoint.get("ep"),(String)endpoint.get("ept"));
+            this.errorLogger().info("completeNewDeviceRegistration: subscribe() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
+        }
     }
 }

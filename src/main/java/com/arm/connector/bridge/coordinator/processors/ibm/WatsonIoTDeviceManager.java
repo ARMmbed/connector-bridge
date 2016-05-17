@@ -179,7 +179,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
         String type = this.m_device_types.get(device);
         if (type == null || type.length() == 0) {
             // DEBUG
-            this.errorLogger().info("WatsonIoT: WARNING Defaulting Device Type to: " + this.m_watson_iot_def_type + " for Device: " + device);
+            this.errorLogger().info("Watson IoT: WARNING Defaulting Device Type to: " + this.m_watson_iot_def_type + " for Device: " + device);
             
             // default the type
             type = this.m_watson_iot_def_type;
@@ -203,6 +203,8 @@ public class WatsonIoTDeviceManager extends BaseClass {
  
     // install the Gateway Type 
     private Boolean installGatewayType() {
+        Boolean status = false; 
+        
         // create the URL
         String url = "https://" + this.m_watson_iot_rest_hostname + this.m_watson_iot_rest_uri_template;
         
@@ -215,15 +217,24 @@ public class WatsonIoTDeviceManager extends BaseClass {
         // dispatch and look for the result
         String result = this.post(url, payload);
         
-        // DEBUG
-        this.errorLogger().info("installGatewayType: RESULT: " + result);
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: installGatewayType: SUCCESS. RESULT: " + result);
+            status = true;
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("Watson IoT: installGatewayType: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
-        // return our status
-        return (result != null && result.length() > 0);
+        return status;
     }
     
     // install the Gateway Device Type 
     private Boolean installGatewayDeviceType(String device_type) {
+        Boolean status = false;
+        
         // create the URL
         String url = "https://" + this.m_watson_iot_rest_hostname + this.m_watson_iot_rest_uri_template;
         
@@ -236,15 +247,24 @@ public class WatsonIoTDeviceManager extends BaseClass {
         // dispatch and look for the result
         String result = this.post(url, payload);
         
-        // DEBUG
-        this.errorLogger().info("installGatewayDeviceType: RESULT: " + result);
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: installGatewayDeviceType: SUCCESS. RESULT: " + result);
+            status = true;
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("Watson IoT: installGatewayDeviceType: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
-        // return our status
-        return (result != null && result.length() > 0);
+        return status;
     }
     
     // install the Gateway Device 
     private Boolean installGatewayDevice() {
+        Boolean status = false;
+        
         // create the URL
         String url = this.createGatewayURL();
         
@@ -260,11 +280,19 @@ public class WatsonIoTDeviceManager extends BaseClass {
         // dispatch and look for the result
         String result = this.post(url, payload);
         
-        // DEBUG
-        //this.errorLogger().info("installGatewayDeviceType: RESULT: " + result);
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: installGatewayDevice: SUCCESS. RESULT: " + result);
+            status = true;
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("Watson IoT: installGatewayDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
         // return our status
-        return (result != null && result.length() > 0);
+        return status;
     }
     
     // build the REST URI for device management
@@ -311,7 +339,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
     // DELETE specific data to a given URL
     private String delete(String url) {
         String result = this.delete(url,null);
-        this.errorLogger().info("delete: URL: " + url + " RESULT: " + result);
+        //this.errorLogger().info("Watson IoT: delete: URL: " + url + " RESULT: " + result);
         return result;
     }
     
@@ -323,7 +351,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
     // DELETE specific data to a given URL
     private String gwdelete(String url) {
         String result = this.delete(url,null);
-        this.errorLogger().info("delete: URL: " + url + " RESULT: " + result);
+        //this.errorLogger().info("Watson IoT: delete: URL: " + url + " RESULT: " + result);
         return result;
     }
     
@@ -446,7 +474,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
     // create the AddDevice JSON from the message map
     private String createAddDeviceJSON(Map message) {
         // DEBUG
-        this.errorLogger().info("createDeviceJSON: message: " + message);
+        this.errorLogger().info("Watson IoT: createDeviceJSON: message: " + message);
         
         // pull relevant values... fill in the rest
         return this.createAddDeviceJSON((String)message.get("ep"),message);
@@ -454,6 +482,8 @@ public class WatsonIoTDeviceManager extends BaseClass {
     
     // process new device registration
     public Boolean registerNewDevice(Map message) {
+        Boolean status = false;
+        
         // create the new device type
         String device_type = (String)message.get("ept");
         String device = (String)message.get("ep");
@@ -469,19 +499,24 @@ public class WatsonIoTDeviceManager extends BaseClass {
         String payload = this.createAddDeviceJSON(message);
         
         // DEBUG
-        this.errorLogger().info("registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
+        this.errorLogger().info("Watson IoT: registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
         
-        // dispatch and look for the result
-        String result = this.gwpost(url, payload);
-        
-        // DEBUG
-        this.errorLogger().info("registerNewDevice: RESULT: " + result);
-        
-        // return our status
-        Boolean status = (result != null && result.length() > 0);
-        
-        // save off our device type if successful
-        this.m_device_types.put(device, device_type);
+        // dispatch and get the result. QUESTION: is gwpost() broken?
+        String result = this.post(url, payload);    // was gwpost() with the gateway creds vs. application creds... 
+
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS. RESULT: " + result);
+            status = true;
+            
+            // save off our device if successful
+            this.m_device_types.put(device, device_type);
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("Watson IoT: registerNewDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
         // return our status
         return status;
@@ -489,6 +524,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
     
     // process device de-registration
     public Boolean deregisterDevice(String device) {
+        Boolean status = false;
         String device_type = this.m_device_types.get(device);
         
         // create the URL
@@ -498,19 +534,24 @@ public class WatsonIoTDeviceManager extends BaseClass {
         url += "/devices/" + device;
         
         // DEBUG
-        this.errorLogger().info("deregisterDevice: URL: " + url + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
+        this.errorLogger().info("Watson IoT: deregisterDevice: URL: " + url + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
         
-        // dispatch and look for the result
-        String result = this.gwdelete(url);
+        // dispatch and look for the result.. QUESTION: gwdelete() broken?
+        String result = this.delete(url);   // was gwdelete() with the gateway creds vs. application creds... 
         
-        // DEBUG
-        this.errorLogger().info("deregisterDevice: RESULT: " + result);
-        
-        // return our status
-        Boolean status = (result != null && result.length() > 0);
-        
-        // delete our device type
-        if (status == true) this.m_device_types.remove(device);
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS. RESULT: " + result);
+            status = true;
+            
+            // remove our device if successful
+            this.m_device_types.remove(device);
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("Watson IoT: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
         // return our status
         return status;

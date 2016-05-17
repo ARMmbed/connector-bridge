@@ -609,4 +609,40 @@ public class Utils {
         }
         return null;
     }
+    
+    // Create a String Array from the TLV
+    public static String[] formatTLVToStringArray(byte tlv[]) {
+        String tlv_str = "";
+        
+        // convert to array, removing separators... 
+        for(int i=0;i<tlv.length;++i) {
+            if (tlv[i] == 63) {
+                tlv_str += " ";
+            }
+            else {
+                tlv_str += (char)tlv[i];
+            }
+        }
+        
+        // trim
+        tlv_str = tlv_str.trim();
+        
+        // split into an array
+        String tlv_split[] = tlv_str.split(" ");
+        
+        // trim array elements
+        for(int i=0;i<tlv_split.length;++i) tlv_split[i] = tlv_split[i].trim();
+        
+        // return the cleaned up array
+        return tlv_split;
+    }
+    
+    // ensure that an HTTP response code is in the 200's
+    public static boolean httpResponseCodeOK(int code) {
+        int check = code - 200;
+        if (check >= 0 && check < 100) {
+            return true;
+        }
+        return false;
+    }
 }

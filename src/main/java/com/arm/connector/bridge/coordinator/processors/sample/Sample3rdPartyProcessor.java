@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.sample;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.util.Map;
@@ -102,7 +103,7 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
     
     // process a received new registration/registration update/deregistration, 
     protected void processRegistration(Map data,String key) {
-        // XXXX TO DO 
+        // XXX TO DO 
         this.errorLogger().info("processRegistration(Sample): key: " + key + " data: " + data);
     }
     
@@ -133,5 +134,11 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
     public void stopListener() {
         // XXX to do
         this.errorLogger().info("stopListener(Sample)");
+    }
+
+    @Override
+    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
+        // XXX TO DO
+        this.errorLogger().info("recordAsyncResponse(Sample): response: " + response + " URI: " + uri + " EP: " + ep);
     }
 }

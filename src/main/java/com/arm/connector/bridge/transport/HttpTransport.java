@@ -600,8 +600,19 @@ public class HttpTransport extends BaseClass {
             //    this.errorLogger().info("HTTP(" + verb +") URL: " + url_str + " Data: " + data + " Response code: " + ((HttpURLConnection)connection).getResponseCode());
         }
         catch (IOException ex) {
-            this.errorLogger().info("Caught Exception in doHTTP(" + verb + "): " + ex.getMessage());
+            this.errorLogger().warning("Exception in doHTTP(" + verb + "): " + ex.getMessage());
             result = null;
+            
+            try {
+                // save off the HTTP response code...
+                if (doSSL)
+                    this.saveResponseCode(((HttpsURLConnection)connection).getResponseCode());
+                else 
+                    this.saveResponseCode(((HttpURLConnection)connection).getResponseCode());
+                }
+            catch (Exception ex2) {
+                this.errorLogger().warning("Exception in doHTTP(" + verb + "): Unable to save last response code: " + ex2.getMessage());
+            }
         }
 
         // return the result

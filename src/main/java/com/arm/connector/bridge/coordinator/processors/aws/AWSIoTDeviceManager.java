@@ -123,7 +123,7 @@ public class AWSIoTDeviceManager extends BaseClass {
         String result = Utils.awsCLI(this.errorLogger(), args);
         
         // DEBUG
-        this.errorLogger().info("registerNewDevice: RESULT: " + result);
+        this.errorLogger().info("AWSIoT: registerNewDevice: RESULT: " + result);
         
         // return our status
         Boolean status = (result != null && result.length() > 0);
@@ -131,7 +131,7 @@ public class AWSIoTDeviceManager extends BaseClass {
         // If OK, save the result
         if (status == true) {
             // DEBUG
-            this.errorLogger().info("registerNewDevice: saving off device details...");
+            this.errorLogger().info("AWSIoT: registerNewDevice: saving off device details...");
             
             // save off device details...
             this.saveAddDeviceDetails(device,device_type,result);
@@ -325,28 +325,28 @@ public class AWSIoTDeviceManager extends BaseClass {
                     ep.put("json_record",json);
 
                     // DEBUG
-                    this.errorLogger().info("parseDeviceDetails for " + device + ": " + ep);
+                    this.errorLogger().info("AWSIoT: parseDeviceDetails for " + device + ": " + ep);
                 }
                 else {
                     // device is not found
-                    this.errorLogger().warning("parseDeviceDetails: device " + device + " is not a registered device (OK)");
+                    this.errorLogger().warning("AWSIoT: parseDeviceDetails: device " + device + " is not a registered device (OK)");
                     ep = null;
                 }
             }
             catch (Exception ex) {
                 // exception in parsing... so nullify...
-                this.errorLogger().warning("parseDeviceDetails: exception while parsing device " + device + " JSON: " + json,ex);
+                this.errorLogger().warning("AWSIoT: parseDeviceDetails: exception while parsing device " + device + " JSON: " + json,ex);
                 if (ep != null) {
-                    this.errorLogger().warning("parseDeviceDetails: last known ep contents: " + ep);
+                    this.errorLogger().warning("AWSIoT: parseDeviceDetails: last known ep contents: " + ep);
                 }
                 else {
-                    this.errorLogger().warning("parseDeviceDetails: last known ep contents: EMPTY");
+                    this.errorLogger().warning("AWSIoT: parseDeviceDetails: last known ep contents: EMPTY");
                 }
                 ep = null;
             }
         }
         else {
-            this.errorLogger().warning("parseDeviceDetails: input JSON is EMPTY");
+            this.errorLogger().warning("AWSIoT: parseDeviceDetails: input JSON is EMPTY");
             ep = null;
         }
         
@@ -490,7 +490,7 @@ public class AWSIoTDeviceManager extends BaseClass {
         }
         else {
             // unable to parse details
-            this.errorLogger().warning("saveAddDeviceDetails: ERROR: unable to parse device " + device + " details JSON: " + json);
+            this.errorLogger().warning("AWSIoT: saveAddDeviceDetails: ERROR: unable to parse device " + device + " details JSON: " + json);
         }
     }
   
@@ -536,7 +536,7 @@ public class AWSIoTDeviceManager extends BaseClass {
         }
         
         // DEBUG
-        this.errorLogger().info("getRegisteredCertificates(" + list.size() + "): " + list);
+        this.errorLogger().info("AWSIoT: getRegisteredCertificates(" + list.size() + "): " + list);
         
         // return the list
         return list;

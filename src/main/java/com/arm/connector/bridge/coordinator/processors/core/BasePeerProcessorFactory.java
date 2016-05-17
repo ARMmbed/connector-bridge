@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.core;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.core.Transport;
@@ -154,6 +155,13 @@ public class BasePeerProcessorFactory extends Processor implements Transport.Rec
     public void processNotification(Map message) {
         for(int i=0;i<this.m_mqtt_list.size() ;++i) {
             this.m_mqtt_list.get(i).processNotification(message);
+        }
+    }
+
+    @Override
+    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
+        for(int i=0;i<this.m_mqtt_list.size() ;++i) {
+            this.m_mqtt_list.get(i).recordAsyncResponse(response,uri,ep,processor);
         }
     }
 }

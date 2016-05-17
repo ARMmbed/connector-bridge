@@ -30,6 +30,7 @@ import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorF
 import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
 import com.arm.connector.bridge.coordinator.processors.arm.MDSProcessor;
 import com.arm.connector.bridge.coordinator.processors.aws.AWSIoTPeerProcessorFactory;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProcessor;
 import com.arm.connector.bridge.core.ErrorLogger;
@@ -343,8 +344,8 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     }
     
     @Override
-    public void pullDeviceMetadata(Map endpoint) {
-        this.mds_rest_processor().pullDeviceMetadata(endpoint);
+    public void pullDeviceMetadata(Map endpoint,AsyncResponseProcessor processor) {
+        this.mds_rest_processor().pullDeviceMetadata(endpoint,processor);
     }
 
     // PeerInterface Orchestration
@@ -355,6 +356,13 @@ public class Orchestrator implements MDSInterface, PeerInterface {
             hash += this.peerProcessor(i).createAuthenticationHash();
         }
         return hash;
+    }
+    
+    @Override
+    public void recordAsyncResponse(String response,String uri,Map ep,AsyncResponseProcessor processor) {
+        for(int i=0;this.m_peer_processor_list != null && i<this.m_peer_processor_list.size();++i) {
+            this.peerProcessor(i).recordAsyncResponse(response, uri, ep, processor);
+        }
     }
 
     @Override

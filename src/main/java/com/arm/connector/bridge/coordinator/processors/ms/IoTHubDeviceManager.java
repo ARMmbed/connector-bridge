@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.ms;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.core.BaseClass;
 import com.arm.connector.bridge.core.ErrorLogger;
+import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.util.HashMap;
@@ -110,6 +111,8 @@ public class IoTHubDeviceManager extends BaseClass {
     
     // create and register a new device
     private boolean createAndRegisterNewDevice(Map message) {
+        Boolean status = false; 
+        
         // create the new device type
         String device_type = (String)message.get("ept");
         String device = (String)message.get("ep");
@@ -121,32 +124,36 @@ public class IoTHubDeviceManager extends BaseClass {
         String payload = this.m_iot_event_hub_add_device_json.replace("__EPNAME__", device);
         
         // DEBUG
-        this.errorLogger().info("registerNewDevice: URL: " + url + " DATA: " + payload);
+        this.errorLogger().info("IoTHub: registerNewDevice: URL: " + url + " DATA: " + payload);
         
         // dispatch and look for the result
         String result = this.put(url,payload);
         
-        // DEBUG
-        //this.errorLogger().info("registerNewDevice: RESULT: " + result);
-        
-        // return our status
-        Boolean status = (result != null && result.length() > 0);
-        
-        // If OK, save the result
-        if (status == true) {
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
             // DEBUG
-            this.errorLogger().info("registerNewDevice: saving off device details...");
+            this.errorLogger().info("IoTHub: registerNewDevice: SUCCESS. RESULT: " + result);
+            status = true;
+            
+            // DEBUG
+            this.errorLogger().info("IoTHub: registerNewDevice: saving off device details...");
             
             // save off device details...
             this.saveAddDeviceDetails(device,device_type,result);
         }
-                
+        else {
+            // DEBUG
+            this.errorLogger().warning("IoTHub: registerNewDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
+           
         // return our status
         return status;
     } 
     
     // process device de-registration
-    public Boolean deregisterDevice(String device) {    
+    public Boolean deregisterDevice(String device) { 
+        Boolean status = false;
+        
         // create the URL
         String url = this.m_device_id_url_template.replace("__EPNAME__", device);
         
@@ -154,19 +161,24 @@ public class IoTHubDeviceManager extends BaseClass {
         String etag = this.getETagForDevice(device);
         
         // DEBUG
-        this.errorLogger().info("deregisterDevice: URL: " + url);
+        this.errorLogger().info("IoTHub: deregisterDevice: URL: " + url);
         
         // dispatch and look for the result
         String result = this.delete(url,etag);
         
-        // DEBUG
-        //this.errorLogger().info("deregisterDevice: RESULT: " + result);
-        
-        // return our status
-        Boolean status = (result != null && result.length() >= 0);
-        
-        // remove the endpoint details
-        this.m_endpoint_details.remove(device);
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS. RESULT: " + result);
+            status = true;
+            
+            // remove the endpoint details
+            this.m_endpoint_details.remove(device);
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("IoTHub: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
         // return our status
         return status;
@@ -175,21 +187,27 @@ public class IoTHubDeviceManager extends BaseClass {
     // get a given device's details...
     private HashMap<String,String> getDeviceDetails(String device) {
         HashMap<String,String> ep = null;
+        Boolean status = false;
         
         // create the URL
         String url = this.m_device_id_url_template.replace("__EPNAME__", device);
         
         // DEBUG
-        this.errorLogger().info("getDeviceDetails: URL: " + url);
+        this.errorLogger().info("IoTHub: getDeviceDetails: URL: " + url);
         
         // dispatch and look for the result
         String result = this.get(url);
-        
-        // DEBUG
-        //this.errorLogger().info("getDeviceDetails: RESULT: " + result);
-        
-        // return our status
-        Boolean status = (result != null && result.length() > 0);
+                
+        // check the result
+        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+            // DEBUG
+            this.errorLogger().info("IoTHub: getDeviceDetails: SUCCESS. RESULT: " + result);
+            status = true;
+        }
+        else {
+            // DEBUG
+            this.errorLogger().warning("IoTHub: getDeviceDetails: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
         
         // parse our result...
         if (status == true) {
@@ -292,24 +310,24 @@ public class IoTHubDeviceManager extends BaseClass {
                 }
                 else {
                     // device is not found
-                    this.errorLogger().warning("parseDeviceDetails: device " + device + " is not a registered device (OK)");
+                    this.errorLogger().warning("IoTHub: parseDeviceDetails: device " + device + " is not a registered device (OK)");
                     ep = null;
                 }
             }
             catch (Exception ex) {
                 // exception in parsing... so nullify...
-                this.errorLogger().warning("parseDeviceDetails: exception while parsing device " + device + " JSON: " + json,ex);
+                this.errorLogger().warning("IoTHub: parseDeviceDetails: exception while parsing device " + device + " JSON: " + json,ex);
                 if (ep != null) {
-                    this.errorLogger().warning("parseDeviceDetails: last known ep contents: " + ep);
+                    this.errorLogger().warning("IoTHub: parseDeviceDetails: last known ep contents: " + ep);
                 }
                 else {
-                    this.errorLogger().warning("parseDeviceDetails: last known ep contents: EMPTY");
+                    this.errorLogger().warning("IoTHub: parseDeviceDetails: last known ep contents: EMPTY");
                 }
                 ep = null;
             }
         }
         else {
-            this.errorLogger().warning("parseDeviceDetails: input JSON is EMPTY");
+            this.errorLogger().warning("IoTHub: parseDeviceDetails: input JSON is EMPTY");
             ep = null;
         }
         
@@ -327,7 +345,7 @@ public class IoTHubDeviceManager extends BaseClass {
         }
         else {
             // unable to parse details
-            this.errorLogger().warning("saveAddDeviceDetails: ERROR: unable to parse device " + device + " details JSON: " + json);
+            this.errorLogger().warning("IoTHub: saveAddDeviceDetails: ERROR: unable to parse device " + device + " details JSON: " + json);
         }
     }
     
@@ -336,7 +354,7 @@ public class IoTHubDeviceManager extends BaseClass {
         // don't overwrite an existing entry..
         if (this.m_endpoint_details.get(device) == null) {
             // DEBUG
-            this.errorLogger().info("saveDeviceDetails: saving " + device + ": " + entry);
+            this.errorLogger().info("IoTHub: saveDeviceDetails: saving " + device + ": " + entry);
 
             // save off the endpoint details
             this.m_endpoint_details.put(device,entry);

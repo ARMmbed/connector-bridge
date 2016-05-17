@@ -27,12 +27,14 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.servlet.Manager;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -41,7 +43,7 @@ import javax.servlet.http.HttpServletResponse;
  * mDS/mDC Peer processor for the connector bridge
  * @author Doug Anson
  */
-public class MDSProcessor extends Processor implements MDSInterface {
+public class MDSProcessor extends Processor implements MDSInterface, AsyncResponseProcessor {
     private HttpTransport              m_http = null;
     private String                     m_mds_host = null;
     private int                        m_mds_port = 0;
@@ -74,6 +76,9 @@ public class MDSProcessor extends Processor implements MDSInterface {
     private WebhookValidator           m_webhook_validator = null;
     private boolean                    m_webhook_validator_enable = false;
     
+    private String                     m_device_attributes_path = null;
+    private String                     m_device_attributes_content_type = null;
+    
     // constructor
     public MDSProcessor(Orchestrator orchestrator,HttpTransport http) {
         super(orchestrator,null);
@@ -90,6 +95,12 @@ public class MDSProcessor extends Processor implements MDSInterface {
         this.m_mds_gw_use_ssl = this.prefBoolValue("mds_gw_use_ssl");
         this.m_use_api_token = this.prefBoolValue("mds_use_api_token");
         if (this.m_use_api_token == true) this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
+        
+        // get the device attributes path
+        this.m_device_attributes_path = orchestrator.preferences().valueOf("mds_device_attributes_path");
+        
+        // get the device attributes content type
+        this.m_device_attributes_content_type = orchestrator.preferences().valueOf("mds_device_attributes_content_type");
         
         // validation check override
         this.m_skip_validation = orchestrator.preferences().booleanValueOf("mds_skip_validation_override");
@@ -136,7 +147,10 @@ public class MDSProcessor extends Processor implements MDSInterface {
         this.initDeviceMetadataResourceURIs();
     }
     
-    // start validation polling
+    /**
+     * start validation polling
+     */
+    @Override
     public void beginValidationPolling() {
         if (this.m_webhook_validator != null) {
             this.m_webhook_validator.startPolling();
@@ -1112,9 +1126,8 @@ public class MDSProcessor extends Processor implements MDSInterface {
         return json;
     }
     
-    // pull the initial device metadata from mDS.. add it to the device endpoint map
-    @Override
-    public void pullDeviceMetadata(Map endpoint) {
+    // initialize the endpoint's default attributes 
+    private void initDeviceWithDefaultAttributes(Map endpoint) {
         this.pullDeviceManufacturer(endpoint);
         this.pullDeviceSerialNumber(endpoint);
         this.pullDeviceModel(endpoint);
@@ -1123,6 +1136,153 @@ public class MDSProcessor extends Processor implements MDSInterface {
         this.pullDeviceFirmwareInfo(endpoint);
         this.pullDeviceHardwareInfo(endpoint);
         this.pullDeviceLocationDescriptionInfo(endpoint);
+    }
+    
+    // determine if a given endpoint actually has device attributes or not... if not, the defaults will be used
+    private boolean hasDeviceAttributes(Map endpoint) {
+        boolean has_device_attributes = false;
+        
+        try {
+            // get the list of resources from the endpoint
+            List resources = (List)endpoint.get("resources");
+            
+            // look for a special resource - /3/0
+            if (resources != null && resources.size() > 0) {
+                for(int i=0;i<resources.size() && !has_device_attributes;++i) {
+                    Map resource = (Map)resources.get(i);
+                    if (resource != null) {
+                        // get the path value
+                        String path = (String)resource.get("path");
+                    
+                        // look for /3/0
+                        if (path != null && path.equalsIgnoreCase(this.m_device_attributes_path) == true) {
+                            // we have device attributes in this endpoint... go get 'em. 
+                            has_device_attributes = true;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) {
+            // caught exception
+            this.errorLogger().info("hasDeviceAttributes: Exception caught",ex);
+        }
+        
+        // return our status
+        return has_device_attributes;
+    }
+    
+    // dispatch GETs to retrieve the actual device attributes
+    private void dispatchDeviceAttributeGETs(Map endpoint,AsyncResponseProcessor processor) {
+        // Create the Device Attributes URL
+        String url = this.createCoAPURL((String)endpoint.get("ep"),this.m_device_attributes_path);
+        
+        // Dispatch and get the response (an AsyncId)
+        String json_response = this.httpsGet(url,this.m_device_attributes_content_type);
+        
+        // record the response to get processed later
+        if (json_response != null) {
+            this.orchestrator().recordAsyncResponse(json_response, url, endpoint, processor);
+        }
+     }
+    
+    // check and dispatch the appropriate GETs to retrieve the actual device attributes
+    private void getActualDeviceAttributes(Map endpoint,AsyncResponseProcessor processor) {
+        // dispatch GETs to retrieve the attributes from the endpoint... 
+        if (this.hasDeviceAttributes(endpoint)) {
+            // dispatch GETs to to retrieve and parse those attributes
+            this.dispatchDeviceAttributeGETs(endpoint,processor);
+        }
+        else {
+            // device does not have device attributes... so just use the defaults... 
+            AsyncResponseProcessor peer_processor = (AsyncResponseProcessor)endpoint.get("peer_processor");
+            if (peer_processor != null) {
+                // call the AsyncResponseProcessor within the peer...
+                peer_processor.processAsyncResponse(endpoint);
+            }
+            else {
+                // error - no peer AsyncResponseProcessor...
+                this.errorLogger().warning("getActualDeviceAttributes: no peer AsyncResponse processor. Device may not get addeded within peer.");
+            }
+        }
+    }
+    
+    // parse the device attributes
+    private Map parseDeviceAttributes(Map response, Map endpoint) {
+        // DEBUG
+        //this.errorLogger().info("parseDeviceAttributes: Response: " + response);
+        //this.errorLogger().info("parseDeviceAttributes: Endpoint: " + endpoint);
+        
+        // Parse the payload into a TLV
+        String b64_payload = (String)response.get("payload");
+        byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
+        
+        // HACK: convert the TLV to a String Array.. 
+        String tlv_data[] = Utils.formatTLVToStringArray(tlv);
+        
+        // Update the values
+        endpoint.put("meta_mfg", tlv_data[2]);
+        endpoint.put("meta_type",tlv_data[3]);
+        endpoint.put("meta_model", tlv_data[4]);
+        endpoint.put("meta_serial", tlv_data[5]);
+        endpoint.put("meta_firmware",tlv_data[6]);
+        endpoint.put("meta_software",tlv_data[7]);
+        endpoint.put("meta_hardware",tlv_data[8]);
+        
+        // return the updated endpoint
+        return endpoint;
+    }
+    
+    // callback for device attribute processing... 
+    @Override
+    public boolean processAsyncResponse(Map response) {
+        // DEBUG
+        //this.errorLogger().info("processAsyncResponse(MDS): RESPONSE: " + response);
+        
+        // Get the originating record
+        HashMap<String,Object> record = (HashMap<String,Object>)response.get("orig_record");
+        if (record != null) {            
+            Map orig_endpoint = (Map)record.get("orig_endpoint");
+            if (orig_endpoint != null) {
+                // Get the peer processor
+                AsyncResponseProcessor peer_processor = (AsyncResponseProcessor)orig_endpoint.get("peer_processor");
+                if (peer_processor != null) {
+                    // parse the device attributes
+                    Map endpoint = this.parseDeviceAttributes(response,orig_endpoint);
+                    
+                    // call the AsyncResponseProcessor within the peer to finalize the device
+                    peer_processor.processAsyncResponse(endpoint);
+                }
+                else {
+                    // error - no peer AsyncResponseProcessor...
+                    this.errorLogger().warning("processAsyncResponse(MDS): no peer AsyncResponse processor. Device may not get addeded within peer: " + record);
+                }
+            }
+            else {
+                // error - no peer AsyncResponseProcessor...
+                this.errorLogger().warning("processAsyncResponse(MDS): no peer AsyncResponse processor. Device may not get addeded within peer: " + orig_endpoint);
+            }
+
+            // return processed status (defaulted)
+            return true;
+        }
+        
+        // return non-processed
+        return false;
+    }
+    
+    // pull the initial device metadata from mDS.. add it to the device endpoint map
+    @Override
+    public void pullDeviceMetadata(Map endpoint,AsyncResponseProcessor processor) {
+        // initialize the endpoint with defaulted device attributes
+        this.initDeviceWithDefaultAttributes(endpoint);
+        
+        // save off the peer processor for later
+        endpoint.put("peer_processor",processor);
+        
+        // invoke GETs to retrieve the actual attributes (we are the processor for the callbacks...)
+        this.getActualDeviceAttributes(endpoint, this);
+        
     }
     
     // read the request data

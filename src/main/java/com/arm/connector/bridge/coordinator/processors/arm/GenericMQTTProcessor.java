@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.processors.core.AsyncResponseManager
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
 import com.arm.connector.bridge.coordinator.processors.core.SubscriptionList;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -156,6 +157,12 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     // get the AsyncResponseManager
     protected AsyncResponseManager asyncResponseManager() {
         return this.m_async_response_manager;
+    }
+    
+    // record an async response to process later
+    @Override
+    public void recordAsyncResponse(String response,String uri,Map ep,AsyncResponseProcessor processor) {
+        this.asyncResponseManager().recordAsyncResponse(response, uri, ep, processor);
     }
     
     // get our defaulted reply topic

@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.aws;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -42,7 +43,7 @@ import org.fusesource.mqtt.client.Topic;
  * AWS IoT peer processor based on MQTT
  * @author Doug Anson
  */
-public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface {
+public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     public static int                               NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
     public static int                               NUM_COAP_TOPICS = 1;                                  // # of MQTT Topics for CoAP verbs
     
@@ -297,28 +298,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 }
             }    
             
-            // pre-populate the new endpoint with initial values for registration
-            this.orchestrator().pullDeviceMetadata(endpoint);
-            
-            try {
-                // create the device in AWSIoT
-                this.errorLogger().info("processRegistration: calling registerNewDevice(): " + endpoint);
-                this.registerNewDevice(endpoint);
-                this.errorLogger().info("processRegistration: registerNewDevice() completed");
-            }
-            catch (Exception ex) {
-                this.errorLogger().warning("processRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
-            }
-            
-            try {
-                // subscribe for AWSIoT as well..
-                this.errorLogger().info("processRegistration: calling subscribe(): " + endpoint);
-                this.subscribe((String)endpoint.get("ep"),(String)endpoint.get("ept"));
-                this.errorLogger().info("processRegistration: subscribe() completed");
-            }
-            catch (Exception ex) {
-                this.errorLogger().warning("processRegistration: caught exception in subscribe(): " + endpoint,ex); 
-            }
+            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            this.retrieveEndpointAttributes(endpoint);
         }
     }
     
@@ -929,5 +910,47 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         }
         
         return ep_type;
+    }
+
+    // AsyncResponse response processor
+    @Override
+    public boolean processAsyncResponse(Map endpoint) {        
+        // with the attributes added, we finally create the device in Watson IoT
+        this.completeNewDeviceRegistration(endpoint);
+        
+        // return our processing status
+        return true;
+    }
+    
+    // discover the endpoint attributes
+    private void retrieveEndpointAttributes(Map endpoint) {
+        // DEBUG
+        this.errorLogger().warning("AWSIoT: Creating New Device: " + endpoint);
+        
+        // pre-populate the new endpoint with initial values for registration
+        this.orchestrator().pullDeviceMetadata(endpoint,this); 
+    }
+    
+    // complete processing of adding the new device
+    private void completeNewDeviceRegistration(Map endpoint) {
+        try {
+            // create the device in AWSIoT
+            this.errorLogger().info("completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);
+            this.registerNewDevice(endpoint);
+            this.errorLogger().info("completeNewDeviceRegistration: registerNewDevice() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint,ex); 
+        }
+
+        try {
+            // subscribe for AWSIoT as well..
+            this.errorLogger().info("completeNewDeviceRegistration: calling subscribe(): " + endpoint);
+            this.subscribe((String)endpoint.get("ep"),(String)endpoint.get("ept"));
+            this.errorLogger().info("completeNewDeviceRegistration: subscribe() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in subscribe(): " + endpoint,ex); 
+        }
     }
 }
