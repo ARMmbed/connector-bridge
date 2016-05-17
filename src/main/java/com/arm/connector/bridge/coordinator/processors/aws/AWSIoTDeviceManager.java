@@ -30,7 +30,6 @@ import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -227,7 +226,7 @@ public class AWSIoTDeviceManager extends BaseClass {
     }
     
     // process device de-registration
-    public Boolean deregisterDevice(String device) { 
+    public boolean deregisterDevice(String device) { 
         // first we unlink the certificate and deactivate it
         this.removeCertificate(device);
         
@@ -238,13 +237,11 @@ public class AWSIoTDeviceManager extends BaseClass {
         // DEBUG
         this.errorLogger().info("deregisterDevice: RESULT: " + result);
         
-        // return our status
-        Boolean status = (result != null && result.length() >= 0);
-        
         // remove the endpoint details
         this.m_endpoint_details.remove(device);
         
         // return our status
+        boolean status = true;
         return status;
     }
     

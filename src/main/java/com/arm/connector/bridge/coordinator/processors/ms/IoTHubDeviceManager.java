@@ -130,13 +130,22 @@ public class IoTHubDeviceManager extends BaseClass {
         String result = this.put(url,payload);
         
         // check the result
-        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+        int http_code = this.m_http.getLastResponseCode();
+        if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
             this.errorLogger().info("IoTHub: registerNewDevice: SUCCESS. RESULT: " + result);
             status = true;
             
             // DEBUG
             this.errorLogger().info("IoTHub: registerNewDevice: saving off device details...");
+            
+            // save off device details...
+            this.saveAddDeviceDetails(device,device_type,result);
+        }
+        else if (http_code == 409) {
+             // DEBUG
+            this.errorLogger().info("IoTHub: registerNewDevice: SUCCESS (already registered)");
+            status = true;
             
             // save off device details...
             this.saveAddDeviceDetails(device,device_type,result);
@@ -170,17 +179,17 @@ public class IoTHubDeviceManager extends BaseClass {
         if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
             // DEBUG
             this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS. RESULT: " + result);
-            status = true;
-            
-            // remove the endpoint details
-            this.m_endpoint_details.remove(device);
         }
         else {
             // DEBUG
             this.errorLogger().warning("IoTHub: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
         }
         
+        // remove the endpoint details
+        this.m_endpoint_details.remove(device);
+        
         // return our status
+        status = true;
         return status;
     }
     

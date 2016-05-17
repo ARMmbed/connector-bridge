@@ -34,6 +34,7 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
+import com.arm.connector.bridge.core.TypeDecoder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     private AsyncResponseManager            m_async_response_manager = null;
     private HttpTransport                   m_http = null;
     protected boolean                       m_use_clean_session = false;
+    private TypeDecoder                     m_type_decoder = null;
     
     // constructor (singleton)
     public GenericMQTTProcessor(Orchestrator orchestrator,MQTTTransport mqtt,HttpTransport http) {
@@ -69,6 +71,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     // constructor (suffix for preferences)
     public GenericMQTTProcessor(Orchestrator orchestrator,MQTTTransport mqtt,String suffix,HttpTransport http) {
         super(orchestrator,suffix);
+        
+        // allocate our TypeDecoder
+        this.m_type_decoder = new TypeDecoder(orchestrator.errorLogger(),orchestrator.preferences());
         
         // allocate our AsyncResponse orchestrator
         this.m_async_response_manager = new AsyncResponseManager(orchestrator);
@@ -141,11 +146,16 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         return this.m_http;
     }
     
+    // get TypeDecoder if needed
+    protected TypeDecoder fundamentalTypeDecoder() {
+        return this.m_type_decoder;
+    }
+    
     // attempt a json parse... 
     protected Map tryJSONParse(String payload) {
-        Map result = new HashMap<String,Object>();
+        HashMap<String,Object> result = new HashMap<>();
         try {
-            result = this.orchestrator().getJSONParser().parseJson(payload);
+            result = (HashMap<String,Object>)this.orchestrator().getJSONParser().parseJson(payload);
             return result;
         }
         catch (Exception ex) {
@@ -694,7 +704,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         
         if (id != null && id.length() > 0) {
             // copy the string
-            String tmp = new String(id);
+            String tmp = id;
             
             // loop through and remove key delimiters
             tmp = tmp.replace('#', ' ');

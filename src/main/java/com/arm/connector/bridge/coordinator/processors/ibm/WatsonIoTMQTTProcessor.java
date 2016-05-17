@@ -64,9 +64,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     private String                  m_watson_iot_api_key = null;
     private String                  m_watson_iot_auth_token = null;
     
-    // RTI 
-    private boolean                 m_rti_format_enable = false;
-    
     // WatsonIoT Device Manager
     private WatsonIoTDeviceManager  m_watson_iot_device_manager = null;
         
@@ -96,12 +93,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         if (this.m_watson_iot_device_data_key == null || this.m_watson_iot_device_data_key.length() <= 0) {
             // default
             this.m_watson_iot_device_data_key = "coap";
-        }
-        
-        // RTI (no longer used... remove at some point...) 
-        this.m_rti_format_enable = this.orchestrator().preferences().booleanValueOf("iotf_use_rti_format",this.m_suffix);
-        if (this.m_rti_format_enable) {
-            this.errorLogger().info("RTI Formatting ENABLED.");
         }
         
         // Observation notifications
@@ -209,33 +200,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         ;
     }
     
-    // RTI
-    private Map rtiFormatMessage(Map coap_message,String json) {
-        Map rti_message = coap_message;
-        
-        // Optional Formatting for RTI
-        if (this.m_rti_format_enable) {
-            try {
-                // parse the input json...
-                Map parsed = this.jsonParser().parseJson(json);
-
-                // Create a new message with the parsed JSON and elements of the CoAP message
-                parsed.put("ep", (String)coap_message.get("ep"));
-                parsed.put("path", (String)coap_message.get("path"));
-                parsed.put("max-age", (String)coap_message.get("max-age"));
-                
-                // use the modified message
-                rti_message = parsed;
-            }
-            catch (Exception ex) {
-                // unable to parse input... so just pass through the original message
-                this.errorLogger().info("rtiFormatMessage: unable to parse input JSON: " + json + "... disabling formatting...");
-            }
-        }
-        
-        return rti_message;
-    }
-    
     // OVERRIDE: process a mDS notification for WatsonIoT
     @Override
     public void processNotification(Map data) {
@@ -252,26 +216,26 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             String b64_coap_payload = (String)notification.get("payload");
             String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
             
+            // DEBUG
+            //this.errorLogger().info("Watson IoT: Decoded Payload: " + decoded_coap_payload);
+            
             // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
             Map json_parsed = this.tryJSONParse(decoded_coap_payload);
             if (json_parsed != null && json_parsed.isEmpty() == false) {
                 // add in a JSON object payload value directly... 
-                notification.put("value", json_parsed);
+                notification.put("value", Utils.retypeMap(json_parsed,this.fundamentalTypeDecoder()));             // its JSON (flat...)                                                   // its JSON 
             }
             else {
-                // add in a decoded payload value as a string type...
-                notification.put("value", decoded_coap_payload);
+                // add in a decoded payload value as a fundamental type...
+                notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(decoded_coap_payload)); // its a Float, Integer, or String
             }
-                        
-            // RTI
-            notification = this.rtiFormatMessage(notification,decoded_coap_payload);
-                        
+                                                
             // we will send the raw CoAP JSON... WatsonIoT can parse that... 
             String coap_raw_json = this.jsonGenerator().generateJson(notification);
             
             // strip off []...
             String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-            
+                        
             // get our endpoint name
             String ep_name = (String)notification.get("ep");
             
@@ -282,8 +246,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             }
                                     
             // DEBUG
-            this.errorLogger().info("WatsonIoT: CoAP notification: " + iotf_coap_json);
-            //this.errorLogger().info("WatsonIoT: CoAP notification (JSON): " + notification);
+            this.errorLogger().warning("WatsonIoT: CoAP notification: " + iotf_coap_json);
             
             // send to WatsonIoT...
             if (this.mqtt() != null) {
@@ -684,9 +647,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         
         // add a new field to denote its a GET
         notification.put("verb",verb);
-
-        // RTI
-        notification = this.rtiFormatMessage(notification,value);
 
         // we will send the raw CoAP JSON... WatsonIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);

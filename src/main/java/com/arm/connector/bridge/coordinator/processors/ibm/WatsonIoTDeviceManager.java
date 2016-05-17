@@ -97,7 +97,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
         
         // build out Basic Auth username/password for the REST calls
         this.m_watson_iot_api_key = "a-" + this.m_watson_iot_org_id + "-" + this.m_watson_iot_org_key;
-        this.m_watson_iot_gw_key = "g-" + this.m_watson_iot_org_id + "-" + this.m_watson_iot_gw_type_id + "-" + this.m_watson_iot_gw_id;
+        this.m_watson_iot_gw_key = "g/" + this.m_watson_iot_org_id + "/" + this.m_watson_iot_gw_type_id + "/" + this.m_watson_iot_gw_id;
         this.m_watson_iot_auth_token = this.preferences().valueOf("iotf_auth_token",this.m_suffix);
         this.m_watson_iot_gw_auth_token = Utils.createURLSafeToken(this.m_watson_iot_auth_token);
         
@@ -111,7 +111,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
         this.m_watson_iot_org_key = api_key;
         this.m_watson_iot_rest_hostname = this.preferences().valueOf("iotf_rest_hostname_template",this.m_suffix).replace("__ORG_ID__",this.m_watson_iot_org_id);
         this.m_watson_iot_api_key = "a-" + this.m_watson_iot_org_id + "-" + this.m_watson_iot_org_key;
-        this.m_watson_iot_gw_key = "g-" + this.m_watson_iot_org_id + "-" + this.m_watson_iot_gw_type_id + "-" + this.m_watson_iot_gw_id;
+        this.m_watson_iot_gw_key = "g/" + this.m_watson_iot_org_id + "/" + this.m_watson_iot_gw_type_id + "/" + this.m_watson_iot_gw_id;
         this.m_gw_iotf_auth_token = this.m_watson_iot_gw_auth_token;
         this.initWatsonIoTMetadata();
     }
@@ -501,13 +501,22 @@ public class WatsonIoTDeviceManager extends BaseClass {
         // DEBUG
         this.errorLogger().info("Watson IoT: registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
         
-        // dispatch and get the result. QUESTION: is gwpost() broken?
-        String result = this.post(url, payload);    // was gwpost() with the gateway creds vs. application creds... 
+        // dispatch and get the result.
+        String result = this.gwpost(url, payload);
 
         // check the result
-        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+        int http_code = this.m_http.getLastResponseCode();
+        if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
             this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS. RESULT: " + result);
+            status = true;
+            
+            // save off our device if successful
+            this.m_device_types.put(device, device_type);
+        }
+        else if (http_code == 409) {
+             // DEBUG
+            this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS (already registered)");
             status = true;
             
             // save off our device if successful
@@ -536,24 +545,24 @@ public class WatsonIoTDeviceManager extends BaseClass {
         // DEBUG
         this.errorLogger().info("Watson IoT: deregisterDevice: URL: " + url + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
         
-        // dispatch and look for the result.. QUESTION: gwdelete() broken?
-        String result = this.delete(url);   // was gwdelete() with the gateway creds vs. application creds... 
+        // dispatch and look for the result.
+        String result = this.gwdelete(url);
         
         // check the result
         if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
             // DEBUG
             this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS. RESULT: " + result);
-            status = true;
-            
-            // remove our device if successful
-            this.m_device_types.remove(device);
         }
         else {
             // DEBUG
             this.errorLogger().warning("Watson IoT: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
         }
+         
+        // remove our device if successful
+        this.m_device_types.remove(device);
         
         // return our status
+        status = true;
         return status;
     }
 }

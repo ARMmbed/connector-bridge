@@ -51,6 +51,10 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServlet;
@@ -644,5 +648,39 @@ public class Utils {
             return true;
         }
         return false;
+    }
+    
+    // re-type a JSON Map
+    public static Map retypeMap(Map json,TypeDecoder decoder) {
+        HashMap<String,Object> remap = new HashMap<>();
+        
+        // iterate through the existing map and re-type each entry
+        Iterator it = json.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry pair = (Map.Entry)it.next();
+            Object value = decoder.getFundamentalValue(pair.getValue());
+            if (value instanceof Double || value instanceof Integer || value instanceof String) {
+                // fundamental types get mapped directly
+                remap.put((String)pair.getKey(),value);
+            }
+            else {
+                // this is a complex embedded type...
+                if (value instanceof Map) {
+                    // embedded JSON - directly recurse.
+                    remap.put((String)pair.getKey(),Utils.retypeMap((Map)value,decoder));
+                }
+                if (value instanceof List) {
+                    // list of embedded JSON - loop and recurse each Map(i)... 
+                    List list = (List)value;
+                    for(int i=0;i<list.size();++i) {
+                        list.set(i, Utils.retypeMap((Map)(Map)list.get(i),decoder));
+                    }
+                    // replace list with new one...
+                    remap.put((String)pair.getKey(),list);
+                }
+            }
+        }
+        
+        return remap;
     }
 }

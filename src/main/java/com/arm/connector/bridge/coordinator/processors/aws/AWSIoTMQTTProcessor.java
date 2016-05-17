@@ -165,15 +165,18 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             String b64_coap_payload = (String)notification.get("payload");
             String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
             
+            // DEBUG
+            //this.errorLogger().info("AWSIoT: Decoded Payload: " + decoded_coap_payload);
+            
             // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
             Map json_parsed = this.tryJSONParse(decoded_coap_payload);
             if (json_parsed != null && json_parsed.isEmpty() == false) {
                 // add in a JSON object payload value directly... 
-                notification.put("value", json_parsed);
+                notification.put("value", Utils.retypeMap(json_parsed,this.fundamentalTypeDecoder()));             // its JSON (flat...)                                                   // its JSON 
             }
             else {
-                // add in a decoded payload value as a string type...
-                notification.put("value", decoded_coap_payload);
+                // add in a decoded payload value as a fundamental type...
+                notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(decoded_coap_payload)); // its a Float, Integer, or String
             }
             
             // get the path
@@ -196,7 +199,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                                     
             // DEBUG
             this.errorLogger().info("AWSIoT: CoAP notification (STR): " + aws_iot_gw_coap_json);
-            this.errorLogger().info("AWSIoT: CoAP notification (JSON): " + notification);
             
             // send to AWSIoT...
             if (this.mqtt(ep_name) != null) {
