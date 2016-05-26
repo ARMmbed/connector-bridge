@@ -92,19 +92,31 @@ public class AsyncResponseManager {
         if (uri != null) record.put("uri",uri);
         if (processor != null) record.put("processor",processor);
         if (orig_endpoint != null) record.put("orig_endpoint",orig_endpoint);
-        
-        // parse the
-        JSONParser parser = this.manager().getJSONParser();
-        Map parsed = parser.parseJson(response);
-        
-        // add it to the record too
-        record.put("response_map",parsed);
-        
-        // add the record to our list
-        this.m_responses.put((String)parsed.get("async-response-id"), record);
-        
-        // DEBUG
-        this.errorLogger().info("recordAsyncResponse: Adding Record: ID:" + (String)parsed.get("async-response-id") + " RECORD: " + record);
+
+        // we have to catch exceptions from the JSON parser... 
+        try {
+            // parse the
+            JSONParser parser = this.manager().getJSONParser();
+            Map parsed = parser.parseJson(response);
+            if (parsed != null && (String)parsed.get("async-response-id") != null) {
+                // add it to the record too
+                record.put("response_map",parsed);
+
+                // add the record to our list
+                this.m_responses.put((String)parsed.get("async-response-id"), record);
+
+                // DEBUG
+                this.errorLogger().info("recordAsyncResponse: Adding Record: ID:" + (String)parsed.get("async-response-id") + " RECORD: " + record);
+            }
+            else {
+                // WARNING: no async-response-id found in this message... so ignore it.
+                this.errorLogger().warning("recordAsyncResponse: No async-response-id found in JSON: " + response + "... Ignoring message...");
+            }
+        }
+        catch (Exception ex) {
+            // CRITICAL: unable to parse the JSON... 
+            this.errorLogger().critical("recordAsyncResponse: Exception in parsing JSON: " + response + "... Unable to parse async message",ex);
+        }
     }
 
     // process AsyncResponse

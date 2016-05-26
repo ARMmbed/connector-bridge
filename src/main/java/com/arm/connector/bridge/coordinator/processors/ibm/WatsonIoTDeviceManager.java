@@ -499,7 +499,7 @@ public class WatsonIoTDeviceManager extends BaseClass {
         String payload = this.createAddDeviceJSON(message);
         
         // DEBUG
-        this.errorLogger().info("Watson IoT: registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
+        this.errorLogger().info("Watson IoT: registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_gw_key + " PW: " + this.m_watson_iot_gw_auth_token);
         
         // dispatch and get the result.
         String result = this.gwpost(url, payload);
