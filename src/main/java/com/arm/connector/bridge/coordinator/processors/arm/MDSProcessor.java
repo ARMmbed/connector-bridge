@@ -79,6 +79,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private String                     m_device_attributes_path = null;
     private String                     m_device_attributes_content_type = null;
     
+    private String                     m_default_rest_version = "2";
+    private boolean                    m_use_rest_versions = false;
+    private String                     m_rest_version = null;
+    
     // constructor
     public MDSProcessor(Orchestrator orchestrator,HttpTransport http) {
         super(orchestrator,null);
@@ -94,6 +98,8 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.m_mds_version = this.prefValue("mds_version");
         this.m_mds_gw_use_ssl = this.prefBoolValue("mds_gw_use_ssl");
         this.m_use_api_token = this.prefBoolValue("mds_use_api_token");
+        this.m_use_rest_versions = this.prefBoolValue("mds_enable_rest_versions");
+        this.m_rest_version = this.prefValueWithDefault("mds_rest_version",this.m_default_rest_version).replace("v","").replace("//","");
         if (this.m_use_api_token == true) this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         
         // get the device attributes path
@@ -123,6 +129,16 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         else {
             // disabling webhook/subscription validation
             orchestrator.errorLogger().warning("MDSProcessor: mds/mDC webhook/subscription validator DISABLED");
+        }
+        
+        // Announce version supported
+        if (this.m_use_rest_versions == true) {
+            // we are versioning our REST calls
+            orchestrator.errorLogger().warning("MDSProcessor: Versioning of mds/mDC REST calls ENABLED (" + "v" + this.m_rest_version + ")");
+        }
+        else {
+            // we are not versioning our REST calls
+            orchestrator.errorLogger().warning("MDSProcessor: Versioning of mds/mDC REST calls DISABLED");
         }
         
         // initialize the default type of URI for contacting us (GW) - this will be sent to mDS for the webhook URL
@@ -1321,9 +1337,20 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         }
     }
     
+    // add REST version information
+    private String connectorVersion() {
+        if (this.m_use_rest_versions == true) {
+            // return the configured version string
+            return "/v" + this.m_rest_version;
+        }
+        
+        // not using rest versioning
+        return "";
+    }
+    
     // create the base URL for mDS operations
     private String createBaseURL() {
-        return this.m_default_mds_uri + this.m_mds_host + ":" + this.m_mds_port;
+        return this.m_default_mds_uri + this.m_mds_host + ":" + this.m_mds_port + this.connectorVersion();
     }
     
     // create the CoAP operation URL
