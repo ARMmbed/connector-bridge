@@ -54,7 +54,7 @@ public interface MDSInterface {
     // perform CoAP operations on endpoint resources
     public String processEndpointResourceOperation(String verb,String uri,Map options);
     public String processEndpointResourceOperation(String verb,String ep_name,String uri);
-    public String processEndpointResourceOperation(String verb,String ep_name,String uri,String value);
+    public String processEndpointResourceOperation(String verb,String ep_name,String uri,String value,String options);
        
     // Webhook management
     public void setNotificationCallbackURL();

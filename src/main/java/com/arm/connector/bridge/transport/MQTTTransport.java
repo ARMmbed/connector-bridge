@@ -695,7 +695,7 @@ public class MQTTTransport extends Transport {
      */
     public boolean sendMessage(String topic,String message,QoS qos) {
         boolean sent = false;
-        if (this.m_connection.isConnected() == true && message != null) {
+        if (this.m_connection != null && this.m_connection.isConnected() == true && message != null) {
             try {
                 // DEBUG
                 this.errorLogger().info("sendMessage: message: " + message + " Topic: " + topic);
@@ -733,7 +733,7 @@ public class MQTTTransport extends Transport {
                 this.errorLogger().critical("sendMessage: unable to send message: " + message, ex);
             }
         }
-        else if (message != null) {
+        else if (this.m_connection != null && message != null) {
             // unable to send (not connected)
             this.errorLogger().warning("sendMessage: NOT CONNECTED. Unable to send message: " + message);
             
@@ -748,6 +748,23 @@ public class MQTTTransport extends Transport {
             else {
                 // unable to send (not connected)
                 this.errorLogger().warning("sendMessage: NOT CONNECTED after EOF/reconnect. Unable to send message: " + message);
+            }
+        }
+        else if (message != null) {
+            // unable to send (not connected)
+            this.errorLogger().warning("sendMessage: NOT CONNECTED (no handle). Unable to send message: " + message);
+            
+            // reset the connection
+            this.resetConnection();
+
+            // resend
+            if (this.m_connection.isConnected() == true) {
+                this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
+                sent = this.sendMessage(topic,message,qos);
+            }
+            else {
+                // unable to send (not connected)
+                this.errorLogger().warning("sendMessage: NOT CONNECTED (no handle) after EOF/reconnect. Unable to send message: " + message);
             }
         }
         else {

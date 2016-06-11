@@ -1001,14 +1001,20 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     // process endpoint resource operation request
     @Override
     public String processEndpointResourceOperation(String verb,String ep_name,String uri) {
-        return this.processEndpointResourceOperation(verb, ep_name, uri, null);
+        return this.processEndpointResourceOperation(verb, ep_name, uri, null,null);
     }
     
     // process endpoint resource operation request
     @Override
-    public String processEndpointResourceOperation(String verb,String ep_name,String uri,String value) {
+    public String processEndpointResourceOperation(String verb,String ep_name,String uri,String value,String options) {
         String json = null;
         String url = this.createCoAPURL(ep_name, uri);
+        
+        // add our options if they are specified
+        if (options != null && options.length() > 0 && options.contains("=") == true) {
+            // There is no way to validate that these options dont break the request... there may also be security issues here. 
+            url += "?" + options;
+        }
         
         if (verb != null && verb.length() > 0) {
             // dispatch the mDS REST based on CoAP verb received

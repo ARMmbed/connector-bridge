@@ -120,7 +120,7 @@ public class IoTHubDeviceManager extends BaseClass {
         // create the URL
         String url = this.m_device_id_url_template.replace("__EPNAME__", device);
                  
-        // build out the POST payload
+        // build out the PUT payload
         String payload = this.m_iot_event_hub_add_device_json.replace("__EPNAME__", device);
         
         // DEBUG

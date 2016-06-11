@@ -554,6 +554,15 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         return (String)parsed.get("coap_verb");
     }
     
+    // pull any mDC/mDS REST options from the message (optional)
+    private String getRESTOptions(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
+        //this.errorLogger().info("getCoAPValue: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("options");
+    }
+    
     // CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
     public void onMessageReceive(String topic, String message) {
@@ -593,8 +602,12 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             ep_name = this.getCoAPEndpointName(message);
         }
         
+        // if there are mDC/mDS REST options... lets add them
+        // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
+        String options = this.getRESTOptions(message);
+
         // dispatch the coap resource operation request
-        String response = this.orchestrator().processEndpointResourceOperation(coap_verb,ep_name,uri,value);
+        String response = this.orchestrator().processEndpointResourceOperation(coap_verb,ep_name,uri,value,options);
         
         // examine the response
         if (response != null && response.length() > 0) {
