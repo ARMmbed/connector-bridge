@@ -47,6 +47,10 @@ public class IoTHubDeviceManager extends BaseClass {
     private String                                  m_iot_event_hub_sas_token = null;
     private String                                  m_iot_event_hub_auth_qualifier = "SharedAccessSignature";
     
+    // IoTHub Device ID prefixing...
+    private boolean                                 m_iot_event_hub_enable_device_id_prefix = false;
+    private String                                  m_iot_event_hub_device_id_prefix = null;
+    
      // constructor
     public IoTHubDeviceManager(ErrorLogger logger,PreferenceManager preferences,HttpTransport http,Orchestrator orchestrator) {
         this(logger,preferences,null,http,orchestrator);
@@ -78,6 +82,47 @@ public class IoTHubDeviceManager extends BaseClass {
         
         // IoTHub SAS Token (take out the qualifier if present...)
         this.m_iot_event_hub_sas_token = this.preferences().valueOf("iot_event_hub_sas_token",this.m_suffix).replace("SharedAccessSignature ", "").trim();
+    
+        // Enable prefixing of mbed Cloud names for IoTHub
+        this.m_iot_event_hub_enable_device_id_prefix = this.prefBoolValue("iot_event_hub_enable_device_id_prefix", this.m_suffix);
+        this.m_iot_event_hub_device_id_prefix = null;
+        
+        // If prefixing is enabled, get the prefix
+        if (this.m_iot_event_hub_enable_device_id_prefix == true) {
+            this.m_iot_event_hub_device_id_prefix = this.preferences().valueOf("iot_event_hub_device_id_prefix",this.m_suffix);
+            if (this.m_iot_event_hub_device_id_prefix != null) {
+                this.m_iot_event_hub_device_id_prefix += "-";
+            }
+        }
+    }
+    
+    // IoTHub DeviceID Prefix enabler
+    private String addDeviceIDPrefix(String ep_name) {
+        String iothub_ep_name = ep_name;
+        if (this.m_iot_event_hub_device_id_prefix != null && ep_name != null) {
+            if (ep_name.contains(this.m_iot_event_hub_device_id_prefix) == false) {
+                iothub_ep_name = this.m_iot_event_hub_device_id_prefix + ep_name;
+            }
+        }
+        
+        // DEBUG
+        //this.errorLogger().info("addDeviceIDPrefix: ep_name: " + ep_name + " --> iothub_ep_name: " + iothub_ep_name);
+        return iothub_ep_name;
+    }
+    
+    // IoTHub DeviceID Prefix remover
+    private String removeDeviceIDPrefix(String iothub_ep_name) {
+        String ep_name = iothub_ep_name;
+        if (this.m_iot_event_hub_device_id_prefix != null && iothub_ep_name != null) {
+            return iothub_ep_name.replace(this.m_iot_event_hub_device_id_prefix,"");
+        }
+        
+        // trim..
+        ep_name = ep_name.trim();
+        
+        // DEBUG
+        //this.errorLogger().info("removeDeviceIDPrefix: iothub_ep_name: " + iothub_ep_name + " --> ep_name: " + ep_name);
+        return ep_name;
     }
     
     // get the orchestrator
@@ -89,13 +134,16 @@ public class IoTHubDeviceManager extends BaseClass {
         
         // get the device details
         String device_type = (String)message.get("ept");
-        String device = (String)message.get("ep");
+        String ep_name = (String)message.get("ep");
+
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
         
         // see if we already have a device...
-        HashMap<String,String> ep = this.getDeviceDetails(device);
+        HashMap<String,String> ep = this.getDeviceDetails(iothub_ep_name);
         if (ep != null) {
             // save off this device 
-            this.saveDeviceDetails(device, ep);
+            this.saveDeviceDetails(iothub_ep_name, ep);
             
             // we are good
             status = true;
@@ -115,13 +163,16 @@ public class IoTHubDeviceManager extends BaseClass {
         
         // create the new device type
         String device_type = (String)message.get("ept");
-        String device = (String)message.get("ep");
+        String ep_name = (String)message.get("ep");
+        
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
         
         // create the URL
-        String url = this.m_device_id_url_template.replace("__EPNAME__", device);
+        String url = this.m_device_id_url_template.replace("__EPNAME__", iothub_ep_name);
                  
         // build out the PUT payload
-        String payload = this.m_iot_event_hub_add_device_json.replace("__EPNAME__", device);
+        String payload = this.m_iot_event_hub_add_device_json.replace("__EPNAME__", iothub_ep_name);
         
         // DEBUG
         this.errorLogger().info("IoTHub: registerNewDevice: URL: " + url + " DATA: " + payload);
@@ -140,7 +191,7 @@ public class IoTHubDeviceManager extends BaseClass {
             this.errorLogger().info("IoTHub: registerNewDevice: saving off device details...");
             
             // save off device details...
-            this.saveAddDeviceDetails(device,device_type,result);
+            this.saveAddDeviceDetails(iothub_ep_name,device_type,result);
         }
         else if (http_code == 409) {
              // DEBUG
@@ -148,7 +199,7 @@ public class IoTHubDeviceManager extends BaseClass {
             status = true;
             
             // save off device details...
-            this.saveAddDeviceDetails(device,device_type,result);
+            this.saveAddDeviceDetails(iothub_ep_name,device_type,result);
         }
         else {
             // DEBUG
@@ -160,14 +211,17 @@ public class IoTHubDeviceManager extends BaseClass {
     } 
     
     // process device de-registration
-    public Boolean deregisterDevice(String device) { 
+    public Boolean deregisterDevice(String ep_name) { 
         Boolean status = false;
         
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        
         // create the URL
-        String url = this.m_device_id_url_template.replace("__EPNAME__", device);
+        String url = this.m_device_id_url_template.replace("__EPNAME__", iothub_ep_name);
         
         // Get the ETag
-        String etag = this.getETagForDevice(device);
+        String etag = this.getETagForDevice(iothub_ep_name);
         
         // DEBUG
         this.errorLogger().info("IoTHub: deregisterDevice: URL: " + url);
@@ -186,7 +240,7 @@ public class IoTHubDeviceManager extends BaseClass {
         }
         
         // remove the endpoint details
-        this.m_endpoint_details.remove(device);
+        this.m_endpoint_details.remove(iothub_ep_name);
         
         // return our status
         status = true;
@@ -194,12 +248,15 @@ public class IoTHubDeviceManager extends BaseClass {
     }
     
     // get a given device's details...
-    private HashMap<String,String> getDeviceDetails(String device) {
+    private HashMap<String,String> getDeviceDetails(String ep_name) {
         HashMap<String,String> ep = null;
         Boolean status = false;
         
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        
         // create the URL
-        String url = this.m_device_id_url_template.replace("__EPNAME__", device);
+        String url = this.m_device_id_url_template.replace("__EPNAME__", iothub_ep_name);
         
         // DEBUG
         this.errorLogger().info("IoTHub: getDeviceDetails: URL: " + url);
@@ -220,7 +277,7 @@ public class IoTHubDeviceManager extends BaseClass {
         
         // parse our result...
         if (status == true) {
-            ep = this.parseDeviceDetails(device,result);
+            ep = this.parseDeviceDetails(iothub_ep_name,result);
         }
         
         // return our endpoint details
@@ -270,7 +327,10 @@ public class IoTHubDeviceManager extends BaseClass {
     
     // get the endpoint details
     public HashMap<String,String> getEndpointDetails(String ep_name) {
-        return this.m_endpoint_details.get(ep_name);
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        
+        return this.m_endpoint_details.get(iothub_ep_name);
     }
     
     // Help the JSON parser with null strings... ugh
@@ -280,10 +340,13 @@ public class IoTHubDeviceManager extends BaseClass {
     }
     
     // parse our device details
-    private HashMap<String,String> parseDeviceDetails(String device,String json) { return this.parseDeviceDetails(device,"",json); }
-    private HashMap<String,String> parseDeviceDetails(String device,String device_type,String json) {
+    private HashMap<String,String> parseDeviceDetails(String ep_name,String json) { return this.parseDeviceDetails(ep_name,"",json); }
+    private HashMap<String,String> parseDeviceDetails(String ep_name,String device_type,String json) {
         HashMap<String,String> ep = null;
         
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+                    
         // check the input json
         if (json != null) {
             try {
@@ -305,10 +368,10 @@ public class IoTHubDeviceManager extends BaseClass {
 
                     // ETag for device
                     ep.put("etag",(String)parsed.get("etag"));
-
+        
                     // Device Name
                     ep.put("deviceID",(String)parsed.get("deviceId"));
-                    ep.put("ep_name",device);
+                    ep.put("ep_name",iothub_ep_name);
                     ep.put("ep_type",device_type);
 
                     // record the entire record for later...
@@ -319,13 +382,13 @@ public class IoTHubDeviceManager extends BaseClass {
                 }
                 else {
                     // device is not found
-                    this.errorLogger().warning("IoTHub: parseDeviceDetails: device " + device + " is not a registered device (OK)");
+                    this.errorLogger().warning("IoTHub: parseDeviceDetails: device " + iothub_ep_name + " is not a registered device (OK)");
                     ep = null;
                 }
             }
             catch (Exception ex) {
                 // exception in parsing... so nullify...
-                this.errorLogger().warning("IoTHub: parseDeviceDetails: exception while parsing device " + device + " JSON: " + json,ex);
+                this.errorLogger().warning("IoTHub: parseDeviceDetails: exception while parsing device " + iothub_ep_name + " JSON: " + json,ex);
                 if (ep != null) {
                     this.errorLogger().warning("IoTHub: parseDeviceDetails: last known ep contents: " + ep);
                 }
@@ -345,28 +408,34 @@ public class IoTHubDeviceManager extends BaseClass {
     }
     
     // Parse the AddDevice result and capture key elements 
-    private void saveAddDeviceDetails(String device,String device_type,String json) {
+    private void saveAddDeviceDetails(String ep_name,String device_type,String json) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+                    
         // parse our device details into structure
-        HashMap<String,String> ep = this.parseDeviceDetails(device, device_type, json);
+        HashMap<String,String> ep = this.parseDeviceDetails(iothub_ep_name, device_type, json);
         if (ep != null) {
             // save off the details
-            this.saveDeviceDetails(device, ep);
+            this.saveDeviceDetails(iothub_ep_name, ep);
         }
         else {
             // unable to parse details
-            this.errorLogger().warning("IoTHub: saveAddDeviceDetails: ERROR: unable to parse device " + device + " details JSON: " + json);
+            this.errorLogger().warning("IoTHub: saveAddDeviceDetails: ERROR: unable to parse device " + iothub_ep_name + " details JSON: " + json);
         }
     }
     
     // save device details
-    public void saveDeviceDetails(String device,HashMap<String,String> entry) {
+    public void saveDeviceDetails(String ep_name,HashMap<String,String> entry) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        
         // don't overwrite an existing entry..
-        if (this.m_endpoint_details.get(device) == null) {
+        if (this.m_endpoint_details.get(iothub_ep_name) == null) {
             // DEBUG
-            this.errorLogger().info("IoTHub: saveDeviceDetails: saving " + device + ": " + entry);
+            this.errorLogger().info("IoTHub: saveDeviceDetails: saving " + iothub_ep_name + ": " + entry);
 
             // save off the endpoint details
-            this.m_endpoint_details.put(device,entry);
+            this.m_endpoint_details.put(iothub_ep_name,entry);
         }
     }
     
