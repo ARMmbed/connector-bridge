@@ -376,7 +376,7 @@ public class MQTTTransport extends Transport {
                 }
                 
                 // DEBUG
-                this.errorLogger().info("MQTTTransport: URL: [" + url + "] clientID: [" + clientID + "] clean: " + clean_session);
+                this.errorLogger().info("MQTTTransport: Connection URL: [" + url + "]");
  
                 // setup the hostname & port
                 endpoint.setHost(url);
@@ -398,27 +398,44 @@ public class MQTTTransport extends Transport {
                     // non-PKI: configure credentials
                     String username = this.getUsername();
                     String pw = this.getPassword();
-                    
-                    // DEBUG
-                    this.errorLogger().info("MQTTTransport: Username: [" + username + "] pw: [" + pw + "] Used");
-                
+                                    
                     if (username != null && username.length() > 0 && username.equalsIgnoreCase("off") == false) {
                         endpoint.setUserName(username);
+                        this.errorLogger().info("MQTTTransport: Username: [" + username + "] used");
+                    }
+                    else {
+                        this.errorLogger().info("MQTTTransport: Anonymous username used");
                     }
                     if (pw != null && pw.length() > 0 && pw.equalsIgnoreCase("off") == false) {
                         endpoint.setPassword(pw);
+                        this.errorLogger().info("MQTTTransport: pw: [" + pw + "] used");
+                    }
+                    else {
+                        this.errorLogger().info("MQTTTransport: Anonymous pw used");
                     }
                 }
                 
                 // configure options... 
                 if (clientID != null && clientID.length() > 0 && clientID.equalsIgnoreCase("off") == false) {
                     endpoint.setClientId(clientID);
+                    this.errorLogger().info("MQTTTransport: Client ID: [" + clientID + "] used");
                 }
-                else if (clean_session == false) {
-                    String def_client_id = this.prefValue("mqtt_default_client_id",this.m_suffix);
-                    if (def_client_id != null && def_client_id.equalsIgnoreCase("off") == false) {
-                        // set a defaulted clientID
-                        endpoint.setClientId(def_client_id);
+                else {
+                    if (clean_session == false) {
+                        String def_client_id = this.prefValue("mqtt_default_client_id",this.m_suffix);
+                        if (def_client_id != null && def_client_id.equalsIgnoreCase("off") == false) {
+                            // set a defaulted clientID
+                            endpoint.setClientId(def_client_id);
+                            this.errorLogger().info("MQTTTransport: Client ID (default for clean): [" + def_client_id + "] used");
+                        }
+                        else {
+                            // non-clean session specified, but no clientID was given...
+                            this.errorLogger().warning("MQTTTransport: ERROR: Non-clean session requested but no ClientID specified");
+                        }
+                    }
+                    else {
+                        // no client ID used... clean session specified (OK)
+                        this.errorLogger().info("MQTTTransport: No ClientID being used (clean session)");
                     }
                 }
                 endpoint.setCleanSession(clean_session);
