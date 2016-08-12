@@ -248,7 +248,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     
     // OVERRIDE: Connection stock MQTT...
     protected boolean connectMQTT() {
-        return this.mqtt().connect(this.m_mqtt_host,this.m_mqtt_port,null,false);
+        return this.mqtt().connect(this.m_mqtt_host,this.m_mqtt_port,null,true);
     }
     
     // OVERRIDE: Topics for stock MQTT...
