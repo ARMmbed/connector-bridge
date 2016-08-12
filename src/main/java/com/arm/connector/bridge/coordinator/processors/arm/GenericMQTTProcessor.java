@@ -35,6 +35,7 @@ import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
 import com.arm.connector.bridge.core.TypeDecoder;
+import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -177,6 +178,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     
     // get our defaulted reply topic
     public String getReplyTopic(String ep_name,String ep_type,String def) {
+        if (this.m_topic_root != null) {
+            return this.m_topic_root + def;
+        }
         return def;
     }
     
@@ -435,6 +439,51 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         return new String[0];
     }
     
+    // get the resource value from the message
+    private String getCoAPValue(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+        //this.errorLogger().info("getCoAPValue: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("new_value");
+    }
+    
+    // pull the CoAP verb from the message
+    private String getCoAPVerb(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+        //this.errorLogger().info("getCoAPValue: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("coap_verb");
+    }
+    
+    // pull the EndpointName from the message
+    private String getCoAPEndpointName(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+        //this.errorLogger().info("getCoAPValue: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("ep");
+    }
+    
+    // get the resource URI from the message
+    private String getCoAPURI(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+        //this.errorLogger().info("getCoAPURI: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("path");
+    }
+    
+    // pull any mDC/mDS REST options from the message (optional)
+    private String getRESTOptions(String message) {
+        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
+        //this.errorLogger().info("getCoAPValue: payload: " + message);
+        JSONParser parser = this.orchestrator().getJSONParser();
+        Map parsed = this.tryJSONParse(message);
+        return (String)parsed.get("options");
+    }
+    
     // MQTT: messages from MQTT come here and are processed...
     @Override
     public void onMessageReceive(String topic, String message) {
@@ -455,17 +504,31 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         
         // Get/Put Endpoint Resource Value...
         else if (this.isEndpointResourceRequest(topic)) {
-            Map options = (Map)this.parseJson(message);
+            Map parsed = (Map)this.parseJson(message);
             String json = null;
             
-            if (options != null && this.isNotDomainEndpointsOnly(topic) == true)  {
-                if (options.containsKey("new_value") == false) {
-                    // GET the resource value
-                    verb = "GET";
-                }
+            if (parsed != null && this.isNotDomainEndpointsOnly(topic) == true)  {
+                // parse the topic to get the endpoint and CoAP verb
+                // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
+                String ep_name = this.getCoAPEndpointName(message);
+
+                // pull the CoAP URI and Payload from the message itself... its JSON... 
+                // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+                String uri = this.getCoAPURI(message);
+        
+                // pull the CoAP verb from the message itself... its JSON... (PRIMARY)
+                // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+                verb = this.getCoAPVerb(message);
+                
+                // get the CoAP value to send
+                String value = this.getCoAPValue(message);
+                
+                // if there are mDC/mDS REST options... lets add them
+                // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
+                String options = this.getRESTOptions(message);
                 
                 // perform the operation
-                json = this.orchestrator().processEndpointResourceOperation(verb, this.stripRequestTAG(topic), options);
+                json = this.orchestrator().processEndpointResourceOperation(verb,ep_name,uri,value,options);
             }
             
             // send a response back if we have one...
@@ -569,6 +632,20 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         return is_endpoint_notification_subscription;
     }
     
+    // get the endpoint name from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<endpoint name>/<URI>
+    private String getEndpointNameFromTopic(String topic) {
+        String modified_topic = topic;
+        if (this.m_topic_root != null) {
+            modified_topic = topic.replace(this.m_topic_root + "/", "");
+        }
+        String[] items = modified_topic.split("/");
+        if (items.length >= 3) {
+            return items[2];
+        }
+        return null;
+    }
+    
     // return the ith element from the topic
     private String getElementFromTopic(String topic) {
         String[] items = topic.split("/");
@@ -618,7 +695,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         boolean is_endpoint_resource_request = false;
         if (this.isEndpointResourcesDiscovery(topic)) {
             // get the endpoint name
-            String endpoint_name = this.getElementFromTopic(topic);
+            String endpoint_name = this.getEndpointNameFromTopic(topic);
             
             // stripped topic
             String stripped_topic = this.stripRequestTAG(topic);
@@ -756,6 +833,34 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         return parts[1];
     }
     
+    // create the observation
+    private String createObservation(String verb, String ep_name, String uri, String value) {
+        Map notification = new HashMap<>();
+        
+        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
+        notification.put("value", value);
+        notification.put("path", uri);
+        notification.put("ep",ep_name);
+        
+        // add a new field to denote its a GET
+        notification.put("verb",verb);
+
+        // we will send the raw CoAP JSON... AWSIoT can parse that... 
+        String coap_raw_json = this.jsonGenerator().generateJson(notification);
+
+        // strip off []...
+        String coap_json_stripped = this.stripArrayChars(coap_raw_json);
+        
+        // encapsulate into a coap/device packet...
+        String coap_json = coap_json_stripped;
+
+        // DEBUG
+        this.errorLogger().info("MQTT-STD: CoAP notification(" + verb + " REPLY): " + coap_json);
+        
+        // return the generic MQTT observation JSON...
+        return coap_json;
+    }
+    
     // default formatter for AsyncResponse replies
     public String formatAsyncResponseAsReply(Map async_response,String verb) {
         // DEBUG
@@ -773,10 +878,17 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
                     // parse if present
                     if (payload.length() > 0) {
                         // Base64 decode
-                        String message = Utils.decodeCoAPPayload(payload);
-                        
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
+
                         // DEBUG
-                        this.errorLogger().info("MQTT-STD: Created(" + verb + ") GET Observation: " + message);
+                        this.errorLogger().info("MQTT-STD: Created(" + verb + ") GET observation: " + message + " reply topic: " + async_response.get("reply_topic"));
 
                         // return the message
                         return message;
@@ -805,7 +917,14 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
                     // parse if present
                     if (payload.length() > 0) {
                         // Base64 decode
-                        String message = Utils.decodeCoAPPayload(payload);
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String)async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String)async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
                         
                         // DEBUG
                         this.errorLogger().info("MQTT-STD: Created(" + verb + ") PUT Observation: " + message);

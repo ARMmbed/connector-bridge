@@ -733,7 +733,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         String iot_event_hub_coap_json = coap_json_stripped;
 
         // DEBUG
-        this.errorLogger().info("IoTHub: CoAP notification(GET REPLY): " + iot_event_hub_coap_json);
+        this.errorLogger().info("IoTHub: CoAP notification(" + verb + " REPLY): " + iot_event_hub_coap_json);
         
         // return the IoTHub-specific observation JSON...
         return iot_event_hub_coap_json;

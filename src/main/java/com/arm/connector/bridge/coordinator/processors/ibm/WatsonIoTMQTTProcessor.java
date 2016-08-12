@@ -674,7 +674,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
 
         // DEBUG
-        this.errorLogger().info("Watson IoT: CoAP notification(GET REPLY): " + iotf_coap_json);
+        this.errorLogger().info("Watson IoT: CoAP notification(" + verb + " REPLY): " + iotf_coap_json);
         
         // return the WatsonIoT-specific observation JSON...
         return iotf_coap_json;

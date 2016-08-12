@@ -683,7 +683,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         String aws_iot_gw_coap_json = coap_json_stripped;
 
         // DEBUG
-        this.errorLogger().info("AWSIoT: CoAP notification(GET REPLY): " + aws_iot_gw_coap_json);
+        this.errorLogger().info("AWSIoT: CoAP notification(" + verb + " REPLY): " + aws_iot_gw_coap_json);
         
         // return the AWSIoT-specific observation JSON...
         return aws_iot_gw_coap_json;
