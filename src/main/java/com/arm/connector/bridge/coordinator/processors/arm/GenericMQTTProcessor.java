@@ -297,21 +297,35 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         for(int i=0;notifications != null && i<notifications.size();++i) {
             Map notification = (Map)notifications.get(i);
             
-            // parse the payload 
-            String b64_payload = (String)notification.get("payload");
-            String parsed_payload = Utils.decodeCoAPPayload(b64_payload);
-                                   
-            // send it as JSON over the observation sub topic
-            String topic = this.createObservationTopic(this.createBaseTopic(),(String)notification.get("ep"),(String)notification.get("path"));
+            // decode the Payload...
+            String b64_coap_payload = (String)notification.get("payload");
+            String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
             
-            // add a "value" pair with the parsed payload as a string
-            notification.put("value", parsed_payload);
-                        
-            // we will send the raw CoAP JSON... IoTF can parse that... 
+            // DEBUG
+            //this.errorLogger().info("Watson IoT: Decoded Payload: " + decoded_coap_payload);
+            
+            // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
+            Map json_parsed = this.tryJSONParse(decoded_coap_payload);
+            if (json_parsed != null && json_parsed.isEmpty() == false) {
+                // add in a JSON object payload value directly... 
+                notification.put("value", Utils.retypeMap(json_parsed,this.fundamentalTypeDecoder()));             // its JSON (flat...)                                                   // its JSON 
+            }
+            else {
+                // add in a decoded payload value as a fundamental type...
+                notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(decoded_coap_payload)); // its a Float, Integer, or String
+            }
+                                                
+            // we will send the raw CoAP JSON... WatsonIoT can parse that... 
             String coap_raw_json = this.jsonGenerator().generateJson(notification);
             
             // strip off []...
             String coap_json_stripped = this.stripArrayChars(coap_raw_json);
+            
+            // get our endpoint name
+            String ep_name = (String)notification.get("ep");
+                                   
+            // send it as JSON over the observation sub topic
+            String topic = this.createObservationTopic(this.createBaseTopic(),ep_name,(String)notification.get("path"));
             
             // encapsulate into a coap/device packet...
             String coap_json = coap_json_stripped;
@@ -323,7 +337,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             this.errorLogger().info("processNotification(MQTT-STD): CoAP notification: " + coap_json);
             
             // send to MQTT...
-            this.mqtt().sendMessage(topic, coap_json);
+            this.mqtt().sendMessage(topic,coap_json);
         }
     }
     
