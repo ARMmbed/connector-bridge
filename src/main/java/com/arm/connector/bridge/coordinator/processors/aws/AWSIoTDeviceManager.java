@@ -565,7 +565,12 @@ public class AWSIoTDeviceManager extends BaseClass {
                 this.deleteCertificate(cert_id);
                 
                 // purge the certificate from the cache
-                this.m_keys_cert_ids.remove(this.getKeyAndCertIndex(cert_id));
+                try {
+                    this.m_keys_cert_ids.remove(this.getKeyAndCertIndex(cert_id));
+                }
+                catch (Exception ex) {
+                    // fail silently...
+                }
             }
         }
     }

@@ -47,7 +47,7 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class GenericMQTTProcessor extends Processor implements Transport.ReceiveListener, PeerInterface {
-    private String                          m_topic_root = null;
+    protected String                        m_topic_root = null;
     protected SubscriptionList              m_subscriptions = null;
     protected boolean                       m_auto_subscribe_to_obs_resources = false;
     protected TransportReceiveThread        m_mqtt_thread = null;

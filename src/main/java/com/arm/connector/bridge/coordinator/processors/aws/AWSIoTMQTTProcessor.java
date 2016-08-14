@@ -55,7 +55,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String                                  m_aws_iot_coap_cmd_topic_put = null;
     private String                                  m_aws_iot_coap_cmd_topic_post = null;
     private String                                  m_aws_iot_coap_cmd_topic_delete = null;
-    private String                                  m_topic_root = null;
     
     private HashMap<String,Object>                  m_aws_iot_gw_endpoints = null;
     private HashMap<String,TransportReceiveThread>  m_mqtt_thread_list = null;
@@ -332,7 +331,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     
     // final customization of a MQTT Topic...
     private String customizeTopic(String topic,String ep_name,String ep_type) {
-        String cust_topic = topic.replace("__EPNAME__", ep_name);
+        String cust_topic = topic.replace("__EPNAME__", ep_name).replace("__TOPIC_ROOT__",this.m_topic_root);
         if (ep_type != null) cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
         this.errorLogger().info("AWSIoT Customized Topic: " + cust_topic); 
         return cust_topic;
