@@ -48,7 +48,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     public static int                               NUM_COAP_TOPICS = 1;                                  // # of MQTT Topics for CoAP verbs
     
     private String                                  m_observation_type = "observation";
-    private String                                  m_async_response_type = "cmd-response";
+    private String                                  m_async_response_type = "response";
     
     private String                                  m_aws_iot_observe_notification_topic = null;
     private String                                  m_aws_iot_coap_cmd_topic_get = null;
@@ -486,14 +486,14 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     }
     
     // create the URI path from the topic
-    private String getURIPathFromTopic(String topic) {
+    private String getURIPathFromTopic(String topic,int start_index) {
         String value = "";
         try {
             // split by forward slash
             String tmp_slash[] = topic.split("/");
             
             // we now re-assemble starting from a specific index
-            for(int i=5;tmp_slash.length > 5 && i<tmp_slash.length;++i) {
+            for(int i=start_index;tmp_slash.length > 5 && i<tmp_slash.length;++i) {
                 value = value + "/" + tmp_slash[i];
             }
         }
@@ -506,20 +506,20 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     
     // get the endpoint name from the MQTT topic
     private String getEndpointNameFromTopic(String topic) {
-        // format: mbed/__DEVICE_TYPE__/__EPNAME__/coap/__COMMAND_TYPE__/#
-        return this.getTopicElement(topic,2);
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getTopicElement(topic,3);                                   // POSITION SENSITIVE
     }
     
     // get the CoAP verb from the MQTT topic
     private String getCoAPVerbFromTopic(String topic) {
-        // format: mbed/__DEVICE_TYPE__/__EPNAME__/coap/__COMMAND_TYPE__/#
-        return this.getTopicElement(topic,4);
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getTopicElement(topic,1);                                   // POSITION SENSITIVE
     }
     
     // get the CoAP URI from the MQTT topic
     private String getCoAPURIFromTopic(String topic) {
-        // format: mbed/__DEVICE_TYPE__/__EPNAME__/coap/__COMMAND_TYPE__/<uri path>
-        return this.getURIPathFromTopic(topic);
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getURIPathFromTopic(topic,4);                               // POSITION SENSITIVE
     }
     
     // get the resource URI from the message
