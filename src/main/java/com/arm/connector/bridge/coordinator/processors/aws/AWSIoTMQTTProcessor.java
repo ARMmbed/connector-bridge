@@ -55,7 +55,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String                                  m_aws_iot_coap_cmd_topic_put = null;
     private String                                  m_aws_iot_coap_cmd_topic_post = null;
     private String                                  m_aws_iot_coap_cmd_topic_delete = null;
-        
+    private String                                  m_topic_root = null;
+    
     private HashMap<String,Object>                  m_aws_iot_gw_endpoints = null;
     private HashMap<String,TransportReceiveThread>  m_mqtt_thread_list = null;
         
@@ -83,11 +84,14 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // Observation notification topic
         this.m_aws_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("aws_iot_observe_notification_topic",this.m_suffix); 
         
+        // initialize the topic root
+        this.initTopicRoot("aws_iot_topic_root");
+        
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
-        this.m_aws_iot_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","get");
-        this.m_aws_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","put");
-        this.m_aws_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","post");
-        this.m_aws_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","delete");
+        this.m_aws_iot_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__TOPIC_ROOT__",this.getTopicRoot()).replace("__COMMAND_TYPE__","get");
+        this.m_aws_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__TOPIC_ROOT__",this.getTopicRoot()).replace("__COMMAND_TYPE__","put");
+        this.m_aws_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__TOPIC_ROOT__",this.getTopicRoot()).replace("__COMMAND_TYPE__","post");
+        this.m_aws_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic",this.m_suffix).replace("__TOPIC_ROOT__",this.getTopicRoot()).replace("__COMMAND_TYPE__","delete");
                          
         // AWSIoT Device Manager - will initialize and update our AWSIoT bindings/metadata
         this.m_aws_iot_gw_device_manager = new AWSIoTDeviceManager(this.orchestrator().errorLogger(),this.orchestrator().preferences(),this.m_suffix,http,this.orchestrator());
@@ -98,7 +102,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     
     // get our defaulted reply topic
     @Override
-    public String getReplyTopic(String ep_name,String ep_type,String def){
+    public String getReplyTopic(String ep_name,String ep_type,String def) {
         return this.customizeTopic(this.m_aws_iot_observe_notification_topic,ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
     }
  

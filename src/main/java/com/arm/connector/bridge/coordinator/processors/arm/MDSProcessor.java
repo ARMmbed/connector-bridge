@@ -559,13 +559,13 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // create the Endpoint Subscription Notification URL
     private String createEndpointResourceSubscriptionURL(String uri) {
-        return this.createEndpointResourceSubscriptionURL(uri,null);
+        return this.createEndpointResourceSubscriptionURL(uri,(Map)null);
     } 
     
     // create the Endpoint Subscription Notification URL
     private String createEndpointResourceSubscriptionURL(String uri,Map options) {
         // build out the URL for mDS Endpoint notification subscriptions...
-        String url = this.createBaseURL() + uri;
+        String url = this.createBaseURL() + "/" + uri;
         
         // SYNC Usage
         
@@ -588,21 +588,21 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
     
     // create the Endpoint Subscription Notification URL (default options)
-    private String createEndpointResourceSubscriptionURL(String domain,String endpoint,String uri) {
+    private String createEndpointResourceSubscriptionURL(String endpoint,String uri) {
         HashMap<String,String> options = new HashMap<>();
         
         // SYNC Usage
         if (this.m_disable_sync == false) {
             options.put("sync","true");
         }
-        return this.createEndpointResourceSubscriptionURL(domain, endpoint, uri, options);
+        return this.createEndpointResourceSubscriptionURL(endpoint, uri, options);
     }
     
     // create the Endpoint Subscription Notification URL
-    private String createEndpointResourceSubscriptionURL(String domain,String endpoint,String uri,Map<String,String> options) {
+    private String createEndpointResourceSubscriptionURL(String endpoint,String uri,Map<String,String> options) {
         // build out the URL for mDS Endpoint notification subscriptions...
         // /{domain}/subscriptions/{endpoint-name}/{resource-path}?sync={true&#124;false}
-        String url = this.createBaseURL() + domain  + "/subscriptions/" + endpoint + uri;
+        String url = this.createBaseURL() + this.getDomain() + "/subscriptions/" + endpoint + uri;
         
         // SYNC Usage 
         
@@ -940,7 +940,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     // process an endpoint resource subscription request
     @Override
     public String subscribeToEndpointResource(String ep_name,String uri,Boolean init_webhook) {
-        String url = this.createEndpointResourceSubscriptionURL(this.getDomain(),ep_name,uri);
+        String url = this.createEndpointResourceSubscriptionURL(ep_name,uri);
         return this.subscribeToEndpointResource(url,init_webhook);
     }
     
