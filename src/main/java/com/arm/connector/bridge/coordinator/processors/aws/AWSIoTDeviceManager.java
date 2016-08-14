@@ -147,11 +147,14 @@ public class AWSIoTDeviceManager extends BaseClass {
     
     // unlink the certificate from the Thing Record
     private void unlinkCertificateFromThing(String ep_name,String arn) {
-        String ep_qual = "--thing-name=" + ep_name;
-        if (ep_name == null) ep_qual = "";
-        
-        String args = "iot detach-thing-principal " + ep_qual + " --principal=" + arn;
-        Utils.awsCLI(this.errorLogger(), args);
+        if (ep_name != null) {
+            String ep_qual = "--thing-name=" + ep_name;
+            String args = "iot detach-thing-principal " + ep_qual + " --principal=" + arn;
+            Utils.awsCLI(this.errorLogger(), args);
+        }
+        else {
+            this.errorLogger().warning("unlinkCertificateFromThing: Unable to unlink Cert from Thing... no Endpoint Name provided");
+        }
     }
     
     // unlink the certificate from the Policy
