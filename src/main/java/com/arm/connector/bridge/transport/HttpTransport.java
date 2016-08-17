@@ -148,6 +148,34 @@ public class HttpTransport extends BaseClass {
      * @param auth_domain
      * @return
      */
+    public String httpsPeristentGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
+        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null,true);
+    }
+    
+    /**
+     *
+     * @param url_str
+     * @param api_token
+     * @param data
+     * @param content_type
+     * @param auth_domain
+     * @return
+     */
+    public String httpsPersistentGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
+        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, true, true, api_token,true);
+    }
+    
+    // execute GET over https
+    /**
+     *
+     * @param url_str
+     * @param username
+     * @param password
+     * @param data
+     * @param content_type
+     * @param auth_domain
+     * @return
+     */
     public String httpsGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null);
     }
@@ -436,9 +464,15 @@ public class HttpTransport extends BaseClass {
     
     public int getLastResponseCode() { return this.m_last_response_code; }
 
-    // perform an authenticated HTML operation
+        // perform an authenticated HTML operation
     @SuppressWarnings("empty-statement")
     private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL,boolean use_api_token,String api_token) {
+        return this.doHTTP(verb,url_str,username,password,data,content_type,auth_domain,doInput,doOutput,doSSL,use_api_token,api_token,false);
+    }
+    
+    // perform an authenticated HTML operation
+    @SuppressWarnings("empty-statement")
+    private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL,boolean use_api_token,String api_token,boolean persistent) {
         String result = "";
         String line = "";
         URLConnection connection = null;
@@ -553,6 +587,11 @@ public class HttpTransport extends BaseClass {
             // specify domain if requested
             if (auth_domain != null && auth_domain.length() > 0) {
                 connection.setRequestProperty("Domain", auth_domain);
+            }
+            
+            // specify a persistent connection or not
+            if (persistent == true) {
+                connection.setRequestProperty("Connection", "keep-alive");
             }
 
             // DEBUG dump the headers

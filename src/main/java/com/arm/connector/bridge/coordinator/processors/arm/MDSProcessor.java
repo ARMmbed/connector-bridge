@@ -83,6 +83,12 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private boolean                    m_use_rest_versions = false;
     private String                     m_rest_version = null;
     
+    // Long Poll vs Webhook usage
+    private boolean                    m_mds_enable_long_poll = false;
+    private String                     m_mds_long_poll_uri = null;
+    private String                     m_mds_long_poll_url = null;
+    private LongPollProcessor          m_long_poll_processor = null;
+    
     // constructor
     public MDSProcessor(Orchestrator orchestrator,HttpTransport http) {
         super(orchestrator,null);
@@ -99,6 +105,8 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.m_mds_gw_use_ssl = this.prefBoolValue("mds_gw_use_ssl");
         this.m_use_api_token = this.prefBoolValue("mds_use_api_token");
         this.m_use_rest_versions = this.prefBoolValue("mds_enable_rest_versions");
+        this.m_mds_enable_long_poll = this.prefBoolValue("mds_enable_long_poll");
+        this.m_mds_long_poll_uri = this.prefValue("mds_long_poll_uri");
         this.m_rest_version = this.prefValueWithDefault("mds_rest_version",this.m_default_rest_version).replace("v","").replace("//","");
         if (this.m_use_api_token == true) this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         
@@ -118,6 +126,17 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.m_webhook_validator = null;
         this.m_webhook_validator_poll_ms = 0;
         this.m_webhook_validator_enable = orchestrator.preferences().booleanValueOf("mds_webhook_validator_enable");
+        
+        // initialize the default type of URI for contacting us (GW) - this will be sent to mDS for the webhook URL
+        this.setupBridgeURI();
+        
+        // initialize the default type of URI for contacting mDS
+        this.setupMDSURI();
+        
+        // OVEERRIDE - long polling vs. Webhook
+        this.longPollOverrideSetup();
+        
+        // if using webhooks, we can optionally validate the webhook setting...
         if (this.m_webhook_validator_enable == true) {
             // enabling webhook/subscription validation
             this.m_webhook_validator_poll_ms = orchestrator.preferences().intValueOf("mds_webhook_validator_poll_ms");
@@ -141,14 +160,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             orchestrator.errorLogger().warning("MDSProcessor: Versioning of mds/mDC REST calls DISABLED");
         }
         
-        // initialize the default type of URI for contacting us (GW) - this will be sent to mDS for the webhook URL
-        this.setupBridgeURI();
-        
-        // initialize the default type of URI for contacting mDS
-        this.setupMDSURI();
-        
-        // configure the callback type based on the version of mDS
-        this.setupCallbackType();
+        // configure the callback type based on the version of mDS (only if not using long polling)
+        if (this.longPollEnabled() == false) {
+            this.setupCallbackType();
+        }
         
         // sanity check the configured mDS AUTH type
         this.sanityCheckAuthType();  
@@ -161,6 +176,48 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         
         // init the device metadata resource URI's
         this.initDeviceMetadataResourceURIs();
+    }
+    
+    // Long polling enabled or disabled?
+    private boolean longPollEnabled() {
+        return (this.m_mds_enable_long_poll == true && this.m_mds_long_poll_uri != null && this.m_mds_long_poll_uri.length() > 0);
+    }
+    
+    // get the long polling URL
+    public String longPollURL() {
+        return this.m_mds_long_poll_url;
+    }
+    
+    // override use of long polling vs. webhooks for notifications
+    private void longPollOverrideSetup() {
+        if (this.longPollEnabled()) {
+            // DEBUG
+            this.errorLogger().info("Long Poll Override ENABLED. Using Long Polling (no webhook)");
+            
+            // disable webhook validation
+            this.m_webhook_validator_enable = false;
+            
+            // override use of long polling vs webhooks for notifications
+            this.m_mds_long_poll_url = this.constructLongPollURL();
+            
+            // start the Long polling thread...
+            this.startLongPolling();
+        }   
+    }
+    
+    // build out the long poll URL
+    private String constructLongPollURL() {
+        String url = this.createBaseURL() + "/" + this.m_mds_long_poll_uri;
+        this.errorLogger().info("constructLongPollURL: Long Poll URL: " + url);
+        return url;
+    }
+    
+    // start the long polling thread
+    private void startLongPolling() {
+        if (this.m_long_poll_processor == null) {
+            this.m_long_poll_processor = new LongPollProcessor(this);
+            this.m_long_poll_processor.startPolling();
+        }
     }
     
     /**
@@ -272,28 +329,34 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // validate the notification
     private Boolean validateNotification(HttpServletRequest request) {
-        boolean validated = false;
-        if (this.validatableNotifications() == true && request.getHeader("Authentication") != null) {
-            String calc_hash = this.createAuthenticationHash();
-            String header_hash = request.getHeader("Authentication");
-            validated = Utils.validateHash(header_hash,calc_hash);
-            
-            // DEBUG
-            if (!validated) {
-                this.errorLogger().warning("validateNotification: failed: calc: " + calc_hash + " header: " + header_hash);
+        if (request != null) {
+            boolean validated = false;
+            if (this.validatableNotifications() == true && request.getHeader("Authentication") != null) {
+                String calc_hash = this.createAuthenticationHash();
+                String header_hash = request.getHeader("Authentication");
+                validated = Utils.validateHash(header_hash,calc_hash);
+
+                // DEBUG
+                if (!validated) {
+                    this.errorLogger().warning("validateNotification: failed: calc: " + calc_hash + " header: " + header_hash);
+                }
+
+                // override
+                if (this.m_skip_validation == true) {
+                    validated = true;
+                }
+
+
+                // return validation status
+                return validated;
             }
-            
-            // override
-            if (this.m_skip_validation == true) {
-                validated = true;
+            else {
+                // using push-url. No authentication possible.
+                return true;
             }
-            
-            
-            // return validation status
-            return validated;
         }
         else {
-            // using push-url. No authentication possible.
+            // no request - so assume we are validated
             return true;
         }
     }
@@ -440,8 +503,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     // set our mDS Notification Callback URL
     @Override
     public void setNotificationCallbackURL() {
-        String target_url = this.createCallbackURL();
-        this.setNotificationCallbackURL(target_url);
+        if (this.longPollEnabled() == false) {
+            String target_url = this.createCallbackURL();
+            this.setNotificationCallbackURL(target_url);
+        }
     }
     
     
@@ -702,6 +767,24 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return this.m_http.getLastResponseCode();
     }
     
+    // invoke peristent HTTPS Get
+    public String persistentHTTPSGet(String url) {
+        return this.persistentHTTPSGet(url, this.m_content_type);
+    }
+    
+    // invoke peristent HTTPS Get
+    private String persistentHTTPSGet(String url,String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsPersistentGetApiTokenAuth(url,this.m_api_token, null,content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsPeristentGet(url,this.m_mds_username,this.m_mds_password,null,content_type,this.m_mds_domain);
+        }
+        this.errorLogger().info("httpsGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+    
     // invoke HTTP GET request (SSL)
     private String httpsGet(String url) {
         return this.httpsGet(url,this.m_content_type);
@@ -711,10 +794,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private String httpsGet(String url,String content_type) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpsGetApiTokenAuth(url,this.m_api_token, null,content_type, this.m_mds_domain);
         }
         else {
-            response = this.m_http.httpsGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpsGet(url,this.m_mds_username,this.m_mds_password,null,content_type,this.m_mds_domain);
         }
         this.errorLogger().info("httpsGet: response: " + this.m_http.getLastResponseCode());
         return response;
@@ -878,6 +961,11 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         
         // send the response back as an ACK to mDS
         this.sendResponseToMDS("text/html;charset=UTF-8", request, response, "", "");
+    }
+    
+    // process and route the mDS message to the appropriate peer method (long poll method)
+    public void processMDSMessage(String json) {
+        this.processMDSMessage(json,null);
     }
     
     // process and route the mDS message to the appropriate peer method
