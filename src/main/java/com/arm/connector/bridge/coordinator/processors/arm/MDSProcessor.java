@@ -319,7 +319,8 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // is our mDS instance actually mDC?
     private boolean mdsIsConnector() {
-        return (this.m_use_api_token == true && this.m_using_callback_webhooks == true && this.m_use_https_dispatch == true);
+        return  ( (this.m_use_api_token == true && this.m_using_callback_webhooks == true && this.m_use_https_dispatch == true) ||
+                  (this.m_use_api_token == true && this.m_mds_enable_long_poll == true && this.m_use_https_dispatch == true) );
     }
     
     // mDS is using Token Auth
