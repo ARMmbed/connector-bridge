@@ -1038,6 +1038,11 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return this.subscribeToEndpointResource(url,false);
     }
     
+    // create the mDS/mDC URI for subscriptions:  "subscriptions/<endpoint>/<uri>"  
+    public String createSubscriptionURI(String ep_name,String uri) {
+        return "subscriptions" + "/" + ep_name + uri;
+    }
+    
     // subscribe to endpoint resources
     private String subscribeToEndpointResource(String url,Boolean init_webhook) {
         if (init_webhook) {

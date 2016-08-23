@@ -431,4 +431,9 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     public void beginValidationPolling() {
         this.mds_rest_processor().beginValidationPolling();
     }
+    
+    @Override
+    public String createSubscriptionURI(String ep_name,String resource_uri) {
+        return this.mds_rest_processor().createSubscriptionURI(ep_name, resource_uri);
+    }
 }

@@ -65,4 +65,7 @@ public interface MDSInterface {
     
     // Begin mDS/mDS webhook and subscription validation polling...
     public void beginValidationPolling();
+    
+    // create the mDS/mDC URI for subscriptions
+    public String createSubscriptionURI(String ep_name,String resource_uri);
 }
