@@ -93,6 +93,9 @@ public class AWSIoTDeviceManager extends BaseClass {
         // see if we already have a device...
         HashMap<String,String> ep = this.getDeviceDetails(device);
         if (ep != null) {
+            // DEBUG
+            this.errorLogger().info("AWSIoT: registerNewDevice: device details: " + ep);
+            
             // complete the details
             this.completeDeviceDetails(ep);
             
@@ -103,6 +106,9 @@ public class AWSIoTDeviceManager extends BaseClass {
             status = true;
         }
         else {
+            // DEBUG
+            this.errorLogger().info("AWSIoT: registerNewDevice: no device details found... creating/registering some. message: " + message);
+            
             // device is not registered... so create/register it
             status = this.createAndRegisterNewDevice(message);
         }

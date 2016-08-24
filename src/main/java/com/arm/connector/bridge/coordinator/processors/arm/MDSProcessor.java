@@ -170,7 +170,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         
         // disable sync usage if with Connector
         if (this.mdsIsConnector() == true) {
-            this.errorLogger().info("Using mbed Device Connector. Sync=true DISABLED");
+            this.errorLogger().info("MDSProcessor: Using mbed Device Connector. Sync=true DISABLED");
             this.m_disable_sync = true;
         }
         
@@ -192,7 +192,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private void longPollOverrideSetup() {
         if (this.longPollEnabled()) {
             // DEBUG
-            this.errorLogger().info("Long Poll Override ENABLED. Using Long Polling (no webhook)");
+            this.errorLogger().warning("MDSProcessor: Long Poll Override ENABLED. Using Long Polling (webhook DISABLED)");
             
             // disable webhook validation
             this.m_webhook_validator_enable = false;

@@ -793,11 +793,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     
     // validate the MQTT Connection
     private synchronized boolean validateMQTTConnection(String ep_name,String ep_type) {        
-        // see if we already have a connection for this endpoint...
-        if (this.mqtt(ep_name) == null) {
-            // create a MQTT connection for this endpoint... 
-            this.createAndStartMQTTForEndpoint(ep_name,ep_type);
-        }
+        // create a MQTT connection for this endpoint... 
+        this.createAndStartMQTTForEndpoint(ep_name,ep_type);
         
         // return our connection status
         return this.isConnected(ep_name);
@@ -807,6 +804,9 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     @Override
     protected synchronized Boolean registerNewDevice(Map message) {
         if (this.m_aws_iot_gw_device_manager != null) {
+            // DEBUG
+            this.errorLogger().info("AWSIoT: Registering new device: " + (String)message.get("ep") + " type: " + (String)message.get("ept"));
+        
             // create the device in AWSIoT
             Boolean success = this.m_aws_iot_gw_device_manager.registerNewDevice(message);
             
@@ -851,70 +851,87 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     
     // add a MQTT transport for a given endpoint - this is how MS AWSIoT MQTT integration works... 
     private synchronized void createAndStartMQTTForEndpoint(String ep_name,String ep_type) {
-        if (this.mqtt(ep_name) == null) {
-            // create a new MQTT Transport instance
-            MQTTTransport mqtt = new MQTTTransport(this.errorLogger(),this.preferences());
+        try {
+            // we may already have a connection established for this endpoint... if so, we just ignore...
+            if (this.mqtt(ep_name) == null) {
+                // no connection exists already... so... go get our endpoint details
+                HashMap<String,String> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
+                if (ep != null) {
+                    // create a new MQTT Transport instance for our endpoint
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(),this.preferences());
+                    if (mqtt != null) {
+                        // AWSIoT only works with PKI
+                        mqtt.enablePKI(ep.get("PrivateKey"),ep.get("PublicKey"),ep.get("certificatePem"),ep.get("thingName"));
 
-            // get our endpoint details
-            HashMap<String,String> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
-                        
-            // AWSIoT only works with PKI
-            mqtt.enablePKI(ep.get("PrivateKey"),ep.get("PublicKey"),ep.get("certificatePem"),ep.get("thingName"));
-            
-            // set the AWSIoT endpoint address
-            this.m_mqtt_host = ep.get("endpointAddress");
-            
-            // ClientID is the endpoint name
-            String client_id = ep_name;
-            
-            // DEBUG override for testing internally... do not enable
-            //if (this.prefBoolValue("mqtt_debug_internal") == true) {
-            //    this.m_mqtt_host = "192.168.1.213";
-            //    client_id = null;
-            //    mqtt.useUserPass();
-            //     mqtt.enableMQTTVersionSet(false);
-            //}
+                        // set the AWSIoT endpoint address
+                        this.m_mqtt_host = ep.get("endpointAddress");
 
-            // add it to the list indexed by the endpoint name... not the clientID...
-            this.addMQTTTransport(ep_name,mqtt);
+                        // ClientID is the endpoint name
+                        String client_id = ep_name;
 
-            // DEBUG
-            this.errorLogger().info("AWSIoT: connecting to MQTT for endpoint: " + ep_name + " type: " + ep_type + "...");
+                        // DEBUG override for testing internally... do not enable
+                        //if (this.prefBoolValue("mqtt_debug_internal") == true) {
+                        //    this.m_mqtt_host = "192.168.1.213";
+                        //    client_id = null;
+                        //    mqtt.useUserPass();
+                        //     mqtt.enableMQTTVersionSet(false);
+                        //}
 
-            // connect and start listening... 
-            if (this.connect(ep_name,client_id) == true) {
-                // DEBUG
-                this.errorLogger().info("AWSIoT: connected to MQTT. Creating and registering listener Thread for endpoint: " + ep_name + " type: " + ep_type);
+                        // add it to the list indexed by the endpoint name... not the clientID...
+                        this.addMQTTTransport(ep_name,mqtt);
 
-                // ensure we only have 1 thread/endpoint
-                if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                    TransportReceiveThread listener = (TransportReceiveThread)this.m_mqtt_thread_list.get(ep_name);
-                    listener.disconnect();
-                    this.m_mqtt_thread_list.remove(ep_name);
+                        // DEBUG
+                        this.errorLogger().info("AWSIoT: connecting to MQTT for endpoint: " + ep_name + " type: " + ep_type + "...");
+
+                        // connect and start listening... 
+                        if (this.connect(ep_name,client_id) == true) {
+                            // DEBUG
+                            this.errorLogger().info("AWSIoT: connected to MQTT. Creating and registering listener Thread for endpoint: " + ep_name + " type: " + ep_type);
+
+                            // ensure we only have 1 thread/endpoint
+                            if (this.m_mqtt_thread_list.get(ep_name) != null) {
+                                TransportReceiveThread listener = (TransportReceiveThread)this.m_mqtt_thread_list.get(ep_name);
+                                listener.disconnect();
+                                this.m_mqtt_thread_list.remove(ep_name);
+                            }
+
+                            // create and start the listener
+                            TransportReceiveThread listener = new TransportReceiveThread(mqtt);
+                            listener.setOnReceiveListener(this);
+                            this.m_mqtt_thread_list.put(ep_name,listener);
+                            listener.start();
+                        } 
+                        else {
+                            // unable to connect!
+                            this.errorLogger().critical("AWSIoT: Unable to connect to MQTT for endpoint: " + ep_name + " type: " + ep_type);
+                            this.remove(ep_name);
+
+                            // ensure we only have 1 thread/endpoint
+                            if (this.m_mqtt_thread_list.get(ep_name) != null) {
+                                TransportReceiveThread listener = (TransportReceiveThread)this.m_mqtt_thread_list.get(ep_name);
+                                listener.disconnect();
+                                this.m_mqtt_thread_list.remove(ep_name);
+                            }
+                        }
+                    }
+                    else {
+                        // unable to allocate MQTT connection for our endpoint
+                        this.errorLogger().critical("AWSIoT: ERROR. Unable to allocate MQTT connection for: " + ep_name);
+                    }
                 }
-                
-                // create and start the listener
-                TransportReceiveThread listener = new TransportReceiveThread(mqtt);
-                listener.setOnReceiveListener(this);
-                this.m_mqtt_thread_list.put(ep_name,listener);
-                listener.start();
-            } 
-            else {
-                // unable to connect!
-                this.errorLogger().critical("AWSIoT: Unable to connect to MQTT for endpoint: " + ep_name + " type: " + ep_type);
-                this.remove(ep_name);
-                
-                // ensure we only have 1 thread/endpoint
-                if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                    TransportReceiveThread listener = (TransportReceiveThread)this.m_mqtt_thread_list.get(ep_name);
-                    listener.disconnect();
-                    this.m_mqtt_thread_list.remove(ep_name);
+                else {
+                    // unable to find endpoint details
+                    this.errorLogger().warning("AWSIoT: unable to find endpoint details for: " + ep_name + "... ignoring...");
                 }
             }
+            else {
+                // already connected... just ignore
+                this.errorLogger().info("AWSIoT: already have connection for " + ep_name + " (OK)");
+            }
         }
-        else {
-            // already connected... just ignore
-            this.errorLogger().info("AWSIoT: already have connection for " + ep_name + " (OK)");
+        catch (Exception ex) {
+            // exception caught... capture and note the stack trace
+            this.errorLogger().critical("AWSIoT: createAndStartMQTTForEndpoint(): exception: " + ex.getMessage() + " endpoint: "+ ep_name,ex);
         }
     }
     
@@ -943,7 +960,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // discover the endpoint attributes
     private void retrieveEndpointAttributes(Map endpoint) {
         // DEBUG
-        this.errorLogger().warning("AWSIoT: Creating New Device: " + endpoint);
+        this.errorLogger().info("AWSIoT: Requesting Device Metadata for: " + endpoint);
         
         // pre-populate the new endpoint with initial values for registration
         this.orchestrator().pullDeviceMetadata(endpoint,this); 
