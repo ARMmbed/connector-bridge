@@ -721,7 +721,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         notification.put("ep",ep_name);
         
         // add a new field to denote its a GET
-        notification.put("verb",verb);
+        notification.put("coap_verb",verb);
 
         // we will send the raw CoAP JSON... IoTHub can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);
