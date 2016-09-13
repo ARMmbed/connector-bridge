@@ -541,7 +541,17 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         if (val == null) {
             val = (String)parsed.get("payload");
             if (val != null) {
-                val = new String(Base64.decodeBase64(val));
+                // see if the value is Base64 encoded
+                if (val.contains("==")) {
+                    // value appears to be Base64 encoded... so decode... 
+                    try {
+                        val = new String(Base64.decodeBase64(val));
+                    }
+                    catch (Exception ex) {
+                        // just use the value itself...
+                        this.errorLogger().info("getCoAPValue: Exception in base64 decode",ex);
+                    }
+                }
             }
         }
         return val;

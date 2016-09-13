@@ -1039,6 +1039,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
     
     // create the mDS/mDC URI for subscriptions:  "subscriptions/<endpoint>/<uri>"  
+    @Override
     public String createSubscriptionURI(String ep_name,String uri) {
         return "subscriptions" + "/" + ep_name + uri;
     }
@@ -1325,25 +1326,31 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // parse the device attributes
     private Map parseDeviceAttributes(Map response, Map endpoint) {
-        // DEBUG
-        //this.errorLogger().info("parseDeviceAttributes: Response: " + response);
-        //this.errorLogger().info("parseDeviceAttributes: Endpoint: " + endpoint);
-        
-        // Parse the payload into a TLV
-        String b64_payload = (String)response.get("payload");
-        byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
-        
-        // HACK: convert the TLV to a String Array.. 
-        String tlv_data[] = Utils.formatTLVToStringArray(tlv);
-        
-        // Update the values
-        endpoint.put("meta_mfg", tlv_data[2]);
-        endpoint.put("meta_type",tlv_data[3]);
-        endpoint.put("meta_model", tlv_data[4]);
-        endpoint.put("meta_serial", tlv_data[5]);
-        endpoint.put("meta_firmware",tlv_data[6]);
-        endpoint.put("meta_software",tlv_data[7]);
-        endpoint.put("meta_hardware",tlv_data[8]);
+        try {
+            // DEBUG
+            //this.errorLogger().info("parseDeviceAttributes: Response: " + response);
+            //this.errorLogger().info("parseDeviceAttributes: Endpoint: " + endpoint);
+
+            // Parse the payload into a TLV
+            String b64_payload = (String)response.get("payload");
+            byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
+
+            // HACK: convert the TLV to a String Array.. 
+            String tlv_data[] = Utils.formatTLVToStringArray(tlv);
+
+            // Update the values
+            endpoint.put("meta_mfg", tlv_data[2]);
+            endpoint.put("meta_type",tlv_data[3]);
+            endpoint.put("meta_model", tlv_data[4]);
+            endpoint.put("meta_serial", tlv_data[5]);
+            endpoint.put("meta_firmware",tlv_data[6]);
+            endpoint.put("meta_software",tlv_data[7]);
+            endpoint.put("meta_hardware",tlv_data[8]);
+        }
+        catch (Exception ex) {
+            // exception during TLV parse... 
+            this.errorLogger().warning("Exception while parsing TLV device attributes... using defaults...",ex);
+        }
         
         // return the updated endpoint
         return endpoint;
