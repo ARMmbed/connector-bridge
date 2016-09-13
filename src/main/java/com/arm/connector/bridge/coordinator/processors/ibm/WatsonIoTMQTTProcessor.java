@@ -35,6 +35,7 @@ import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 
@@ -525,7 +526,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("getCoAPURI: payload: " + message);
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
-        return (String)parsed.get("path");
+        String val =  (String)parsed.get("path");
+        if (val == null) val = (String)parsed.get("resourceId");
+        return val;
     }
     
     // get the resource value from the message
@@ -534,7 +537,12 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("getCoAPValue: payload: " + message);
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
-        return (String)parsed.get("new_value");
+        String val =  (String)parsed.get("new_value");
+        if (val == null) {
+            val = (String)parsed.get("payload");
+            if (val == null) val = new String(Base64.decodeBase64(val));
+        }
+        return val;
     }
     
     // pull the EndpointName from the message
@@ -543,7 +551,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("getCoAPValue: payload: " + message);
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
-        return (String)parsed.get("ep");
+        String val =  (String)parsed.get("ep");
+        if (val == null) val = (String)parsed.get("deviceId");
+        return val;
     }
     
     // pull the CoAP verb from the message
@@ -552,7 +562,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("getCoAPValue: payload: " + message);
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
-        return (String)parsed.get("coap_verb");
+        String val =  (String)parsed.get("coap_verb");
+        if (val == null) val = (String)parsed.get("method");
+        return val;
     }
     
     // pull any mDC/mDS REST options from the message (optional)
