@@ -1349,7 +1349,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         }
         catch (Exception ex) {
             // exception during TLV parse... 
-            this.errorLogger().warning("Exception while parsing TLV device attributes... using defaults...",ex);
+            this.errorLogger().warning("Error parsing TLV device attributes... using defaults...");
         }
         
         // return the updated endpoint
