@@ -538,7 +538,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("new_value");
-        if (val == null | val.length() == 0) {
+        if (val == null || val.length() == 0) {
             val = (String)parsed.get("payload");
             if (val != null) {
                 // see if the value is Base64 encoded
