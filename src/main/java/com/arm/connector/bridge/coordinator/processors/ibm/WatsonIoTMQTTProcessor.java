@@ -527,7 +527,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("path");
-        if (val == null) val = (String)parsed.get("resourceId");
+        if (val == null || val.length() == 0) val = (String)parsed.get("resourceId");
         return val;
     }
     
@@ -538,7 +538,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("new_value");
-        if (val == null) {
+        if (val == null | val.length() == 0) {
             val = (String)parsed.get("payload");
             if (val != null) {
                 // see if the value is Base64 encoded
@@ -564,7 +564,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("ep");
-        if (val == null) val = (String)parsed.get("deviceId");
+        if (val == null || val.length() == 0) val = (String)parsed.get("deviceId");
         return val;
     }
     
@@ -575,7 +575,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         JSONParser parser = this.orchestrator().getJSONParser();
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("coap_verb");
-        if (val == null) val = (String)parsed.get("method");
+        if (val == null || val.length() == 0) val = (String)parsed.get("method");
         return val;
     }
     
