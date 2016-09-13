@@ -507,7 +507,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         String val =  (String)parsed.get("new_value");
         if (val == null) {
             val = (String)parsed.get("payload");
-            if (val == null) val = new String(Base64.decodeBase64(val));
+            if (val != null) {
+                val = new String(Base64.decodeBase64(val));
+            }
         }
         return val;
     }
