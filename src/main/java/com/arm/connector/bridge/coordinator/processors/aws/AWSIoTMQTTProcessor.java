@@ -103,7 +103,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // get our defaulted reply topic
     @Override
     public String getReplyTopic(String ep_name,String ep_type,String def) {
-        return this.customizeTopic(this.m_aws_iot_observe_notification_topic,ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
+        //return this.customizeTopic(this.m_aws_iot_observe_notification_topic,ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
+        return super.getReplyTopic(ep_name, ep_type, def);
     }
  
     // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
@@ -649,7 +650,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 // CoAP GET and PUT provides AsyncResponses...
                 if (coap_verb.equalsIgnoreCase("get") == true || coap_verb.equalsIgnoreCase("put") == true) {
                     // its an AsyncResponse.. so record it...
-                    this.recordAsyncResponse(response,coap_verb,this.mqtt(ep_name),this,topic,message,ep_name,uri);
+                    this.recordAsyncResponse(response,coap_verb,this.mqtt(ep_name),this,topic,this.getReplyTopic(ep_name,this.getEndpointTypeFromEndpointName(ep_name),uri),message,ep_name,uri);
                 }
                 else {
                     // we ignore AsyncResponses to PUT,POST,DELETE
@@ -696,12 +697,15 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         Map notification = new HashMap<>();
         
         // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20ansond","value":"29.75"}    
-        notification.put("value", value);
-        notification.put("path", uri);
+        notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
+        notification.put("path",uri);
+        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
+        notification.put("deviceId",ep_name);
         
         // add a new field to denote its a GET
         notification.put("coap_verb",verb);
+        notification.put("method",verb);
 
         // we will send the raw CoAP JSON... AWSIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);

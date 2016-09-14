@@ -182,7 +182,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     }
     
     // get our reply topic (if we specify URI, the build out the full resource response topic)
-    public String getReplyTopic(String ep_name,String ep_type,String uri,String def) {
+    private String getReplyTopic(String ep_name,String ep_type,String uri,String def) {
         return this.createResourceResponseTopic(ep_type,ep_name,uri);
     }
     
@@ -363,7 +363,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     }
     
     // get the endpoint type from the endpoint name
-    private String getEndpointTypeFromEndpointName(String ep_name) {
+    protected String getEndpointTypeFromEndpointName(String ep_name) {
         String ep_type = this.m_subscriptions.endpointTypeFromEndpointName(ep_name);
         if (ep_type != null) {
             return ep_type;
@@ -372,7 +372,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     }
     
     // set the endpoint type from the endpoint name
-    private void setEndpointTypeFromEndpointName(String ep_name,String ep_type) {
+    protected void setEndpointTypeFromEndpointName(String ep_name,String ep_type) {
         this.m_mqtt_endpoint_type_list.put(ep_name,ep_type);
     }
     
@@ -862,7 +862,12 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     }
     
     // record AsyncResponses
-    protected void recordAsyncResponse(String response,String coap_verb,MQTTTransport mqtt,GenericMQTTProcessor proc,String response_topic, String message, String ep_name, String uri) {
+    protected void recordAsyncResponse(String response,String coap_verb,MQTTTransport mqtt,GenericMQTTProcessor proc,String response_topic, String reply_topic, String message, String ep_name, String uri) {
+        this.asyncResponseManager().recordAsyncResponse(response, coap_verb, mqtt, proc, response_topic, reply_topic, message, ep_name, uri);
+    }
+    
+    // record AsyncResponses
+    private void recordAsyncResponse(String response,String coap_verb,MQTTTransport mqtt,GenericMQTTProcessor proc,String response_topic, String message, String ep_name, String uri) {
         this.asyncResponseManager().recordAsyncResponse(response, coap_verb, mqtt, proc, response_topic, this.getReplyTopic(ep_name,this.getEndpointTypeFromEndpointName(ep_name),uri,response_topic), message, ep_name, uri);
     }
     
@@ -938,12 +943,15 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         Map notification = new HashMap<>();
         
         // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
-        notification.put("value", value);
-        notification.put("path", uri);
+        notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
+        notification.put("path",uri);
+        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
+        notification.put("deviceId",ep_name);
         
         // add a new field to denote its a GET
         notification.put("coap_verb",verb);
+        notification.put("method",verb);
 
         // we will send the raw CoAP JSON... AWSIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);
