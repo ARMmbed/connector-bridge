@@ -545,9 +545,14 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             val = (String)parsed.get("payload");
             if (val != null || val.length() == 0) {
                 // see if the value is Base64 encoded
-                if (val.contains("==")) {
+                String last = val.substring(val.length()-1);
+                if (val.contains("==") || last.contains("=")) {
                     // value appears to be Base64 encoded... so decode... 
                     try {
+                        // DEBUG
+                        this.errorLogger().info("getCoAPValue: Value: " + val + " flagged as Base64 encoded... decoding...");
+                        
+                        // Decode
                         val = new String(Base64.decodeBase64(val));
                         
                         // DEBUG
