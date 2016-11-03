@@ -686,16 +686,17 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     private String createObservation(String verb, String ep_name, String uri, String value) {
         Map notification = new HashMap<>();
         
-        // needs to look like this:  {"d":{"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20ansond","value":"29.75"}}    
+        // Create the prototype-compatible version of the notification
         notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
         notification.put("path",uri);
-        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
-        notification.put("deviceId",ep_name);
-        
-        // add a new field to denote its a GET
         notification.put("coap_verb",verb);
-        notification.put("method",verb);
+        
+        // add compatibility with the production version of IBM's Connector Bridge
+        notification.put("resourceId",uri.substring(1));                   // strip leading "/" off of the URI...
+        notification.put("deviceId",ep_name);                              // ep
+        notification.put("payload",Base64.encodeBase64(value.getBytes())); // Base64 Encoded payload
+        notification.put("method",verb.toUpperCase());                     // verb (upper case)
 
         // we will send the raw CoAP JSON... WatsonIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);
