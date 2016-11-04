@@ -46,7 +46,7 @@ import org.fusesource.mqtt.client.Topic;
 public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     public static int               NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
     
-    private String                  m_observation_type = "observation";
+    private String                  m_observation_type = "notify";
     private String                  m_async_response_type = "cmd-response";
     
     private String                  m_mqtt_ip_address = null;
@@ -64,6 +64,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     // WatsonIoT bindings
     private String                  m_watson_iot_api_key = null;
     private String                  m_watson_iot_auth_token = null;
+    
+    // Legacy bridge
+    private boolean                 m_watson_legacy_bridge = false;
     
     // WatsonIoT Device Manager
     private WatsonIoTDeviceManager  m_watson_iot_device_manager = null;
@@ -89,11 +92,23 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         this.m_mqtt_ip_address = this.orchestrator().preferences().valueOf("iotf_mqtt_ip_address",this.m_suffix);
         this.m_mqtt_port = this.orchestrator().preferences().intValueOf("iotf_mqtt_port",this.m_suffix);
         
-        // get our configured device data key 
-        this.m_watson_iot_device_data_key = this.orchestrator().preferences().valueOf("iotf_device_data_key",this.m_suffix);
-        if (this.m_watson_iot_device_data_key == null || this.m_watson_iot_device_data_key.length() <= 0) {
-            // default
-            this.m_watson_iot_device_data_key = "coap";
+        // legacy bridge?
+        this.m_watson_legacy_bridge = this.orchestrator().preferences().booleanValueOf("iotf_legacy_bridge",this.m_suffix);
+        if (this.m_watson_legacy_bridge == true) {
+            this.errorLogger().warning("Watson IoT Bridge in Legacy Mode");
+            this.m_observation_type = "observation";
+        }
+        
+        // get our configured device data key (legacy mode only)
+        if (this.m_watson_legacy_bridge == true) {
+            this.m_watson_iot_device_data_key = this.orchestrator().preferences().valueOf("iotf_device_data_key",this.m_suffix);
+            if (this.m_watson_iot_device_data_key == null || this.m_watson_iot_device_data_key.length() <= 0) {
+                // default
+                this.m_watson_iot_device_data_key = "off";
+            }
+            if (this.m_watson_iot_device_data_key.equalsIgnoreCase("off")) {
+                this.m_watson_iot_device_data_key = null;
+            }
         }
         
         // Observation notifications
@@ -153,10 +168,15 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("WatsonIoT Credentials: Username: " + this.m_mqtt.getUsername() + " PW: " + this.m_mqtt.getPassword());
     }
     
+    // legacy mode
+    private boolean legacyBridge() {
+        return this.m_watson_legacy_bridge;
+    }
+    
     // get our defaulted reply topic
     public String getReplyTopic(String ep_name,String ep_type,String def) {
         String val = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_type, this.m_async_response_type);
-        this.errorLogger().warning("REPLY TOPIC DOUG: " + val);
+        //this.errorLogger().warning("REPLY TOPIC DOUG: " + val);
         return val;
     }
     
@@ -231,15 +251,22 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                 // add in a decoded payload value as a fundamental type...
                 notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(decoded_coap_payload)); // its a Float, Integer, or String
             }
+            
+            // get our endpoint name
+            String ep_name = (String)notification.get("ep");
+            String path = (String)notification.get("path");
+            
+            if (this.legacyBridge() == false) {
+                // add compatibility with the production version of IBM's Connector Bridge
+                notification.put("resourceId",path.substring(1));           // strip leading "/" off of the URI...
+                notification.put("deviceId",notification.get("ep"));        // ep
+            }
                                                 
             // we will send the raw CoAP JSON... WatsonIoT can parse that... 
             String coap_raw_json = this.jsonGenerator().generateJson(notification);
             
             // strip off []...
             String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-                        
-            // get our endpoint name
-            String ep_name = (String)notification.get("ep");
             
             // encapsulate into a coap/device packet...
             String iotf_coap_json = coap_json_stripped;
@@ -692,11 +719,13 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         notification.put("ep",ep_name);
         notification.put("coap_verb",verb);
         
-        // add compatibility with the production version of IBM's Connector Bridge
-        notification.put("resourceId",uri.substring(1));                   // strip leading "/" off of the URI...
-        notification.put("deviceId",ep_name);                              // ep
-        notification.put("payload",Base64.encodeBase64(value.getBytes())); // Base64 Encoded payload
-        notification.put("method",verb.toUpperCase());                     // verb (upper case)
+        if (this.legacyBridge() == false) {
+            // add compatibility with the production version of IBM's Connector Bridge
+            notification.put("resourceId",uri.substring(1));                   // strip leading "/" off of the URI...
+            notification.put("deviceId",ep_name);                              // ep
+            notification.put("payload",Base64.encodeBase64(value.getBytes())); // Base64 Encoded payload
+            notification.put("method",verb.toUpperCase());                     // verb (upper case)
+        }
 
         // we will send the raw CoAP JSON... WatsonIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);
