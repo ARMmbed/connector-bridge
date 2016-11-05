@@ -714,17 +714,27 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         Map notification = new HashMap<>();
         
         // Create the prototype-compatible version of the notification
-        notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
+        if (value != null && value.length() > 0) {
+            notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
+        }
+        else {
+            notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue("0"));
+        }
         notification.put("path",uri);
         notification.put("ep",ep_name);
         notification.put("coap_verb",verb);
         
         if (this.legacyBridge() == false) {
             // add compatibility with the production version of IBM's Connector Bridge
-            notification.put("resourceId",uri.substring(1));                   // strip leading "/" off of the URI...
-            notification.put("deviceId",ep_name);                              // ep
-            notification.put("payload",Base64.encodeBase64(value.getBytes())); // Base64 Encoded payload
-            notification.put("method",verb.toUpperCase());                     // verb (upper case)
+            notification.put("resourceId",uri.substring(1));                        // strip leading "/" off of the URI...
+            notification.put("deviceId",ep_name);                                   // ep
+            if (value != null) {
+                notification.put("payload",Base64.encodeBase64(value.getBytes()));  // Base64 Encoded payload
+            }
+            else {
+                notification.put("payload",Base64.encodeBase64("0".getBytes()));    // Base64 Encoded payload
+            }
+            notification.put("method",verb.toUpperCase());                          // verb (upper case)
         }
 
         // we will send the raw CoAP JSON... WatsonIoT can parse that... 
