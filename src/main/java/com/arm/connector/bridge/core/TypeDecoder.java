@@ -60,9 +60,11 @@ public class TypeDecoder extends BaseClass {
     private boolean isInteger(Object data) {
         try {
             if (data != null && data instanceof String) {
-                Integer i = Integer.parseInt(((String)data));
-                this.m_i = i;
-                return true;
+                if (((String)data).length() > 0) {
+                    Integer i = Integer.parseInt(((String)data));
+                    this.m_i = i;
+                    return true;
+                }
             }
         }
         catch (Exception ex) {
