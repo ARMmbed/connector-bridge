@@ -49,7 +49,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     public static int                               NUM_COAP_TOPICS = 1;                                  // # of MQTT Topics for CoAP verbs
     
     private String                                  m_observation_type = "observation";
-    private String                                  m_async_response_type = "response";
+    private String                                  m_async_response_type = "cmd-response";
     
     private String                                  m_aws_iot_observe_notification_topic = null;
     private String                                  m_aws_iot_coap_cmd_topic_get = null;
@@ -103,8 +103,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // get our defaulted reply topic
     @Override
     public String getReplyTopic(String ep_name,String ep_type,String def) {
-        //return this.customizeTopic(this.m_aws_iot_observe_notification_topic,ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
-        return super.getReplyTopic(ep_name, ep_type, def);
+        return this.customizeTopic(this.m_aws_iot_observe_notification_topic,ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
     }
  
     // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
