@@ -65,6 +65,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     protected boolean                       m_use_clean_session = false;
     private TypeDecoder                     m_type_decoder = null;
     private HashMap<String,String>          m_mqtt_endpoint_type_list = null;
+    private boolean                         m_unified_format_enabled = false;
     
     // constructor (singleton)
     public GenericMQTTProcessor(Orchestrator orchestrator,MQTTTransport mqtt,HttpTransport http) {
@@ -95,6 +96,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         
         // our suffix
         this.m_suffix = suffix;
+        
+        // unified format enabled or disabled
+        this.m_unified_format_enabled = orchestrator.preferences().booleanValueOf("unified_format_enabled",this.m_suffix);
         
         // Get the device data key if one exists
         this.m_device_data_key = orchestrator.preferences().valueOf("mqtt_device_data_key",this.m_suffix);
@@ -155,6 +159,11 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     // get TypeDecoder if needed
     protected TypeDecoder fundamentalTypeDecoder() {
         return this.m_type_decoder;
+    }
+    
+    // unified format enabled
+    protected boolean unifiedFormatEnabled() {
+        return this.m_unified_format_enabled;
     }
     
     // attempt a json parse... 
@@ -950,13 +959,17 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
         notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
         notification.put("path",uri);
-        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
-        notification.put("deviceId",ep_name);
         
         // add a new field to denote its a GET
         notification.put("coap_verb",verb);
-        notification.put("method",verb);
+        
+        // Unified Format?
+        if (this.unifiedFormatEnabled() == true) {
+            notification.put("resourceId",uri);
+            notification.put("deviceId",ep_name);
+            notification.put("method",verb);
+        }
 
         // we will send the raw CoAP JSON... AWSIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);

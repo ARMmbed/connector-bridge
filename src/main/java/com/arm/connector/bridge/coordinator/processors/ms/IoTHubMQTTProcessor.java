@@ -150,9 +150,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     @Override
     public String getReplyTopic(String ep_name,String ep_type,String def) {
         // IOTHUB DeviceID Prefix
-        //String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-        //return this.customizeTopic(this.m_iot_hub_observe_notification_topic,iothub_ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
-        return super.getReplyTopic(ep_name, ep_type, def);
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        return this.customizeTopic(this.m_iot_hub_observe_notification_topic,iothub_ep_name,ep_type).replace(this.m_observation_type, this.m_async_response_type);
     }
  
     // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
@@ -751,13 +750,17 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // needs to look like this: {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20ansond","value":"29.75"}    
         notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
         notification.put("path",uri);
-        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
-        notification.put("deviceId",ep_name);
         
         // add a new field to denote its a GET
         notification.put("coap_verb",verb);
-        notification.put("method",verb);
+        
+        // Unified Format?
+        if (this.unifiedFormatEnabled() == true) {
+            notification.put("resourceId",uri);
+            notification.put("deviceId",ep_name);
+            notification.put("method",verb);
+        }
 
         // we will send the raw CoAP JSON... IoTHub can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);

@@ -701,16 +701,20 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String createObservation(String verb, String ep_name, String uri, String value) {
         Map notification = new HashMap<>();
         
-        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20ansond","value":"29.75"}    
+        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
         notification.put("value",this.fundamentalTypeDecoder().getFundamentalValue(value));
         notification.put("path",uri);
-        notification.put("resourceId",uri);
         notification.put("ep",ep_name);
-        notification.put("deviceId",ep_name);
         
         // add a new field to denote its a GET
         notification.put("coap_verb",verb);
-        notification.put("method",verb);
+        
+        // Unified Format?
+        if (this.unifiedFormatEnabled() == true) {
+            notification.put("resourceId",uri);
+            notification.put("deviceId",ep_name);
+            notification.put("method",verb);
+        }
 
         // we will send the raw CoAP JSON... AWSIoT can parse that... 
         String coap_raw_json = this.jsonGenerator().generateJson(notification);
