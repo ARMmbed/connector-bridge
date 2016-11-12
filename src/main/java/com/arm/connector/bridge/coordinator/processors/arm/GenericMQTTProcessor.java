@@ -99,6 +99,12 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         
         // unified format enabled or disabled
         this.m_unified_format_enabled = orchestrator.preferences().booleanValueOf("unified_format_enabled",this.m_suffix);
+        if (this.m_unified_format_enabled == true) {
+            this.errorLogger().warning("Unified Bridge Format ENABLED");
+        }
+        else {
+            this.errorLogger().warning("Unified Bridge Format DISABLED");
+        }
         
         // Get the device data key if one exists
         this.m_device_data_key = orchestrator.preferences().valueOf("mqtt_device_data_key",this.m_suffix);

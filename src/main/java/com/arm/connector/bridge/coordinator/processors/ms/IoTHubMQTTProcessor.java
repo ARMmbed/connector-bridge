@@ -84,6 +84,11 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         
         // initialize the listener thread map
         this.m_mqtt_thread_list = new HashMap<>();
+        
+        // if unified format enabled, observation == notify
+        if (this.unifiedFormatEnabled()) {
+            this.m_observation_type = "notify";
+        }
                         
         // get our defaults
         this.m_iot_hub_name = this.orchestrator().preferences().valueOf("iot_event_hub_name",this.m_suffix);
@@ -759,6 +764,12 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         if (this.unifiedFormatEnabled() == true) {
             notification.put("resourceId",uri);
             notification.put("deviceId",ep_name);
+            if (value != null) {
+                notification.put("payload",Base64.encodeBase64(value.getBytes()));  // Base64 Encoded payload
+            }
+            else {
+                notification.put("payload",Base64.encodeBase64("0".getBytes()));    // Base64 Encoded payload
+            }
             notification.put("method",verb);
         }
 
