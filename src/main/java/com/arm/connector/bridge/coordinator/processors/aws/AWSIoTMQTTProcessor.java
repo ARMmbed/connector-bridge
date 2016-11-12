@@ -81,13 +81,15 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // initialize the listener thread map
         this.m_mqtt_thread_list = new HashMap<>();
         
-        // if unified format enabled, observation == notify
-        if (this.unifiedFormatEnabled()) {
-            this.m_observation_type = "notify";
-        }
-        
         // Observation notification topic
         this.m_aws_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("aws_iot_observe_notification_topic",this.m_suffix); 
+        
+        // if unified format enabled, observation == notify
+        if (this.unifiedFormatEnabled()) {
+            String old_type = this.m_observation_type;
+            this.m_observation_type = "notify";
+            this.m_aws_iot_observe_notification_topic = this.m_aws_iot_observe_notification_topic.replace(old_type, this.m_observation_type);
+        }
         
         // initialize the topic root
         this.initTopicRoot("aws_iot_topic_root");
