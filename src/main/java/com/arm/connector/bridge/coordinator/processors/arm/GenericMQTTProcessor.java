@@ -67,6 +67,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     private HashMap<String,String>          m_mqtt_endpoint_type_list = null;
     private boolean                         m_unified_format_enabled = false;
     
+    private String                          m_observation_key = "observation";
+    private String                          m_cmd_response_key = "cmd-response";
+    
     // constructor (singleton)
     public GenericMQTTProcessor(Orchestrator orchestrator,MQTTTransport mqtt,HttpTransport http) {
         this(orchestrator,mqtt,null,http);
@@ -101,6 +104,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         this.m_unified_format_enabled = orchestrator.preferences().booleanValueOf("unified_format_enabled",this.m_suffix);
         if (this.m_unified_format_enabled == true) {
             this.errorLogger().warning("Unified Bridge Format ENABLED");
+            this.m_observation_key = "notify";
         }
         else {
             this.errorLogger().warning("Unified Bridge Format DISABLED");
@@ -757,7 +761,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     // not an observation or a new_registration...
     private boolean isNotObservationOrNewRegistration(String topic) {
         if (topic != null) {
-            return (topic.contains("observation") == false && topic.contains("new_registration") == false);
+            return (topic.contains(this.m_observation_key) == false && topic.contains("new_registration") == false);
         }
         return false;
     }
@@ -793,12 +797,12 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     
     // returns mbed/<domain>/observation/<ep_type>/<endpoint>/<uri>
     private String createObservationTopic(String ep_type,String ep_name,String uri) {
-        return this.createBaseTopic("observation") + "/" + ep_type + "/" + ep_name + uri;
+        return this.createBaseTopic(this.m_observation_key) + "/" + ep_type + "/" + ep_name + uri;
     }
     
     // returns mbed/<domain>/response/<ep_type>/<endpoint>/<uri>
     private String createResourceResponseTopic(String ep_type,String ep_name,String uri) {
-        return this.createBaseTopic("response") + "/" + ep_type + "/" + ep_name + uri;
+        return this.createBaseTopic(this.m_cmd_response_key) + "/" + ep_type + "/" + ep_name + uri;
     }
     
     // strip off the request TAG
