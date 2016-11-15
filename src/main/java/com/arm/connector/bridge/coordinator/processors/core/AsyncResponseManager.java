@@ -77,40 +77,46 @@ public class AsyncResponseManager {
     
     // record an AsyncResponse
     public void recordAsyncResponse(String response,String coap_verb,MQTTTransport mqtt,GenericMQTTProcessor proc,String response_topic,String reply_topic,String message, String ep_name, String uri,AsyncResponseProcessor processor,Map orig_endpoint) {
-        // create a new AsyncResponse record
-        HashMap<String,Object> record = new HashMap<>();
-       
-        // fill it... 
-        if (coap_verb != null) record.put("verb", coap_verb);
-        if (response != null) record.put("response",response);
-        if (mqtt != null) record.put("mqtt",mqtt);
-        if (proc != null) record.put("proc",proc);
-        if (response_topic != null) record.put("response_topic",response_topic);
-        if (reply_topic != null) record.put("reply_topic",reply_topic);
-        if (message != null) record.put("message",message);
-        if (ep_name != null) record.put("ep_name",ep_name);
-        if (uri != null) record.put("uri",uri);
-        if (processor != null) record.put("processor",processor);
-        if (orig_endpoint != null) record.put("orig_endpoint",orig_endpoint);
-
         // we have to catch exceptions from the JSON parser... 
         try {
-            // parse the
-            JSONParser parser = this.manager().getJSONParser();
-            Map parsed = parser.parseJson(response);
-            if (parsed != null && (String)parsed.get("async-response-id") != null) {
-                // add it to the record too
-                record.put("response_map",parsed);
+            if (response != null && response.length() > 0) {
+                // create a new AsyncResponse record
+                HashMap<String,Object> record = new HashMap<>();
+                
+                // parse the response
+                JSONParser parser = this.manager().getJSONParser();
+                Map parsed = parser.parseJson(response);
+                if (parsed != null && (String)parsed.get("async-response-id") != null) {
+                    // add it to the record too
+                    record.put("response_map",parsed);
+                    
+                    // fill in the record with other good convenient things too... 
+                    if (coap_verb != null) record.put("verb", coap_verb);
+                    if (response != null) record.put("response",response);
+                    if (mqtt != null) record.put("mqtt",mqtt);
+                    if (proc != null) record.put("proc",proc);
+                    if (response_topic != null) record.put("response_topic",response_topic);
+                    if (reply_topic != null) record.put("reply_topic",reply_topic);
+                    if (message != null) record.put("message",message);
+                    if (ep_name != null) record.put("ep_name",ep_name);
+                    if (uri != null) record.put("uri",uri);
+                    if (processor != null) record.put("processor",processor);
+                    if (orig_endpoint != null) record.put("orig_endpoint",orig_endpoint);
 
-                // add the record to our list
-                this.m_responses.put((String)parsed.get("async-response-id"), record);
+                    // add the record to our list
+                    this.m_responses.put((String)parsed.get("async-response-id"), record);
 
-                // DEBUG
-                this.errorLogger().info("recordAsyncResponse: Adding Record: ID:" + (String)parsed.get("async-response-id") + " RECORD: " + record);
+                    // DEBUG
+                    this.errorLogger().info("recordAsyncResponse: Adding Record: ID:" + (String)parsed.get("async-response-id") + " RECORD: " + record);
+                }
+                else {
+                    // WARNING: no async-response-id found in this message... so ignore it.
+                    this.errorLogger().warning("recordAsyncResponse: No async-response-id found in JSON: " + response + "... Ignoring message...");
+                }
             }
             else {
-                // WARNING: no async-response-id found in this message... so ignore it.
-                this.errorLogger().warning("recordAsyncResponse: No async-response-id found in JSON: " + response + "... Ignoring message...");
+                // NO Response provided... so ignore
+                this.errorLogger().warning("recordAsyncResponse: response is NULL. ignoring...");
             }
         }
         catch (Exception ex) {
