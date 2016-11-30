@@ -556,6 +556,12 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("path");
         if (val == null || val.length() == 0) val = (String)parsed.get("resourceId");
+        
+        // adapt for those variants that have path as "311/0/5850" vs. "/311/0/5850"... 
+        if (val != null && val.charAt(0) != '/') {
+            // prepend a "/"
+            val = "/" + val;
+        }
         return val;
     }
     
