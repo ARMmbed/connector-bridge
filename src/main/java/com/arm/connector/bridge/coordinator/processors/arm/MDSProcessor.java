@@ -1170,23 +1170,48 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             // dispatch the mDS REST based on CoAP verb received
             if (verb.equalsIgnoreCase(("get"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking GET: " + url);
-                json = this.httpsGet(url);
+                if (this.mdsRequiresSSL()) {
+                    json = this.httpsGet(url);
+                }
+                else { 
+                    json = this.httpGet(url);
+                }
             }
             if (verb.equalsIgnoreCase(("put"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking PUT: " + url + " DATA: " + value);
-                json = this.httpsPut(url,value);
+                if (this.mdsRequiresSSL()) {
+                    json = this.httpsPut(url,value);
+                }
+                else { 
+                    json = this.httpPut(url,value);
+                }
             }
             if (verb.equalsIgnoreCase(("post"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking POST: " + url + " DATA: " + value);
-                json = this.httpsPost(url,value,"plain/text");  // nail content_type to "plain/text"
+                if (this.mdsRequiresSSL()) {
+                    json = this.httpsPost(url,value,"plain/text");  // nail content_type to "plain/text"
+                }
+                else { 
+                    json = this.httpPost(url,value,"plain/text");   // nail content_type to "plain/text"
+                }
             }
             if (verb.equalsIgnoreCase(("delete"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
-                json = this.httpsDelete(url,"plain/text");      // nail content_type to "plain/text"
+                if (this.mdsRequiresSSL()) {
+                    json = this.httpsDelete(url,"plain/text");      // nail content_type to "plain/text"
+                }
+                else { 
+                    json = this.httpDelete(url,"plain/text");       // nail content_type to "plain/text"
+                }
             }
             if (verb.equalsIgnoreCase(("del"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
-                json = this.httpsDelete(url,"plain/text");      // nail content_type to "plain/text"
+                if (this.mdsRequiresSSL()) {
+                    json = this.httpsDelete(url,"plain/text");      // nail content_type to "plain/text"
+                }
+                else { 
+                    json = this.httpDelete(url,"plain/text");       // nail content_type to "plain/text"
+                }
             }
         }
         else {
