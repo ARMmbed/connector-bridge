@@ -533,6 +533,11 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         String[] parsed = topic.split("/");
         if (parsed != null && parsed.length > index) 
             element = parsed[index];
+        
+        // map to lower case.. 
+        if (element != null) {
+            element = element.toLowerCase();
+        }
         return element;
     }
     
@@ -618,6 +623,11 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         Map parsed = this.tryJSONParse(message);
         String val =  (String)parsed.get("coap_verb");
         if (val == null || val.length() == 0) val = (String)parsed.get("method");
+        
+        // map to lower case
+        if (val != null) {
+            val = val.toLowerCase();
+        }
         return val;
     }
     
