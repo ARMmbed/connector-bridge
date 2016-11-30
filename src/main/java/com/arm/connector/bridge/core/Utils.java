@@ -312,11 +312,6 @@ public class Utils {
     }
     
     // get our external IP Address
-    public static String getExternalIPAddress() {
-        return Utils.getExternalIPAddress(false,null);
-    }
-    
-    // get our external IP Address
     public static String getExternalIPAddress(boolean use_gw_address,String gw_address) {
         if (Utils._externalIPAddress == null) {
             if (use_gw_address == true && gw_address != null && gw_address.length() > 0) {

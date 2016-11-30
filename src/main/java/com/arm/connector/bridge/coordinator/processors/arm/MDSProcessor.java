@@ -412,7 +412,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         int local_port = this.prefIntValue("mds_gw_port");
         if (this.m_mds_gw_use_ssl == true) ++local_port;        // SSL will use +1 of this port... ensure firewall configs match!
         String notify_uri = this.prefValue("mds_gw_context_path") + this.prefValue("mds_gw_events_path") + this.getDomain(true);
- 
+        
         // build and return the webhook callback URL
         return  this.m_default_gw_uri + local_ip + ":" + local_port + notify_uri;
     }
