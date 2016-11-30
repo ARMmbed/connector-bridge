@@ -58,8 +58,17 @@ public class LongPollProcessor extends Thread {
     
     // poll 
     private void poll() {
+        String response = null;
+        
         // persistent GET over https()
-        String response = this.m_mds.persistentHTTPSGet(this.m_mds.longPollURL());
+        if (this.m_mds.usingSSLInDispatch() == true) {
+            // use SSL
+            this.m_mds.persistentHTTPSGet(this.m_mds.longPollURL());
+        }
+        else {
+            // no SSL
+            this.m_mds.persistentHTTPGet(this.m_mds.longPollURL());
+        }
         
         // DEBUG
         if (response != null && response.length() > 0) {

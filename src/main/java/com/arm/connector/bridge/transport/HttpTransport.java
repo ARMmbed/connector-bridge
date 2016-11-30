@@ -148,6 +148,34 @@ public class HttpTransport extends BaseClass {
      * @param auth_domain
      * @return
      */
+    public String httpPeristentGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
+        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, false, false, null,true);
+    }
+    
+    /**
+     *
+     * @param url_str
+     * @param api_token
+     * @param data
+     * @param content_type
+     * @param auth_domain
+     * @return
+     */
+    public String httpPersistentGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
+        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, false, true, api_token,true);
+    }
+    
+    // execute GET over https
+    /**
+     *
+     * @param url_str
+     * @param username
+     * @param password
+     * @param data
+     * @param content_type
+     * @param auth_domain
+     * @return
+     */
     public String httpsPeristentGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null,true);
     }
@@ -537,14 +565,14 @@ public class HttpTransport extends BaseClass {
             if (use_api_token == false && username != null && username.length() > 0 && password != null && password.length() > 0) {
                 String encoding = Base64.encodeBase64String((username + ":" + password).getBytes());
                 connection.setRequestProperty("Authorization", this.m_basic_auth_qualifier + " "  + encoding);
-                //this.errorLogger().info("Basic Authorization: " + username + ":" + password + ": " + encoding);
+                this.errorLogger().info("HTTP(S): Basic Authorization: " + username + ":" + password + ": " + encoding);
             }
             
             // enable ApiTokenAuth auth if requested
             if (use_api_token == true && api_token != null && api_token.length() > 0) {
                // use qualification for the authorization header...
                connection.setRequestProperty("Authorization", this.m_auth_qualifier + " " + api_token);
-               //this.errorLogger().info("ApiTokenAuth Authorization: " + api_token);
+               //this.errorLogger().info("HTTP(S): ApiTokenAuth Authorization: " + api_token);
                
                // Always reset to the established default
                this.resetAuthorizationQualifier();
@@ -574,6 +602,9 @@ public class HttpTransport extends BaseClass {
             if (content_type != null && content_type.length() > 0) {
                 connection.setRequestProperty("Content-Type", content_type);
                 connection.setRequestProperty("Accept", "*/*");
+                
+                // DEBUG
+                this.errorLogger().info("ContentType: " + content_type);
             }
             
             // add Connection: keep-alive (does not work...)

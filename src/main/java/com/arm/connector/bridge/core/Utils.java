@@ -313,20 +313,30 @@ public class Utils {
     
     // get our external IP Address
     public static String getExternalIPAddress() {
+        return Utils.getExternalIPAddress(false,null);
+    }
+    
+    // get our external IP Address
+    public static String getExternalIPAddress(boolean use_gw_address,String gw_address) {
         if (Utils._externalIPAddress == null) {
-            BufferedReader in = null;
-            try {
-                URL whatismyip = new URL("http://checkip.amazonaws.com");
-                in = new BufferedReader(new InputStreamReader(whatismyip.openStream()));
-                Utils._externalIPAddress = in.readLine();
-                in.close();
+            if (use_gw_address == true && gw_address != null && gw_address.length() > 0) {
+                Utils._externalIPAddress = gw_address;
             }
-            catch (Exception ex) {
+            else {
+                BufferedReader in = null;
                 try {
-                    if (in != null) in.close();
+                    URL whatismyip = new URL("http://checkip.amazonaws.com");
+                    in = new BufferedReader(new InputStreamReader(whatismyip.openStream()));
+                    Utils._externalIPAddress = in.readLine();
+                    in.close();
                 }
-                catch(Exception ex2) {
-                    // silent
+                catch (Exception ex) {
+                    try {
+                        if (in != null) in.close();
+                    }
+                    catch(Exception ex2) {
+                        // silent
+                    }
                 }
             }
         }

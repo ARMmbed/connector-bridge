@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.apache.commons.codec.binary.Base64;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
@@ -110,6 +111,23 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.m_rest_version = this.prefValueWithDefault("mds_rest_version",this.m_default_rest_version).replace("v","").replace("//","");
         if (this.m_use_api_token == true) this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         
+        // adjust mds_username
+        try {
+            Double ver = Double.valueOf(this.m_mds_version);
+            if (ver >= 3.0) {
+                // v3.0+ on-prem mDS uses "Basic domain/user:pw"
+                String domain = this.getDomain(true).replace("/","");
+                this.m_mds_username = domain + "/" + this.m_mds_username;
+                
+                // DEBUG
+                this.errorLogger().info("mDS(v3x) Updated username: " + this.m_mds_username);
+            }
+        }
+        catch (Exception ex) {
+            // parsing error... fail silently...
+            ;
+        }
+        
         // get the device attributes path
         this.m_device_attributes_path = orchestrator.preferences().valueOf("mds_device_attributes_path");
         
@@ -178,6 +196,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.initDeviceMetadataResourceURIs();
     }
     
+    // using SSL or not
+    public boolean usingSSLInDispatch() {
+        return this.m_use_https_dispatch;
+    }
     // Long polling enabled or disabled?
     private boolean longPollEnabled() {
         return (this.m_mds_enable_long_poll == true && this.m_mds_long_poll_uri != null && this.m_mds_long_poll_uri.length() > 0);
@@ -364,14 +386,29 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // create any authentication header JSON that may be necessary
     private String createCallbackHeaderAuthJSON() {
-        return "{\"Authentication\":\"" + this.createAuthenticationHash() +  "\"}";
+        String hash = this.createAuthenticationHash();
+        
+        try {
+            Double ver = Double.valueOf(this.m_mds_version);
+            if (hash != null && hash.equalsIgnoreCase("none") == true && ver >= 3.0 && this.prefBoolValue("mds_use_gw_address") == true) {
+                // local mDS does not use thi
+                return null;
+            }
+        }
+        catch (Exception ex) {
+            // parsing error of mds_version... just use the default hash (likely "none")
+            ;
+        }
+        
+        // return the authentication header
+        return "{\"Authentication\":\"" + hash +  "\"}";
     }
     
     // create our callback URL
     private String createCallbackURL() {
         String url = null;
         
-        String local_ip = Utils.getExternalIPAddress(); // this.prefValue("mds_gw_address");
+        String local_ip = Utils.getExternalIPAddress(this.prefBoolValue("mds_use_gw_address"),this.prefValue("mds_gw_address"));
         int local_port = this.prefIntValue("mds_gw_port");
         if (this.m_mds_gw_use_ssl == true) ++local_port;        // SSL will use +1 of this port... ensure firewall configs match!
         String notify_uri = this.prefValue("mds_gw_context_path") + this.prefValue("mds_gw_events_path") + this.getDomain(true);
@@ -768,6 +805,24 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return this.m_http.getLastResponseCode();
     }
     
+    // invoke peristent HTTP Get
+    public String persistentHTTPGet(String url) {
+        return this.persistentHTTPGet(url, this.m_content_type);
+    }
+    
+    // invoke peristent HTTPS Get
+    private String persistentHTTPGet(String url,String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpPersistentGetApiTokenAuth(url,this.m_api_token, null,content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpPeristentGet(url,this.m_mds_username,this.m_mds_password,null,content_type,this.m_mds_domain);
+        }
+        this.errorLogger().info("persistentHTTPGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+    
     // invoke peristent HTTPS Get
     public String persistentHTTPSGet(String url) {
         return this.persistentHTTPSGet(url, this.m_content_type);
@@ -782,7 +837,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         else {
             response = this.m_http.httpsPeristentGet(url,this.m_mds_username,this.m_mds_password,null,content_type,this.m_mds_domain);
         }
-        this.errorLogger().info("httpsGet: response: " + this.m_http.getLastResponseCode());
+        this.errorLogger().info("persistentHTTPSGet: response: " + this.m_http.getLastResponseCode());
         return response;
     }
     
