@@ -115,11 +115,20 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         this.m_watson_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("iotf_observe_notification_topic",this.m_suffix).replace("__EVENT_TYPE__",this.m_observation_type); 
         
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
-        this.m_watson_iot_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","get");
-        this.m_watson_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","put");
-        this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","post");
-        this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","delete");
-        
+        if (this.legacyBridge() == true) {
+            // lower-case for the topics
+            this.m_watson_iot_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","get");
+            this.m_watson_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","put");
+            this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","post");
+            this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","delete");
+        }
+        else {
+            // upper-case for the topics
+            this.m_watson_iot_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","GET");
+            this.m_watson_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","PUT");
+            this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","POST");
+            this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","DELETE");
+        }
         // establish default bindings
         this.m_watson_iot_api_key = this.orchestrator().preferences().valueOf("iotf_api_key",this.m_suffix).replace("__ORG_ID__",this.m_watson_iot_org_id).replace("__ORG_KEY__",this.m_watson_iot_org_key);
         this.m_watson_iot_auth_token = this.orchestrator().preferences().valueOf("iotf_auth_token",this.m_suffix);
