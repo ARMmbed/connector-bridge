@@ -64,12 +64,12 @@ public class LongPollProcessor extends Thread {
         if (this.m_mds.usingSSLInDispatch() == true) {
             // use SSL
             this.m_mds.errorLogger().info("poll: using HTTPS persistent get...");
-            this.m_mds.persistentHTTPSGet(this.m_mds.longPollURL());
+            response = this.m_mds.persistentHTTPSGet(this.m_mds.longPollURL());
         }
         else {
             // no SSL
             this.m_mds.errorLogger().info("poll: using HTTP persistent get...");
-            this.m_mds.persistentHTTPGet(this.m_mds.longPollURL());
+            response = this.m_mds.persistentHTTPGet(this.m_mds.longPollURL());
         }
         
         // DEBUG
