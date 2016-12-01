@@ -129,6 +129,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","POST");
             this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic",this.m_suffix).replace("__COMMAND_TYPE__","DELETE");
         }
+        
         // establish default bindings
         this.m_watson_iot_api_key = this.orchestrator().preferences().valueOf("iotf_api_key",this.m_suffix).replace("__ORG_ID__",this.m_watson_iot_org_id).replace("__ORG_KEY__",this.m_watson_iot_org_key);
         this.m_watson_iot_auth_token = this.orchestrator().preferences().valueOf("iotf_auth_token",this.m_suffix);
