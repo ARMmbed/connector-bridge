@@ -38,7 +38,6 @@ import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.apache.commons.codec.binary.Base64;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
@@ -114,7 +113,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         // adjust mds_username
         try {
             Double ver = Double.valueOf(this.m_mds_version);
-            if (ver >= 3.0) {
+            if (ver > 3.0) {
                 // v3.0+ on-prem mDS uses "Basic domain/user:pw"
                 String domain = this.getDomain(true).replace("/","");
                 this.m_mds_username = domain + "/" + this.m_mds_username;
@@ -390,7 +389,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         
         try {
             Double ver = Double.valueOf(this.m_mds_version);
-            if (hash != null && hash.equalsIgnoreCase("none") == true && ver >= 3.0 && this.prefBoolValue("mds_use_gw_address") == true) {
+            if (hash != null && hash.equalsIgnoreCase("none") == true && ver > 3.0 && this.prefBoolValue("mds_use_gw_address") == true) {
                 // local mDS does not use thi
                 return null;
             }

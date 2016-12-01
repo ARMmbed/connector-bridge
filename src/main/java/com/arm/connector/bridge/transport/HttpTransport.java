@@ -572,7 +572,7 @@ public class HttpTransport extends BaseClass {
             if (use_api_token == true && api_token != null && api_token.length() > 0) {
                // use qualification for the authorization header...
                connection.setRequestProperty("Authorization", this.m_auth_qualifier + " " + api_token);
-               //this.errorLogger().info("HTTP(S): ApiTokenAuth Authorization: " + api_token);
+               this.errorLogger().info("HTTP(S): ApiTokenAuth Authorization: " + this.m_auth_qualifier + " " + api_token);
                
                // Always reset to the established default
                this.resetAuthorizationQualifier();
