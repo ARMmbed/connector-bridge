@@ -1,7 +1,7 @@
 /**
  * @file    WatsonIoTPeerProcessorFactory.java
- * @brief   IBM Watson IoT Peer Processor Factory
- * @author  Doug Anson
+ * @brief IBM Watson IoT Peer Processor Factory
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.coordinator.processors.ibm;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
@@ -34,14 +33,16 @@ import java.util.ArrayList;
 
 /**
  * IBM Watson IoT Peer Processor Manager: Factory for initiating a peer processor for IBM Watson IoT
+ *
  * @author Doug Anson
  */
-public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory implements Transport.ReceiveListener, PeerInterface {  
+public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory implements Transport.ReceiveListener, PeerInterface {
+
     // Factory method for initializing the IBM MQTT collection orchestrator
-    public static WatsonIoTPeerProcessorFactory createPeerProcessor(Orchestrator manager,HttpTransport http) {
+    public static WatsonIoTPeerProcessorFactory createPeerProcessor(Orchestrator manager, HttpTransport http) {
         // create me
-        WatsonIoTPeerProcessorFactory me = new WatsonIoTPeerProcessorFactory(manager,http);
-        
+        WatsonIoTPeerProcessorFactory me = new WatsonIoTPeerProcessorFactory(manager, http);
+
         // initialize me
         boolean starterkit_enabled = manager.preferences().booleanValueOf("enable_starterkit_addon");
         boolean iotf_enabled = manager.preferences().booleanValueOf("enable_iotf_addon");
@@ -49,50 +50,50 @@ public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory impl
         if (mgr_config != null && mgr_config.length() > 0) {
             // muliple MQTT brokers requested... follow configuration and assign suffixes
             String[] config = mgr_config.split(";");
-            for(int i=0;i<config.length;++i) {
+            for (int i = 0; i < config.length; ++i) {
                 if (starterkit_enabled == true && config[i].equalsIgnoreCase("sk") == true) {
                     manager.errorLogger().info("Registering IBM StarterKit MQTT processor...");
-                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager,""+i,http);
+                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, "" + i, http);
                     me.addProcessor(p);
                 }
                 if (starterkit_enabled == true && config[i].equalsIgnoreCase("sk-d") == true) {
                     manager.errorLogger().info("Registering IBM StarterKit MQTT processor (default)...");
-                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager,""+i,http);
-                    me.addProcessor(p,true);
+                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, "" + i, http);
+                    me.addProcessor(p, true);
                 }
                 if (iotf_enabled == true && config[i].equalsIgnoreCase("iotf") == true) {
                     manager.errorLogger().info("Registering Watson IoT MQTT processor...");
-                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),""+i,http);
+                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
                     me.addProcessor(p);
                 }
                 if (iotf_enabled == true && config[i].equalsIgnoreCase("iotf-d") == true) {
                     manager.errorLogger().info("Registering Watson IoT MQTT processor (default)...");
-                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),""+i,http);
-                    me.addProcessor(p,true);
+                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    me.addProcessor(p, true);
                 }
             }
         }
-        else {
-            // single MQTT broker configuration requested
+        else // single MQTT broker configuration requested
+        {
             if (iotf_enabled == true) {
                 manager.errorLogger().info("Registering Watson IoT MQTT processor (singleton)...");
-                GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),http);
+                GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
                 me.addProcessor(p);
             }
             else if (starterkit_enabled == true) {
                 manager.errorLogger().info("Registering StarterKit MQTT processor (singleton)...");
-                GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager,http);
+                GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, http);
                 me.addProcessor(p);
             }
         }
-        
+
         // return me
         return me;
     }
-    
+
     // constructor
-    public WatsonIoTPeerProcessorFactory(Orchestrator manager,HttpTransport http) {
-        super(manager,null);
+    public WatsonIoTPeerProcessorFactory(Orchestrator manager, HttpTransport http) {
+        super(manager, null);
         this.m_http = http;
         this.m_mqtt_list = new ArrayList<>();
     }

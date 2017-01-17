@@ -1,7 +1,7 @@
 /**
  * @file    Console.java
- * @brief   Console Servlet Handler
- * @author  Doug Anson
+ * @brief Console Servlet Handler
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.servlet;
 
 import java.io.IOException;
@@ -39,7 +38,7 @@ import javax.servlet.http.HttpServletResponse;
 public class Console extends HttpServlet {
 
     private Manager m_manager = null;
-    
+
     // constructor
     public Console() {
         super();
@@ -47,9 +46,11 @@ public class Console extends HttpServlet {
             this.m_manager = Manager.getInstance(this);
         }
     }
-    
+
     // get our manager
-    public Manager manager() { return this.m_manager; }
+    public Manager manager() {
+        return this.m_manager;
+    }
 
     /**
      * Processes requests for both HTTP
@@ -61,14 +62,14 @@ public class Console extends HttpServlet {
      * @throws ServletException if a servlet-specific error occurs
      * @throws IOException if an I/O error occurs
      */
-    protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException  {
+    protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         // allocate the event processor if its not allocated already
         if (this.m_manager == null) {
             this.m_manager = Manager.getInstance(this);
         }
 
         // show our console
-        this.m_manager.processConsole(request,response);
+        this.m_manager.processConsole(request, response);
     }
 
     // <editor-fold defaultstate="collapsed" desc="HttpServlet methods. Click on the + sign on the left to edit the code.">
@@ -86,7 +87,7 @@ public class Console extends HttpServlet {
             throws ServletException, IOException {
         processRequest(request, response);
     }
-   
+
     /**
      * Handles the HTTP
      * <code>PUT</code> method.
@@ -101,7 +102,7 @@ public class Console extends HttpServlet {
             throws ServletException, IOException {
         processRequest(request, response);
     }
-    
+
     /**
      * Handles the HTTP
      * <code>POST</code> method.

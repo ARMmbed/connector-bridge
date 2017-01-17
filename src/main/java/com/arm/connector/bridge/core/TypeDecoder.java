@@ -1,7 +1,7 @@
 /**
  * @file    TypeDecoder.java
- * @brief   Class that aids in the parsing of an input String into its fundamental type (Float, Integer, String)
- * @author  Doug Anson
+ * @brief Class that aids in the parsing of an input String into its fundamental type (Float, Integer, String)
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,40 +11,41 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.core;
 
 import com.arm.connector.bridge.preferences.PreferenceManager;
 
 /**
  * TypeDecoder class
+ *
  * @author Doug Anson
  */
 public class TypeDecoder extends BaseClass {
-    private Double  m_d = 0.0;
+
+    private Double m_d = 0.0;
     private Integer m_i = 0;
-    private String  m_s = null;
-    
+    private String m_s = null;
+
     // Default Constructor
-    public TypeDecoder(ErrorLogger logger,PreferenceManager preferences) {
-        super(logger,preferences);
+    public TypeDecoder(ErrorLogger logger, PreferenceManager preferences) {
+        super(logger, preferences);
     }
 
     // Is a Double Type?
     private boolean isDouble(Object data) {
         try {
             if (data != null && data instanceof String) {
-                if (((String)data).contains(".") == true) {
-                    Double d = Double.parseDouble(((String)data));
+                if (((String) data).contains(".") == true) {
+                    Double d = Double.parseDouble(((String) data));
                     this.m_d = d;
                     return true;
                 }
@@ -55,13 +56,13 @@ public class TypeDecoder extends BaseClass {
         }
         return false;
     }
-    
+
     // Is an Integer Type?
     private boolean isInteger(Object data) {
         try {
             if (data != null && data instanceof String) {
-                if (((String)data).length() > 0) {
-                    Integer i = Integer.parseInt(((String)data));
+                if (((String) data).length() > 0) {
+                    Integer i = Integer.parseInt(((String) data));
                     this.m_i = i;
                     return true;
                 }
@@ -72,12 +73,12 @@ public class TypeDecoder extends BaseClass {
         }
         return false;
     }
-    
+
     // Is an String Type?
     private boolean isString(Object data) {
         try {
             if (data != null && data instanceof String) {
-                this.m_s = (String)data;
+                this.m_s = (String) data;
                 return true;
             }
         }
@@ -86,34 +87,34 @@ public class TypeDecoder extends BaseClass {
         }
         return false;
     }
-    
+
     // Get the fundamenal value
     public Object getFundamentalValue(Object data) {
-        if (this.isDouble((String)data)) {
+        if (this.isDouble((String) data)) {
             // DEBUG
             this.errorLogger().info("getFundamentalValue: Type is Double");
-            
+
             // return a Double
             return this.m_d;
         }
-        if (this.isInteger((String)data)) {
+        if (this.isInteger((String) data)) {
             // DEBUG
             this.errorLogger().info("getFundamentalValue: Type is Integer");
-            
+
             // return an Integer
             return this.m_i;
         }
-        if (this.isString((String)data)) {
+        if (this.isString((String) data)) {
             // DEBUG
             this.errorLogger().info("getFundamentalValue: Type is String");
-            
+
             // return an Integer
             return this.m_s;
         }
-        
+
         // DEBUG
         this.errorLogger().info("getFundamentalValue: Type is Object");
-            
+
         // return itself... not a Double, Integer, or String 
         return data;
     }

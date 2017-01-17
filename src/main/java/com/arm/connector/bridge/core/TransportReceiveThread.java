@@ -1,7 +1,7 @@
 /**
  * @file    TransportReceiveThread.java
- * @brief   Generic transport receive thread base class 
- * @author  Doug Anson
+ * @brief Generic transport receive thread base class
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,20 +11,20 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
 package com.arm.connector.bridge.core;
 
-
 /**
  * Receive Thread for inbound message processing
+ *
  * @author Doug Anson
  */
 public class TransportReceiveThread extends Thread implements Transport.ReceiveListener {
@@ -35,6 +35,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     /**
      * Constructor
+     *
      * @param mqtt
      */
     public TransportReceiveThread(Transport mqtt) {
@@ -46,6 +47,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     /**
      * get our running state
+     *
      * @return
      */
     public boolean isRunning() {
@@ -54,6 +56,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     /**
      * get our connection status
+     *
      * @return
      */
     public boolean isConnected() {
@@ -85,16 +88,16 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      */
     @SuppressWarnings("empty-statement")
     private void listenerThreadLoop() {
-        int sleep_time = ((this.m_transport.preferences().intValueOf("mqtt_receive_loop_sleep"))*1000);
+        int sleep_time = ((this.m_transport.preferences().intValueOf("mqtt_receive_loop_sleep")) * 1000);
         while (this.m_running && this.m_transport.isConnected() == true) {
             // receive and process...
             this.m_transport.receiveAndProcess();
-            
+
             // sleep for a bit...
             try {
                 Thread.sleep(sleep_time);
             }
-            catch(InterruptedException ex) {
+            catch (InterruptedException ex) {
                 // silent
                 ;
             }
@@ -103,6 +106,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     /**
      * set the receive listener
+     *
      * @param listener
      */
     public void setOnReceiveListener(Transport.ReceiveListener listener) {
@@ -112,6 +116,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     /**
      * callback on Message Receive events
+     *
      * @param message
      */
     @Override

@@ -1,7 +1,7 @@
 /**
  * @file    ErrorLogger.java
- * @brief   error logging facility
- * @author  Doug Anson
+ * @brief error logging facility
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.core;
 
 import com.arm.connector.bridge.preferences.PreferenceManager;
@@ -39,56 +38,56 @@ public class ErrorLogger extends BaseClass {
     /**
      *
      */
-    public static String DEFAULT_MESSAGE = "<No Message-OK>";
+    public static final String DEFAULT_MESSAGE = "<No Message-OK>";
 
     // Logging classifications
     /**
      *
      */
-    public static int INFO = 0x0001;     // informational
+    public static final int INFO = 0x0001;     // informational
 
     /**
      *
      */
-    public static int WARNING = 0x0002;     // warning
+    public static final int WARNING = 0x0002;     // warning
 
     /**
      *
      */
-    public static int CRITICAL = 0x0004;     // critical error
+    public static final int CRITICAL = 0x0004;     // critical error
 
     // masks
     /**
      *
      */
-    public static int SHOW_ALL = 0x00FF;     // show all
+    public static final int SHOW_ALL = 0x00FF;     // show all
 
     /**
      *
      */
-    public static int SHOW_INFO = 0x0001;     // show INFO only
+    public static final int SHOW_INFO = 0x0001;     // show INFO only
 
     /**
      *
      */
-    public static int SHOW_WARNING = 0x0002;     // show WARNING only
+    public static final int SHOW_WARNING = 0x0002;     // show WARNING only
 
     /**
      *
      */
-    public static int SHOW_CRITICAL = 0x0004;     // show CRITICAL only
+    public static final int SHOW_CRITICAL = 0x0004;     // show CRITICAL only
 
     // maxmium number of tracked log entries
     /**
      *
      */
-    public static int MAX_LOG_ENTRIES = 500;      // reset the list after retaining this many entries
+    public static final int MAX_LOG_ENTRIES = 500;      // reset the list after retaining this many entries
 
-    private String m_message;                                   // our message
-    private Exception m_exception;                              // our exception
-    private int m_level;                                        // error classification level
-    private int m_mask = SHOW_ALL;                              // default error classification mask
-    private volatile ArrayList<String> m_log = null;            // error log
+    private String m_message = null;                    // our message
+    private Exception m_exception = null;               // our exception
+    private int m_level = 0;                            // error classification level
+    private int m_mask = SHOW_ALL;                      // default error classification mask
+    private volatile ArrayList<String> m_log = null;    // error log
 
     /**
      * constructor
@@ -101,12 +100,12 @@ public class ErrorLogger extends BaseClass {
         this.m_mask = ErrorLogger.SHOW_ALL;
         this.m_log = new ArrayList<>();
     }
-    
+
     /*
     * Configure the logging level
-    */
+     */
     public void configureLoggingLevel(PreferenceManager preferences) {
-        String config = preferences.valueOf("mds_bridge_error_level",null);
+        String config = preferences.valueOf("mds_bridge_error_level", null);
         if (config != null && config.length() > 0) {
             int mask = 0;
             if (config.contains("info")) {
@@ -124,7 +123,7 @@ public class ErrorLogger extends BaseClass {
             this.setLoggingMask(mask);
         }
     }
-    
+
     // set the logging mask
     private void setLoggingMask(int mask) {
         this.m_mask = mask;
@@ -142,6 +141,7 @@ public class ErrorLogger extends BaseClass {
 
     /**
      * log entry - messages only
+     *
      * @param message
      */
     public void info(String message) {
@@ -166,6 +166,7 @@ public class ErrorLogger extends BaseClass {
 
     /**
      * log entry - messages and exceptions
+     *
      * @param message
      * @param ex
      */
@@ -193,6 +194,7 @@ public class ErrorLogger extends BaseClass {
 
     /**
      * log entry - exceptions only
+     *
      * @param ex
      */
     public void info(Exception ex) {
@@ -231,8 +233,8 @@ public class ErrorLogger extends BaseClass {
                 if (this.m_message != null) {
                     // log the message
                     System.out.println(this.prettyLevel() + this.m_message + " Exception: " + this.m_exception + ".\n\nStackTrace: " + this.stackTraceToString(this.m_exception));
-                    this.buffer(this.m_message + " Exception: " + this.m_exception + ".\n\nStackTrace: " + this.stackTraceToString(this.m_exception));                   
-                 }
+                    this.buffer(this.m_message + " Exception: " + this.m_exception + ".\n\nStackTrace: " + this.stackTraceToString(this.m_exception));
+                }
                 else {
                     // log the exception
                     System.out.println(this.prettyLevel() + this.m_exception);
@@ -241,32 +243,36 @@ public class ErrorLogger extends BaseClass {
                 }
             }
             // log what we have
+            else if (this.m_message != null) {
+                // log the message
+                System.out.println(this.prettyLevel() + this.m_message);
+                this.buffer(this.m_message);
+            }
             else {
-                if (this.m_message != null) {
-                    // log the message
-                    System.out.println(this.prettyLevel() + this.m_message);
-                    this.buffer(this.m_message);
-                }
-                else {
-                    // no message
-                    this.m_message = "UNKNOWN ERROR";
-                    
-                    // log the message
-                    System.out.println(this.prettyLevel() + this.m_message);
-                    this.buffer(this.m_message);
-                }
+                // no message
+                this.m_message = "UNKNOWN ERROR";
+
+                // log the message
+                System.out.println(this.prettyLevel() + this.m_message);
+                this.buffer(this.m_message);
             }
         }
     }
 
     // pretty display of logging level
     private String prettyLevel() {
-        if (this.m_level == ErrorLogger.INFO) return "INFO: ";
-        if (this.m_level == ErrorLogger.WARNING) return "WARN: ";
-        if (this.m_level == ErrorLogger.CRITICAL) return "CRIT: ";
+        if (this.m_level == ErrorLogger.INFO) {
+            return "INFO: ";
+        }
+        if (this.m_level == ErrorLogger.WARNING) {
+            return "WARN: ";
+        }
+        if (this.m_level == ErrorLogger.CRITICAL) {
+            return "CRIT: ";
+        }
         return "UNK: ";
     }
-    
+
     // convert a stack trace to a string
     private String stackTraceToString(Exception ex) {
         if (ex != null) {

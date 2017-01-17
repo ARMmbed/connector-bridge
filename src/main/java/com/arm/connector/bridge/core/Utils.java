@@ -1,7 +1,7 @@
 /**
  * @file    Utils.java
- * @brief   misc collection of static utilities
- * @author  Doug Anson
+ * @brief misc collection of static utilities
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.core;
 
 import java.io.BufferedReader;
@@ -64,9 +63,11 @@ import org.apache.commons.codec.binary.Hex;
 
 /**
  * Static support utilities
+ *
  * @author Doug Anson
  */
 public class Utils {
+
     // static variables
     private static char[] hexArray = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
     private static String __cache_hash = null;
@@ -126,7 +127,6 @@ public class Utils {
     }
 
     // START DATE FUNCTIONS
-    
     // get the current date and time
     public static java.util.Date now() {
         java.util.Date rightnow = new java.util.Date(System.currentTimeMillis());
@@ -196,7 +196,6 @@ public class Utils {
     }
 
     // END DATE FUNCTIONS
-    
     // Hex String to ByteBuffer or byte[]
     public static ByteBuffer hexStringToByteBuffer(String str) {
         return ByteBuffer.wrap(Utils.hexStringToByteArray(str));
@@ -246,11 +245,11 @@ public class Utils {
         }
         return null;
     }
-    
+
     // decode CoAP payload Base64
     public static String decodeCoAPPayload(String payload) {
         String decoded = null;
-        
+
         try {
             String b64_payload = payload.replace("\\u003d", "=");
             Base64 decoder = new Base64();
@@ -260,10 +259,10 @@ public class Utils {
         catch (Exception ex) {
             decoded = "<unk>";
         }
-        
+
         return decoded;
     }
-    
+
     // create a URL-safe Token
     public static String createURLSafeToken(String seed) {
         try {
@@ -274,12 +273,12 @@ public class Utils {
             return "exception";
         }
     }
-    
+
     // create Authentication Hash
     public static String createHash(String data) {
         try {
             if (data == null) {
-               return "none";
+                return "none";
             }
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] digest = md.digest(data.getBytes());
@@ -290,9 +289,9 @@ public class Utils {
             return "none";
         }
     }
-    
+
     // validate the Authentication Hash
-    public static boolean validateHash(String header_hash,String calc_hash) {
+    public static boolean validateHash(String header_hash, String calc_hash) {
         boolean validated = false;
         try {
             if (Utils.__cache_hash == null) {
@@ -310,9 +309,9 @@ public class Utils {
             return false;
         }
     }
-    
+
     // get our external IP Address
-    public static String getExternalIPAddress(boolean use_gw_address,String gw_address) {
+    public static String getExternalIPAddress(boolean use_gw_address, String gw_address) {
         if (Utils._externalIPAddress == null) {
             if (use_gw_address == true && gw_address != null && gw_address.length() > 0) {
                 Utils._externalIPAddress = gw_address;
@@ -327,9 +326,11 @@ public class Utils {
                 }
                 catch (Exception ex) {
                     try {
-                        if (in != null) in.close();
+                        if (in != null) {
+                            in.close();
+                        }
                     }
-                    catch(Exception ex2) {
+                    catch (Exception ex2) {
                         // silent
                     }
                 }
@@ -337,142 +338,143 @@ public class Utils {
         }
         return Utils._externalIPAddress;
     }
-    
+
     // convert a InputStream to a String
     public static String convertStreamToString(java.io.InputStream is) {
         java.util.Scanner s = new java.util.Scanner(is).useDelimiter("\\A");
         return s.hasNext() ? s.next() : "";
     }
-    
+
     /**
      * Execute the AWS CLI
+     *
      * @param logger - ErrorLogger instance
-     * @param args - arguments for the AWS CLI 
+     * @param args - arguments for the AWS CLI
      * @return response from CLI action
      */
-    public static String awsCLI(ErrorLogger logger,String args) {
-       // construct the arguments
-       String cmd = "./aws " + args;
-       String response = null;
-       String error = null;
-       
-       try {
-           // invoke the AWS CLI
-           Process proc = Runtime.getRuntime().exec(cmd);
-           response = Utils.convertStreamToString(proc.getInputStream());
-           error= Utils.convertStreamToString(proc.getErrorStream());
-           
-           // wait to completion
-           proc.waitFor();
-           int status = proc.exitValue();
-           
-           // DEBUG
-           if (status != 0) {
-               // non-zero exit status
-               logger.info("AWS CLI: Invoked: " + cmd);
-               logger.info("AWS CLI: Response: " + response);
-               logger.info("AWS CLI: Error: " + error);
-               logger.info("AWS CLI: Exit Code: " + status);
-           }
-           else {
-               // successful exit status
-               logger.info("AWS CLI: Invoked: " + cmd);
-               logger.info("AWS CLI: Response: " + response);
-               logger.info("AWS CLI: Exit Code: " + status);
-           }
-       } 
-       catch (IOException | InterruptedException ex) {
-           logger.warning("AWS CLI: Exception for command: " + cmd,ex);
-           response = null;
-       }
-       
-       // return the resposne
-       return response;
+    public static String awsCLI(ErrorLogger logger, String args) {
+        // construct the arguments
+        String cmd = "./aws " + args;
+        String response = null;
+        String error = null;
+
+        try {
+            // invoke the AWS CLI
+            Process proc = Runtime.getRuntime().exec(cmd);
+            response = Utils.convertStreamToString(proc.getInputStream());
+            error = Utils.convertStreamToString(proc.getErrorStream());
+
+            // wait to completion
+            proc.waitFor();
+            int status = proc.exitValue();
+
+            // DEBUG
+            if (status != 0) {
+                // non-zero exit status
+                logger.info("AWS CLI: Invoked: " + cmd);
+                logger.info("AWS CLI: Response: " + response);
+                logger.info("AWS CLI: Error: " + error);
+                logger.info("AWS CLI: Exit Code: " + status);
+            }
+            else {
+                // successful exit status
+                logger.info("AWS CLI: Invoked: " + cmd);
+                logger.info("AWS CLI: Response: " + response);
+                logger.info("AWS CLI: Exit Code: " + status);
+            }
+        }
+        catch (IOException | InterruptedException ex) {
+            logger.warning("AWS CLI: Exception for command: " + cmd, ex);
+            response = null;
+        }
+
+        // return the resposne
+        return response;
     }
-   
+
     // escape chars utility
     public static String escapeChars(String str) {
-        return str.replace("\\n","");
+        return str.replace("\\n", "");
     }
-    
+
     // Create CA Root certificate
     public static X509Certificate createCACertificate(ErrorLogger logger) {
         // Root CA for AWS IoT (5/6/2016)
         // https://www.symantec.com/content/en/us/enterprise/verisign/roots/VeriSign-Class%203-Public-Primary-Certification-Authority-G5.pem
-        String pem =    "-----BEGIN CERTIFICATE-----" +
-                            "MIIE0zCCA7ugAwIBAgIQGNrRniZ96LtKIVjNzGs7SjANBgkqhkiG9w0BAQUFADCB" +
-                            "yjELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQL" +
-                            "ExZWZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJp" +
-                            "U2lnbiwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MUUwQwYDVQQDEzxW" +
-                            "ZXJpU2lnbiBDbGFzcyAzIFB1YmxpYyBQcmltYXJ5IENlcnRpZmljYXRpb24gQXV0" +
-                            "aG9yaXR5IC0gRzUwHhcNMDYxMTA4MDAwMDAwWhcNMzYwNzE2MjM1OTU5WjCByjEL" +
-                            "MAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQLExZW" +
-                            "ZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJpU2ln" +
-                            "biwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MUUwQwYDVQQDEzxWZXJp" +
-                            "U2lnbiBDbGFzcyAzIFB1YmxpYyBQcmltYXJ5IENlcnRpZmljYXRpb24gQXV0aG9y" +
-                            "aXR5IC0gRzUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCvJAgIKXo1" +
-                            "nmAMqudLO07cfLw8RRy7K+D+KQL5VwijZIUVJ/XxrcgxiV0i6CqqpkKzj/i5Vbex" +
-                            "t0uz/o9+B1fs70PbZmIVYc9gDaTY3vjgw2IIPVQT60nKWVSFJuUrjxuf6/WhkcIz" +
-                            "SdhDY2pSS9KP6HBRTdGJaXvHcPaz3BJ023tdS1bTlr8Vd6Gw9KIl8q8ckmcY5fQG" +
-                            "BO+QueQA5N06tRn/Arr0PO7gi+s3i+z016zy9vA9r911kTMZHRxAy3QkGSGT2RT+" +
-                            "rCpSx4/VBEnkjWNHiDxpg8v+R70rfk/Fla4OndTRQ8Bnc+MUCH7lP59zuDMKz10/" +
-                            "NIeWiu5T6CUVAgMBAAGjgbIwga8wDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8E" +
-                            "BAMCAQYwbQYIKwYBBQUHAQwEYTBfoV2gWzBZMFcwVRYJaW1hZ2UvZ2lmMCEwHzAH" +
-                            "BgUrDgMCGgQUj+XTGoasjY5rw8+AatRIGCx7GS4wJRYjaHR0cDovL2xvZ28udmVy" +
-                            "aXNpZ24uY29tL3ZzbG9nby5naWYwHQYDVR0OBBYEFH/TZafC3ey78DAJ80M5+gKv" +
-                            "MzEzMA0GCSqGSIb3DQEBBQUAA4IBAQCTJEowX2LP2BqYLz3q3JktvXf2pXkiOOzE" +
-                            "p6B4Eq1iDkVwZMXnl2YtmAl+X6/WzChl8gGqCBpH3vn5fJJaCGkgDdk+bW48DW7Y" +
-                            "5gaRQBi5+MHt39tBquCWIMnNZBU4gcmU7qKEKQsTb47bDN0lAtukixlE0kF6BWlK" +
-                            "WE9gyn6CagsCqiUXObXbf+eEZSqVir2G3l6BFoMtEMze/aiCKm0oHw0LxOXnGiYZ" +
-                            "4fQRbxC1lfznQgUy286dUV4otp6F01vvpX1FQHKOtw5rDgb7MzVIcbidJ4vEZV8N" +
-                            "hnacRHr2lVz2XTIIM6RUthg/aFzyQkqFOFSDX9HoLPKsEdao7WNq" +
-                        "-----END CERTIFICATE-----";
-        
-        return Utils.createX509CertificateFromPEM(logger,pem,"X509");
+        String pem = "-----BEGIN CERTIFICATE-----"
+                + "MIIE0zCCA7ugAwIBAgIQGNrRniZ96LtKIVjNzGs7SjANBgkqhkiG9w0BAQUFADCB"
+                + "yjELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQL"
+                + "ExZWZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJp"
+                + "U2lnbiwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MUUwQwYDVQQDEzxW"
+                + "ZXJpU2lnbiBDbGFzcyAzIFB1YmxpYyBQcmltYXJ5IENlcnRpZmljYXRpb24gQXV0"
+                + "aG9yaXR5IC0gRzUwHhcNMDYxMTA4MDAwMDAwWhcNMzYwNzE2MjM1OTU5WjCByjEL"
+                + "MAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQLExZW"
+                + "ZXJpU2lnbiBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJpU2ln"
+                + "biwgSW5jLiAtIEZvciBhdXRob3JpemVkIHVzZSBvbmx5MUUwQwYDVQQDEzxWZXJp"
+                + "U2lnbiBDbGFzcyAzIFB1YmxpYyBQcmltYXJ5IENlcnRpZmljYXRpb24gQXV0aG9y"
+                + "aXR5IC0gRzUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCvJAgIKXo1"
+                + "nmAMqudLO07cfLw8RRy7K+D+KQL5VwijZIUVJ/XxrcgxiV0i6CqqpkKzj/i5Vbex"
+                + "t0uz/o9+B1fs70PbZmIVYc9gDaTY3vjgw2IIPVQT60nKWVSFJuUrjxuf6/WhkcIz"
+                + "SdhDY2pSS9KP6HBRTdGJaXvHcPaz3BJ023tdS1bTlr8Vd6Gw9KIl8q8ckmcY5fQG"
+                + "BO+QueQA5N06tRn/Arr0PO7gi+s3i+z016zy9vA9r911kTMZHRxAy3QkGSGT2RT+"
+                + "rCpSx4/VBEnkjWNHiDxpg8v+R70rfk/Fla4OndTRQ8Bnc+MUCH7lP59zuDMKz10/"
+                + "NIeWiu5T6CUVAgMBAAGjgbIwga8wDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8E"
+                + "BAMCAQYwbQYIKwYBBQUHAQwEYTBfoV2gWzBZMFcwVRYJaW1hZ2UvZ2lmMCEwHzAH"
+                + "BgUrDgMCGgQUj+XTGoasjY5rw8+AatRIGCx7GS4wJRYjaHR0cDovL2xvZ28udmVy"
+                + "aXNpZ24uY29tL3ZzbG9nby5naWYwHQYDVR0OBBYEFH/TZafC3ey78DAJ80M5+gKv"
+                + "MzEzMA0GCSqGSIb3DQEBBQUAA4IBAQCTJEowX2LP2BqYLz3q3JktvXf2pXkiOOzE"
+                + "p6B4Eq1iDkVwZMXnl2YtmAl+X6/WzChl8gGqCBpH3vn5fJJaCGkgDdk+bW48DW7Y"
+                + "5gaRQBi5+MHt39tBquCWIMnNZBU4gcmU7qKEKQsTb47bDN0lAtukixlE0kF6BWlK"
+                + "WE9gyn6CagsCqiUXObXbf+eEZSqVir2G3l6BFoMtEMze/aiCKm0oHw0LxOXnGiYZ"
+                + "4fQRbxC1lfznQgUy286dUV4otp6F01vvpX1FQHKOtw5rDgb7MzVIcbidJ4vEZV8N"
+                + "hnacRHr2lVz2XTIIM6RUthg/aFzyQkqFOFSDX9HoLPKsEdao7WNq"
+                + "-----END CERTIFICATE-----";
+
+        return Utils.createX509CertificateFromPEM(logger, pem, "X509");
     }
-    
+
     // create a Keystore
-    public static String createKeystore(ErrorLogger logger,String base,String sep,String filename,X509Certificate cert,PrivateKey priv_key,String pw) {
+    public static String createKeystore(ErrorLogger logger, String base, String sep, String filename, X509Certificate cert, PrivateKey priv_key, String pw) {
         String basedir = base + File.separator + sep;
         String keystore_filename = basedir + File.separator + filename;
-        
+
         try {
             // first create the directory if it does not exist
             File file = new File(basedir);
-            
+
             // make the directories
             logger.info("createKeystore: Making directories for keystore...");
             file.mkdirs();
-            
+
             // create the KeyStore
             logger.info("createKeystore: Creating keystore: " + keystore_filename);
             file = new File(keystore_filename);
-            if (file.createNewFile()){
-	        logger.info("createKeystore: keystore created:  " + keystore_filename);
-	    }
+            if (file.createNewFile()) {
+                logger.info("createKeystore: keystore created:  " + keystore_filename);
+            }
             else {
-	        logger.warning("createKeystore: keystore already exists " + keystore_filename);
-	    }
-            
+                logger.warning("createKeystore: keystore already exists " + keystore_filename);
+            }
+
             // store data into the keystore
             KeyStore ks = KeyStore.getInstance("JKS");
-            ks.load(null,pw.toCharArray());
-            
+            ks.load(null, pw.toCharArray());
+
             // set the certificate, priv and pub keys
             if (cert != null) {
                 Certificate[] cert_list = new Certificate[2];
                 cert_list[0] = cert;
                 cert_list[1] = Utils.createCACertificate(logger);
-                
-                ks.setCertificateEntry("aws",cert_list[0]);
+
+                ks.setCertificateEntry("aws", cert_list[0]);
                 ks.setCertificateEntry("verisign", cert_list[1]);
-                
+
                 if (priv_key != null) {
                     try {
-                        ks.setKeyEntry("privkey",priv_key,pw.toCharArray(),cert_list);
+                        ks.setKeyEntry("privkey", priv_key, pw.toCharArray(), cert_list);
                     }
                     catch (Exception ex2) {
-                        logger.warning("createKeystore: Exception during priv addition... not added to keystore",ex2);
+                        logger.warning("createKeystore: Exception during priv addition... not added to keystore", ex2);
                     }
                 }
                 else {
@@ -485,35 +487,35 @@ public class Utils {
 
             try (FileOutputStream fos = new FileOutputStream(keystore_filename)) {
                 // store away the keystore content
-                ks.store(fos,pw.toCharArray());
-                
+                ks.store(fos, pw.toCharArray());
+
                 // close
                 fos.flush();
             }
         }
         catch (IOException | KeyStoreException | NoSuchAlgorithmException | CertificateException ex) {
-            logger.warning("createKeystore: Unable to create keystore: " + keystore_filename,ex);
+            logger.warning("createKeystore: Unable to create keystore: " + keystore_filename, ex);
         }
-       
+
         // return the keystore filename
         return keystore_filename;
     }
-    
+
     // generate a keystore password
-    public static String generateKeystorePassword(String base_pw,String salt) {
+    public static String generateKeystorePassword(String base_pw, String salt) {
         // XXX TO DO
         return base_pw;
     }
-    
+
     // remove the keystore from the filesystem
-    public static void deleteKeystore(ErrorLogger logger,String filename,String keystore_name) {
+    public static void deleteKeystore(ErrorLogger logger, String filename, String keystore_name) {
         try {
             // DEBUG
             logger.info("deleteKeystore: deleting keystore: " + filename);
-            
+
             // Delete the KeyStore
             File file = new File(filename);
-            if(file.delete()){
+            if (file.delete()) {
                 // success
                 logger.info(file.getName() + " is deleted!");
             }
@@ -521,13 +523,13 @@ public class Utils {
                 // failure
                 logger.warning("Delete operation is failed: " + filename);
             }
-            
+
             // Create the parent directory
-            String basedir = filename.replace("/" + keystore_name,"");
-            
+            String basedir = filename.replace("/" + keystore_name, "");
+
             // DEBUG
             logger.info("deleteKeystore: deleting keystore parent directory: " + basedir);
-            
+
             // Delete the Base Directory
             file = new File(basedir);
             if (file.isDirectory()) {
@@ -540,73 +542,70 @@ public class Utils {
                     logger.warning("Delete operation is failed : " + basedir);
                 }
             }
-            
+
         }
         catch (Exception ex) {
             // exception caught
-            logger.warning("deleteKeystore: Exception during deletion of keystore: " + filename,ex);
+            logger.warning("deleteKeystore: Exception during deletion of keystore: " + filename, ex);
         }
     }
-    
+
     // Create X509Certificate from PEM
-    static public X509Certificate createX509CertificateFromPEM(ErrorLogger logger,String pem, String cert_type) {
+    static public X509Certificate createX509CertificateFromPEM(ErrorLogger logger, String pem, String cert_type) {
         try {
             String temp = Utils.escapeChars(pem);
             String certPEM = temp.replace("-----BEGIN CERTIFICATE-----", "");
             certPEM = certPEM.replace("-----END CERTIFICATE-----", "");
-            
+
             // DEBUG
             //logger.info("createX509CertificateFromPEM: " + certPEM);
-
             Base64 b64 = new Base64();
-            byte [] decoded = b64.decode(certPEM);
-            
+            byte[] decoded = b64.decode(certPEM);
+
             CertificateFactory cf = CertificateFactory.getInstance(cert_type);
-            return (X509Certificate)cf.generateCertificate(new ByteArrayInputStream(decoded));
+            return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(decoded));
         }
         catch (Exception ex) {
             // exception caught
-            logger.warning("createX509CertificateFromPEM: Exception during private key gen",ex);
+            logger.warning("createX509CertificateFromPEM: Exception during private key gen", ex);
         }
         return null;
     }
-    
+
     // Create PrivateKey from PEM
-    static public PrivateKey createPrivateKeyFromPEM(ErrorLogger logger,String pem, String algorithm) {
+    static public PrivateKey createPrivateKeyFromPEM(ErrorLogger logger, String pem, String algorithm) {
         try {
             String temp = Utils.escapeChars(pem);
-            String privKeyPEM = temp.replace("-----BEGIN RSA PRIVATE KEY-----","");
+            String privKeyPEM = temp.replace("-----BEGIN RSA PRIVATE KEY-----", "");
             privKeyPEM = privKeyPEM.replace("-----END RSA PRIVATE KEY-----", "");
-            
+
             // DEBUG
             //logger.info("createPrivateKeyFromPEM: " + privKeyPEM);
-            
             Base64 b64 = new Base64();
-            byte [] decoded = b64.decode(privKeyPEM);
-            
+            byte[] decoded = b64.decode(privKeyPEM);
+
             PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decoded);
             KeyFactory kf = KeyFactory.getInstance(algorithm);
             return kf.generatePrivate(spec);
         }
         catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
             // exception caught
-            logger.warning("createPrivateKeyFromPEM: Exception during private key gen",ex);
+            logger.warning("createPrivateKeyFromPEM: Exception during private key gen", ex);
         }
         return null;
     }
 
-     // Create PublicKey from PEM
-    static public PublicKey createPublicKeyFromPEM(ErrorLogger logger,String pem, String algorithm) {
+    // Create PublicKey from PEM
+    static public PublicKey createPublicKeyFromPEM(ErrorLogger logger, String pem, String algorithm) {
         try {
             String temp = Utils.escapeChars(pem);
             String publicKeyPEM = temp.replace("-----BEGIN PUBLIC KEY-----", "");
             publicKeyPEM = publicKeyPEM.replace("-----END PUBLIC KEY-----", "");
-            
+
             // DEBUG
             //logger.info("createPublicKeyFromPEM: " + publicKeyPEM);
-
             Base64 b64 = new Base64();
-            byte [] decoded = b64.decode(publicKeyPEM);
+            byte[] decoded = b64.decode(publicKeyPEM);
 
             X509EncodedKeySpec spec = new X509EncodedKeySpec(decoded);
             KeyFactory kf = KeyFactory.getInstance(algorithm);
@@ -614,38 +613,39 @@ public class Utils {
         }
         catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
             // exception caught
-            logger.warning("createPublicKeyFromPEM: Exception during public key gen",ex);
+            logger.warning("createPublicKeyFromPEM: Exception during public key gen", ex);
         }
         return null;
     }
-    
+
     // Create a String Array from the TLV
     public static String[] formatTLVToStringArray(byte tlv[]) {
-        String tlv_str = "";
-        
         // convert to array, removing separators... 
-        for(int i=0;i<tlv.length;++i) {
+        StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < tlv.length; ++i) {
             if (tlv[i] == 63) {
-                tlv_str += " ";
+                buf.append(" ");
             }
             else {
-                tlv_str += (char)tlv[i];
+                buf.append((char) tlv[i]);
             }
         }
-        
+
         // trim
-        tlv_str = tlv_str.trim();
-        
+        String tlv_str = buf.toString().trim();
+
         // split into an array
         String tlv_split[] = tlv_str.split(" ");
-        
+
         // trim array elements
-        for(int i=0;i<tlv_split.length;++i) tlv_split[i] = tlv_split[i].trim();
-        
+        for (int i = 0; i < tlv_split.length; ++i) {
+            tlv_split[i] = tlv_split[i].trim();
+        }
+
         // return the cleaned up array
         return tlv_split;
     }
-    
+
     // ensure that an HTTP response code is in the 200's
     public static boolean httpResponseCodeOK(int code) {
         int check = code - 200;
@@ -654,38 +654,38 @@ public class Utils {
         }
         return false;
     }
-    
+
     // re-type a JSON Map
-    public static Map retypeMap(Map json,TypeDecoder decoder) {
-        HashMap<String,Object> remap = new HashMap<>();
-        
+    public static Map retypeMap(Map json, TypeDecoder decoder) {
+        HashMap<String, Object> remap = new HashMap<>();
+
         // iterate through the existing map and re-type each entry
         Iterator it = json.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry pair = (Map.Entry)it.next();
+            Map.Entry pair = (Map.Entry) it.next();
             Object value = decoder.getFundamentalValue(pair.getValue());
             if (value instanceof Double || value instanceof Integer || value instanceof String) {
                 // fundamental types get mapped directly
-                remap.put((String)pair.getKey(),value);
+                remap.put((String) pair.getKey(), value);
             }
             else {
                 // this is a complex embedded type...
                 if (value instanceof Map) {
                     // embedded JSON - directly recurse.
-                    remap.put((String)pair.getKey(),Utils.retypeMap((Map)value,decoder));
+                    remap.put((String) pair.getKey(), Utils.retypeMap((Map) value, decoder));
                 }
                 if (value instanceof List) {
                     // list of embedded JSON - loop and recurse each Map(i)... 
-                    List list = (List)value;
-                    for(int i=0;i<list.size();++i) {
-                        list.set(i, Utils.retypeMap((Map)(Map)list.get(i),decoder));
+                    List list = (List) value;
+                    for (int i = 0; i < list.size(); ++i) {
+                        list.set(i, Utils.retypeMap((Map) (Map) list.get(i), decoder));
                     }
                     // replace list with new one...
-                    remap.put((String)pair.getKey(),list);
+                    remap.put((String) pair.getKey(), list);
                 }
             }
         }
-        
+
         return remap;
     }
 }

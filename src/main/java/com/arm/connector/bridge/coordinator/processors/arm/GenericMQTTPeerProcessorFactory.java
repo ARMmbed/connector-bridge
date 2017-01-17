@@ -1,7 +1,7 @@
 /**
  * @file    GenericMQTTPeerProcessorFactory.java
- * @brief   Generic MQTT Processor Factory
- * @author  Doug Anson
+ * @brief Generic MQTT Processor Factory
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
@@ -33,45 +32,47 @@ import java.util.ArrayList;
 
 /**
  * IBM Peer Processor Manager: Factory for initiating a generic MQTT peer processor
+ *
  * @author Doug Anson
  */
-public class GenericMQTTPeerProcessorFactory extends BasePeerProcessorFactory implements Transport.ReceiveListener, PeerInterface {  
+public class GenericMQTTPeerProcessorFactory extends BasePeerProcessorFactory implements Transport.ReceiveListener, PeerInterface {
+
     // Factory method for initializing the generic MQTT collection orchestrator
-    public static GenericMQTTPeerProcessorFactory createPeerProcessor(Orchestrator manager,HttpTransport http) {
+    public static GenericMQTTPeerProcessorFactory createPeerProcessor(Orchestrator manager, HttpTransport http) {
         // create me
-        GenericMQTTPeerProcessorFactory me = new GenericMQTTPeerProcessorFactory(manager,http);
-        
+        GenericMQTTPeerProcessorFactory me = new GenericMQTTPeerProcessorFactory(manager, http);
+
         // initialize me
         String mgr_config = manager.preferences().valueOf("mqtt_mgr_config");
         if (mgr_config != null && mgr_config.length() > 0) {
             // muliple MQTT brokers requested... follow configuration and assign suffixes
             String[] config = mgr_config.split(";");
-            for(int i=0;i<config.length;++i) {
+            for (int i = 0; i < config.length; ++i) {
                 if (config[i].equalsIgnoreCase("std") == true) {
                     manager.errorLogger().info("Registering Generic MQTT processor...");
-                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),""+i,http);
+                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
                     me.addProcessor(p);
                 }
                 if (config[i].equalsIgnoreCase("std-d") == true) {
                     manager.errorLogger().info("Registering Generic MQTT processor (default)...");
-                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),""+i,http);
-                    me.addProcessor(p,true);
+                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    me.addProcessor(p, true);
                 }
             }
         }
         else {
-           manager.errorLogger().info("Registering Generic MQTT processor (singleton)...");
-           GenericMQTTProcessor p = new GenericMQTTProcessor(manager,new MQTTTransport(manager.errorLogger(),manager.preferences()),http);
-           me.addProcessor(p);
+            manager.errorLogger().info("Registering Generic MQTT processor (singleton)...");
+            GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
+            me.addProcessor(p);
         }
-        
+
         // return me
         return me;
     }
-    
+
     // constructor
-    public GenericMQTTPeerProcessorFactory(Orchestrator manager,HttpTransport http) {
-        super(manager,null);
+    public GenericMQTTPeerProcessorFactory(Orchestrator manager, HttpTransport http) {
+        super(manager, null);
         this.m_http = http;
         this.m_mqtt_list = new ArrayList<>();
     }

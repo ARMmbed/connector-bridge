@@ -1,7 +1,7 @@
 /**
  * @file    HttpTransport.java
- * @brief   HTTP Transport Support 
- * @author  Doug Anson
+ * @brief HTTP Transport Support
+ * @author Doug Anson
  * @version 1.0
  * @see
  *
@@ -11,16 +11,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  */
-
 package com.arm.connector.bridge.transport;
 
 import com.arm.connector.bridge.core.BaseClass;
@@ -53,15 +52,15 @@ import org.apache.commons.codec.binary.Base64;
  * @author Doug Anson
  */
 public class HttpTransport extends BaseClass {
+
     private int m_last_response_code = 0;
     private String m_auth_qualifier_default = "bearer";
     private String m_auth_qualifier = this.m_auth_qualifier_default;
     private String m_basic_auth_qualifier = "Basic";
     private String m_etag_value = null;
     private String m_if_match_header_value = null;
-    
-    // constructor
 
+    // constructor
     /**
      *
      * @param error_logger
@@ -76,34 +75,34 @@ public class HttpTransport extends BaseClass {
         }
         this.errorLogger().info("HTTP: Authorization Qualifier set to: " + this.m_auth_qualifier);
     }
-    
+
     // set the authorization qualifier
     public void setAuthorizationQualifier(String qualifier) {
         if (qualifier != null && qualifier.length() > 0) {
             this.m_auth_qualifier = qualifier;
         }
     }
-    
+
     // reset the authorization qualifier
     private void resetAuthorizationQualifier() {
         this.m_auth_qualifier = this.m_auth_qualifier_default;
     }
-    
+
     // set the ETag value
     public void setETagValue(String etag) {
         this.m_etag_value = etag;
     }
-    
+
     // reset the ETag value
     private void resetETagValue() {
         this.m_etag_value = null;
     }
-    
+
     // set the If-Match value
     public void setIfMatchValue(String ifMatch) {
         this.m_if_match_header_value = ifMatch;
     }
-    
+
     // reset the If-Match value
     private void resetIfMatchValue() {
         this.m_if_match_header_value = null;
@@ -123,7 +122,7 @@ public class HttpTransport extends BaseClass {
     public String httpGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, false, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -136,7 +135,7 @@ public class HttpTransport extends BaseClass {
     public String httpGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, false, true, api_token);
     }
-    
+
     // execute GET over https
     /**
      *
@@ -149,9 +148,9 @@ public class HttpTransport extends BaseClass {
      * @return
      */
     public String httpPeristentGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
-        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, false, false, null,true);
+        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, false, false, null, true);
     }
-    
+
     /**
      *
      * @param url_str
@@ -162,9 +161,9 @@ public class HttpTransport extends BaseClass {
      * @return
      */
     public String httpPersistentGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
-        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, false, true, api_token,true);
+        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, false, true, api_token, true);
     }
-    
+
     // execute GET over https
     /**
      *
@@ -177,9 +176,9 @@ public class HttpTransport extends BaseClass {
      * @return
      */
     public String httpsPeristentGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
-        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null,true);
+        return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null, true);
     }
-    
+
     /**
      *
      * @param url_str
@@ -190,9 +189,9 @@ public class HttpTransport extends BaseClass {
      * @return
      */
     public String httpsPersistentGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
-        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, true, true, api_token,true);
+        return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, true, true, api_token, true);
     }
-    
+
     // execute GET over https
     /**
      *
@@ -207,7 +206,7 @@ public class HttpTransport extends BaseClass {
     public String httpsGet(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, username, password, data, content_type, auth_domain, true, false, true, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -220,7 +219,6 @@ public class HttpTransport extends BaseClass {
     public String httpsGetApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("GET", url_str, null, null, data, content_type, auth_domain, true, false, true, true, api_token);
     }
-
 
     // execute POST over https
     /**
@@ -236,7 +234,7 @@ public class HttpTransport extends BaseClass {
     public String httpPost(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("POST", url_str, username, password, data, content_type, auth_domain, true, true, false, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -249,7 +247,7 @@ public class HttpTransport extends BaseClass {
     public String httpPostApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("POST", url_str, null, null, data, content_type, auth_domain, true, true, false, true, api_token);
     }
-    
+
     // execute POST over https
     /**
      *
@@ -264,7 +262,7 @@ public class HttpTransport extends BaseClass {
     public String httpsPost(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("POST", url_str, username, password, data, content_type, auth_domain, true, true, true, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -292,7 +290,7 @@ public class HttpTransport extends BaseClass {
     public String httpPut(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("PUT", url_str, username, password, data, content_type, auth_domain, true, true, false, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -305,7 +303,7 @@ public class HttpTransport extends BaseClass {
     public String httpPutApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("PUT", url_str, null, null, data, content_type, auth_domain, true, true, false, true, api_token);
     }
-    
+
     // execute PUT over https
     /**
      *
@@ -320,7 +318,7 @@ public class HttpTransport extends BaseClass {
     public String httpsPut(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("PUT", url_str, username, password, data, content_type, auth_domain, true, true, true, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -349,7 +347,7 @@ public class HttpTransport extends BaseClass {
     public String httpPut(String url_str, String username, String password, String data, String content_type, String auth_domain, boolean expect_response) {
         return this.doHTTP("PUT", url_str, username, password, data, content_type, auth_domain, expect_response, true, false, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -363,7 +361,7 @@ public class HttpTransport extends BaseClass {
     public String httpPutApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain, boolean expect_response) {
         return this.doHTTP("PUT", url_str, null, null, data, content_type, auth_domain, expect_response, true, false, true, api_token);
     }
-    
+
     // execute PUT over https
     /**
      *
@@ -393,7 +391,7 @@ public class HttpTransport extends BaseClass {
     public String httpsPutApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain, boolean expect_response) {
         return this.doHTTP("PUT", url_str, null, null, data, content_type, auth_domain, expect_response, true, true, true, api_token);
     }
-    
+
     // execute DELETE over http
     /**
      *
@@ -408,7 +406,7 @@ public class HttpTransport extends BaseClass {
     public String httpDelete(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("DELETE", url_str, username, password, data, content_type, auth_domain, true, true, false, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -421,7 +419,7 @@ public class HttpTransport extends BaseClass {
     public String httpDeleteApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("DELETE", url_str, null, null, data, content_type, auth_domain, true, true, false, true, api_token);
     }
-    
+
     // execute DELETE over https
     /**
      *
@@ -436,7 +434,7 @@ public class HttpTransport extends BaseClass {
     public String httpsDelete(String url_str, String username, String password, String data, String content_type, String auth_domain) {
         return this.doHTTP("DELETE", url_str, username, password, data, content_type, auth_domain, true, true, true, false, null);
     }
-    
+
     /**
      *
      * @param url_str
@@ -446,7 +444,7 @@ public class HttpTransport extends BaseClass {
      * @param auth_domain
      * @return
      */
-    public String httpsDeleteApiTokenAuth(String url_str, String api_token,String data, String content_type, String auth_domain) {
+    public String httpsDeleteApiTokenAuth(String url_str, String api_token, String data, String content_type, String auth_domain) {
         return this.doHTTP("DELETE", url_str, null, null, data, content_type, auth_domain, true, true, true, true, api_token);
     }
 
@@ -485,22 +483,24 @@ public class HttpTransport extends BaseClass {
         }
         return value;
     }
-    
+
     private void saveResponseCode(int response_code) {
         this.m_last_response_code = response_code;
     }
-    
-    public int getLastResponseCode() { return this.m_last_response_code; }
 
-        // perform an authenticated HTML operation
-    @SuppressWarnings("empty-statement")
-    private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL,boolean use_api_token,String api_token) {
-        return this.doHTTP(verb,url_str,username,password,data,content_type,auth_domain,doInput,doOutput,doSSL,use_api_token,api_token,false);
+    public int getLastResponseCode() {
+        return this.m_last_response_code;
     }
-    
+
     // perform an authenticated HTML operation
     @SuppressWarnings("empty-statement")
-    private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL,boolean use_api_token,String api_token,boolean persistent) {
+    private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL, boolean use_api_token, String api_token) {
+        return this.doHTTP(verb, url_str, username, password, data, content_type, auth_domain, doInput, doOutput, doSSL, use_api_token, api_token, false);
+    }
+
+    // perform an authenticated HTML operation
+    @SuppressWarnings("empty-statement")
+    private String doHTTP(String verb, String url_str, String username, String password, String data, String content_type, String auth_domain, boolean doInput, boolean doOutput, boolean doSSL, boolean use_api_token, String api_token, boolean persistent) {
         String result = "";
         String line = "";
         URLConnection connection = null;
@@ -512,13 +512,19 @@ public class HttpTransport extends BaseClass {
             // Http Connection and verb
             if (doSSL) {
                 // Create a trust manager that does not validate certificate chains
-                TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager(){
+                TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
                     @Override
-                    public X509Certificate[] getAcceptedIssuers(){return null;}
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+
                     @Override
-                    public void checkClientTrusted(X509Certificate[] certs, String authType){}
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                    }
+
                     @Override
-                    public void checkServerTrusted(X509Certificate[] certs, String authType){}
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                    }
                 }};
 
                 // Install the all-trusting trust manager
@@ -527,32 +533,33 @@ public class HttpTransport extends BaseClass {
                     sc.init(null, trustAllCerts, new SecureRandom());
                     HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
                     HttpsURLConnection.setDefaultHostnameVerifier(new HostnameVerifier() {
-                            @Override
-                            public boolean verify(String hostname, SSLSession session) {
-                                return true;
-                            }
-                        });
-                } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                        @Override
+                        public boolean verify(String hostname, SSLSession session) {
+                            return true;
+                        }
+                    });
+                }
+                catch (NoSuchAlgorithmException | KeyManagementException e) {
                     // do nothing
                     ;
                 }
-                
+
                 // open the SSL connction
-                connection = (HttpsURLConnection)(url.openConnection());
-                ((HttpsURLConnection)connection).setRequestMethod(verb);
-                ((HttpsURLConnection)connection).setSSLSocketFactory(sc.getSocketFactory());
-                ((HttpsURLConnection)connection).setHostnameVerifier(new HostnameVerifier() {
-                            @Override
-                            public boolean verify(String hostname, SSLSession session) {
-                                return true;
-                            }
-                        });
+                connection = (HttpsURLConnection) (url.openConnection());
+                ((HttpsURLConnection) connection).setRequestMethod(verb);
+                ((HttpsURLConnection) connection).setSSLSocketFactory(sc.getSocketFactory());
+                ((HttpsURLConnection) connection).setHostnameVerifier(new HostnameVerifier() {
+                    @Override
+                    public boolean verify(String hostname, SSLSession session) {
+                        return true;
+                    }
+                });
             }
             else {
-                connection = (HttpURLConnection)(url.openConnection()); 
-                ((HttpURLConnection)connection).setRequestMethod(verb);
+                connection = (HttpURLConnection) (url.openConnection());
+                ((HttpURLConnection) connection).setRequestMethod(verb);
             }
-            
+
             connection.setDoInput(doInput);
             if (doOutput && data != null && data.length() > 0) {
                 connection.setDoOutput(doOutput);
@@ -564,26 +571,26 @@ public class HttpTransport extends BaseClass {
             // enable basic auth if requested
             if (use_api_token == false && username != null && username.length() > 0 && password != null && password.length() > 0) {
                 String encoding = Base64.encodeBase64String((username + ":" + password).getBytes());
-                connection.setRequestProperty("Authorization", this.m_basic_auth_qualifier + " "  + encoding);
+                connection.setRequestProperty("Authorization", this.m_basic_auth_qualifier + " " + encoding);
                 this.errorLogger().info("HTTP(S): Basic Authorization: " + username + ":" + password + ": " + encoding);
             }
-            
+
             // enable ApiTokenAuth auth if requested
             if (use_api_token == true && api_token != null && api_token.length() > 0) {
-               // use qualification for the authorization header...
-               connection.setRequestProperty("Authorization", this.m_auth_qualifier + " " + api_token);
-               this.errorLogger().info("HTTP(S): ApiTokenAuth Authorization: " + this.m_auth_qualifier + " " + api_token);
-               
-               // Always reset to the established default
-               this.resetAuthorizationQualifier();
+                // use qualification for the authorization header...
+                connection.setRequestProperty("Authorization", this.m_auth_qualifier + " " + api_token);
+                this.errorLogger().info("HTTP(S): ApiTokenAuth Authorization: " + this.m_auth_qualifier + " " + api_token);
+
+                // Always reset to the established default
+                this.resetAuthorizationQualifier();
             }
-            
+
             // ETag support if requested
             if (this.m_etag_value != null && this.m_etag_value.length() > 0) {
                 // set the ETag header value
-               connection.setRequestProperty("ETag",this.m_etag_value);
-               //this.errorLogger().info("ETag Value: " + this.m_etag_value);
-               
+                connection.setRequestProperty("ETag", this.m_etag_value);
+                //this.errorLogger().info("ETag Value: " + this.m_etag_value);
+
                 // Always reset to the established default
                 this.resetETagValue();
             }
@@ -591,25 +598,24 @@ public class HttpTransport extends BaseClass {
             // If-Match support if requested
             if (this.m_if_match_header_value != null && this.m_if_match_header_value.length() > 0) {
                 // set the If-Match header value
-               connection.setRequestProperty("If-Match",this.m_if_match_header_value);
-               //this.errorLogger().info("If-Match Value: " + this.m_if_match_header_value);
-               
+                connection.setRequestProperty("If-Match", this.m_if_match_header_value);
+                //this.errorLogger().info("If-Match Value: " + this.m_if_match_header_value);
+
                 // Always reset to the established default
                 this.resetIfMatchValue();
             }
-            
+
             // specify content type if requested
             if (content_type != null && content_type.length() > 0) {
                 connection.setRequestProperty("Content-Type", content_type);
                 connection.setRequestProperty("Accept", "*/*");
-                
+
                 // DEBUG
                 this.errorLogger().info("ContentType: " + content_type);
             }
-            
+
             // add Connection: keep-alive (does not work...)
             //connection.setRequestProperty("Connection", "keep-alive");
-
             // special gorp for HTTP DELETE
             if (verb != null && verb.equalsIgnoreCase("delete")) {
                 connection.setRequestProperty("Access-Control-Allow-Methods", "OPTIONS, DELETE");
@@ -619,7 +625,7 @@ public class HttpTransport extends BaseClass {
             if (auth_domain != null && auth_domain.length() > 0) {
                 connection.setRequestProperty("Domain", auth_domain);
             }
-            
+
             // specify a persistent connection or not
             if (persistent == true) {
                 connection.setRequestProperty("Connection", "keep-alive");
@@ -630,7 +636,6 @@ public class HttpTransport extends BaseClass {
             //    this.errorLogger().info("HTTP: Headers: " + ((HttpsURLConnection)connection).getRequestProperties()); 
             //else
             //    this.errorLogger().info("HTTP: Headers: " + ((HttpURLConnection)connection).getRequestProperties()); 
-            
             // specify data if requested - assumes it properly escaped if necessary
             if (doOutput && data != null && data.length() > 0) {
                 try (OutputStreamWriter out = new OutputStreamWriter(connection.getOutputStream())) {
@@ -642,9 +647,11 @@ public class HttpTransport extends BaseClass {
             if (doInput) {
                 try {
                     try (InputStream content = (InputStream) connection.getInputStream(); BufferedReader in = new BufferedReader(new InputStreamReader(content))) {
+                        StringBuilder buf = new StringBuilder();
                         while ((line = in.readLine()) != null) {
-                            result += line;
+                            buf.append(line);
                         }
+                        result = buf.toString();
                     }
                 }
                 catch (java.io.FileNotFoundException ex) {
@@ -656,13 +663,15 @@ public class HttpTransport extends BaseClass {
                 // no result expected
                 result = "";
             }
-            
+
             // save off the HTTP response code...
-            if (doSSL)
-                this.saveResponseCode(((HttpsURLConnection)connection).getResponseCode());
-            else 
-                this.saveResponseCode(((HttpURLConnection)connection).getResponseCode());
-            
+            if (doSSL) {
+                this.saveResponseCode(((HttpsURLConnection) connection).getResponseCode());
+            }
+            else {
+                this.saveResponseCode(((HttpURLConnection) connection).getResponseCode());
+            }
+
             // DEBUG
             //if (doSSL)
             //    this.errorLogger().info("HTTP(" + verb +") URL: " + url_str + " Data: " + data + " Response code: " + ((HttpsURLConnection)connection).getResponseCode());
@@ -672,14 +681,22 @@ public class HttpTransport extends BaseClass {
         catch (IOException ex) {
             this.errorLogger().warning("Exception in doHTTP(" + verb + "): " + ex.getMessage());
             result = null;
-            
+
             try {
-                // save off the HTTP response code...
-                if (doSSL)
-                    this.saveResponseCode(((HttpsURLConnection)connection).getResponseCode());
-                else 
-                    this.saveResponseCode(((HttpURLConnection)connection).getResponseCode());
+                // check for non-null connection
+                if (connection != null) {
+                    // save off the HTTP response code...
+                    if (doSSL) {
+                        this.saveResponseCode(((HttpsURLConnection) connection).getResponseCode());
+                    }
+                    else {
+                        this.saveResponseCode(((HttpURLConnection) connection).getResponseCode());
+                    }
                 }
+                else {
+                    this.errorLogger().warning("ERROR in doHTTP(" + verb + "): Connection is NULL");
+                }
+            }
             catch (Exception ex2) {
                 this.errorLogger().warning("Exception in doHTTP(" + verb + "): Unable to save last response code: " + ex2.getMessage());
             }
