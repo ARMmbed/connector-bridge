@@ -655,11 +655,6 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         }
     }
 
-    /* create the Endpoint Subscription Notification URL
-    private String createEndpointResourceSubscriptionURL(String uri) {
-        return this.createEndpointResourceSubscriptionURL(uri, (Map) null);
-    }
-     */
     // create the Endpoint Subscription Notification URL
     private String createEndpointResourceSubscriptionURL(String uri, Map options) {
         // build out the URL for mDS Endpoint notification subscriptions...
@@ -921,11 +916,6 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return response;
     }
 
-    /* invoke HTTP POST request (SSL) 
-    private String httpsPost(String url, String data) {
-        return this.httpsPost(url, data, this.m_content_type);
-    }
-     */
     // invoke HTTP POST request (SSL)
     private String httpsPost(String url, String data, String content_type) {
         String response = null;
@@ -939,11 +929,6 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return response;
     }
 
-    /* invoke HTTP POST request (SSL) 
-    private String httpPost(String url, String data) {
-        return this.httpPost(url, data, this.m_content_type);
-    }
-     */
     // invoke HTTP POST request - set the content_type to "plain/text" forcefully...
     private String httpPost(String url, String data, String content_type) {
         String response = null;
@@ -1147,12 +1132,6 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // process endpoint resource operation request
     @Override
-    public String processEndpointResourceOperation(String verb, String ep_name, String uri) {
-        return this.processEndpointResourceOperation(verb, ep_name, uri, null, null);
-    }
-
-    // process endpoint resource operation request
-    @Override
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options) {
         String json = null;
         String url = this.createCoAPURL(ep_name, uri);
@@ -1218,40 +1197,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
         return json;
     }
-
-    // process endpoint resource operation request
-    @Override
-    public String processEndpointResourceOperation(String verb, String uri, Map options) {
-        String json = null;
-        String url = this.createEndpointResourceRequestURL(uri, options);
-
-        // DEBUG
-        this.errorLogger().info("processEndpointResourceOperation: Invoking " + verb + ": " + url);
-
-        // Get Endpoint Resource Value - use HTTP GET
-        if (verb.equalsIgnoreCase("get")) {
-            if (this.mdsRequiresSSL()) {
-                json = this.httpsGet(url);
-            }
-            else {
-                json = this.httpGet(url);
-            }
-        }
-
-        // Put Endpoint Resource Value - use HTTP PUT
-        if (verb.equalsIgnoreCase("put")) {
-            String new_value = (String) options.get("new_value");
-            if (this.mdsRequiresSSL()) {
-                json = this.httpsPut(url, new_value);
-            }
-            else {
-                json = this.httpPut(url, new_value);
-            }
-        }
-
-        return json;
-    }
-
+    
     // process an endpoint resource un-subscribe request
     @Override
     public String unsubscribeFromEndpointResource(String uri, Map options) {

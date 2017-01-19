@@ -325,16 +325,6 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     }
 
     @Override
-    public String processEndpointResourceOperation(String verb, String uri, Map options) {
-        return this.mds_rest_processor().processEndpointResourceOperation(verb, uri, options);
-    }
-
-    @Override
-    public String processEndpointResourceOperation(String verb, String ep_name, String uri) {
-        return this.mds_rest_processor().processEndpointResourceOperation(verb, ep_name, uri);
-    }
-
-    @Override
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options) {
         return this.mds_rest_processor().processEndpointResourceOperation(verb, ep_name, uri, value, options);
     }

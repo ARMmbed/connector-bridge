@@ -33,7 +33,7 @@ import javax.servlet.http.HttpServletResponse;
  */
 public interface MDSInterface {
 
-    // process notifications
+    // process observations/notifications
     public void processMDSMessage(HttpServletRequest request, HttpServletResponse response);
 
     // process de-registrations
@@ -41,7 +41,6 @@ public interface MDSInterface {
 
     // process resource subscription request
     public String subscribeToEndpointResource(String uri, Map options, Boolean init_webhook);
-
     public String subscribeToEndpointResource(String ep_name, String uri, Boolean init_webhook);
 
     // process resource un-subscribe request
@@ -54,15 +53,10 @@ public interface MDSInterface {
     public String performDeviceResourceDiscovery(String uri);
 
     // perform CoAP operations on endpoint resources
-    public String processEndpointResourceOperation(String verb, String uri, Map options);
-
-    public String processEndpointResourceOperation(String verb, String ep_name, String uri);
-
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options);
 
     // Webhook management
     public void setNotificationCallbackURL();
-
     public void resetNotificationCallbackURL();
 
     // Device Metadata extraction
