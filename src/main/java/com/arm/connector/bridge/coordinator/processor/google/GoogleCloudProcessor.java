@@ -34,6 +34,10 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.plus.Plus;
 import com.google.api.services.plus.PlusScopes;
+import com.google.cloud.pubsub.PubSub;
+import com.google.cloud.pubsub.PubSubOptions;
+import com.google.cloud.pubsub.Topic;
+import com.google.cloud.pubsub.TopicInfo;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -52,6 +56,7 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
     private GoogleCredential m_credential = null;
     private NetHttpTransport m_google_http = null;
     private JsonFactory m_google_json = null;
+    private PubSub m_pubsub = null;
     private String m_app_name = null;
     private String m_auth_json = null;
     private boolean m_logged_in = false;
@@ -60,6 +65,9 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
     private String m_google_cloud_coap_cmd_topic_put = null;
     private String m_google_cloud_coap_cmd_topic_post = null;
     private String m_google_cloud_coap_cmd_topic_delete = null;
+    private HashMap<String, String> m_google_cloud_endpoint_type_list = null;
+    
+    private Topic  m_observe_topic = null;
     
     private HashMap<String, Object> m_google_cloud_gw_endpoints = null;
 
@@ -86,8 +94,14 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
         // initialize the topic root
         this.initTopicRoot("google_cloud_topic_root");
         
+        // auto-subscribe behavior
+        this.initAutoSubscribe("google_cloud_obs_auto_subscribe");
+        
         // Google Cloud peer Processor Announce
         this.errorLogger().info("Google Cloud Processor ENABLED.");
+        
+        // create endpoint name/endpoint type map
+        this.m_google_cloud_endpoint_type_list = new HashMap<>();
         
         // Observation notification topic
         this.m_google_cloud_observe_notification_topic = this.orchestrator().preferences().valueOf("google_cloud_observe_notification_topic", this.m_suffix);
@@ -108,9 +122,108 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
         this.m_auth_json = this.orchestrator().preferences().valueOf("google_cloud_auth_json",this.m_suffix);
         
         // Log into Google Cloud
-        this.m_logged_in = this.googleCloudLogin(this.m_app_name, this.m_auth_json);
+        //this.m_logged_in = this.googleCloudLogin(this.m_app_name, this.m_auth_json);
+        
+        // Create topics
+        //this.googleCloudCreateTopics();
     }
-  
+    
+    // get the endpoint type from the endpoint name
+    @Override
+    protected String getEndpointTypeFromEndpointName(String ep_name) {
+        String t = super.getEndpointTypeFromEndpointName(ep_name);
+        if (t != null) return t;
+        return this.m_google_cloud_endpoint_type_list.get(ep_name);
+    }
+
+    // set the endpoint type from the endpoint name
+    protected void setEndpointTypeFromEndpointName(String ep_name, String ep_type) {
+        this.m_google_cloud_endpoint_type_list.put(ep_name, ep_type);
+    }
+    
+    // process a received new registration
+    @Override
+    protected void processRegistration(Map data, String key) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
+
+            // ensure we have the endpoint type
+            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+
+            // mimic the message that we get from direct discovery...
+            String message = "[{\"name\":\"" + endpoint.get("ep") + "\",\"type\":\"" + endpoint.get("ept") + "\",\"status\":\"ACTIVE\"}]";
+            String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
+
+            // DEBUG
+            this.errorLogger().info("processNewRegistration(Google Cloud) : Publishing new registration topic: " + topic + " message:" + message);
+            this.sendMessage(topic, message);
+
+            // send it also raw... over a subtopic
+            topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
+            message = this.jsonGenerator().generateJson(endpoint);
+
+            // DEBUG
+            this.errorLogger().info("processNewRegistration(Google Cloud) : Publishing new registration topic: " + topic + " message:" + message);
+            this.sendMessage(topic, message);
+
+            // re-subscribe if previously subscribed to observable resources
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // re-subscribe to this resource
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+            }
+        }
+    }
+    
+    // process a reregistration
+    @Override
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map endpoint = (Map) notifications.get(i);
+            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+                if (this.isObservableResource(resource)) {
+                    this.errorLogger().info("processReRegistration(Google Cloud) : CoAP re-registration: " + endpoint + " Resource: " + resource);
+                    if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
+                        this.errorLogger().info("processReRegistration(Google Cloud) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
+                        this.processRegistration(data, "reg-updates");
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    }
+                }
+            }
+        }
+    }
+    
+    // process a deregistration
+    @Override
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistrations = this.parseDeRegistrationBody(parsed);
+        this.orchestrator().processDeregistrations(deregistrations);
+        for (int i = 0; i < deregistrations.length; ++i) {
+            this.m_google_cloud_endpoint_type_list.remove(deregistrations[i]);
+        }
+        return deregistrations;
+    }
+    
     // process an observation
     @Override
     public void processNotification(Map data) {
@@ -195,6 +308,7 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
     @Override
     public void sendMessage(String to, String message) {
         // send a message over Google Cloud...
+        this.errorLogger().info("Sending Message to: " + to + " message: " + message);
     }
     
     // log into the Google Cloud as a Service Account
@@ -239,5 +353,18 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
         
         // return our status
         return success;
+    }
+    
+    // Create the GoogleCloud topics
+    private void googleCloudCreateTopics() {
+        if (this.m_pubsub != null) {
+            // Create the Observation Topic
+            this.errorLogger().info("googleCloudCreateTopics: Creating Observation Topic: " + this.m_google_cloud_observe_notification_topic);
+            this.m_observe_topic = this.m_pubsub.create(TopicInfo.of(this.m_google_cloud_observe_notification_topic));
+        }
+        else {
+            // no pubsub instance
+            this.errorLogger().warning("googleCloudCreateTopics: no pubsub instance... unable to create topics");
+        }
     }
 }

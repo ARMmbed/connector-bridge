@@ -43,7 +43,6 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class GenericMQTTProcessor extends Processor implements Transport.ReceiveListener, PeerInterface {
-    protected boolean m_auto_subscribe_to_obs_resources = false;
     protected TransportReceiveThread m_mqtt_thread = null;
     protected String m_mqtt_host = null;
     protected int m_mqtt_port = 0;
@@ -107,7 +106,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         }
 
         // auto-subscribe behavior
-        this.m_auto_subscribe_to_obs_resources = orchestrator.preferences().booleanValueOf("mqtt_obs_auto_subscribe", this.m_suffix);
+        this.initAutoSubscribe("mqtt_obs_auto_subscribe");
 
         // setup our MQTT listener if we have one...
         if (mqtt != null) {
@@ -132,7 +131,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
 
             // DEBUG
-            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
+            this.errorLogger().info("processRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
             this.mqtt().sendMessage(topic, message);
 
             // send it also raw... over a subtopic
@@ -140,7 +139,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             message = this.jsonGenerator().generateJson(endpoint);
 
             // DEBUG
-            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
+            this.errorLogger().info("processRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
             this.mqtt().sendMessage(topic, message);
 
             // re-subscribe if previously subscribed to observable resources
@@ -178,9 +177,9 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             for (int j = 0; resources != null && j < resources.size(); ++j) {
                 Map resource = (Map) resources.get(j);
                 if (this.isObservableResource(resource)) {
-                    this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registration: " + endpoint + " Resource: " + resource);
+                    this.errorLogger().info("processReRegistration(MQTT-STD) : CoAP re-registration: " + endpoint + " Resource: " + resource);
                     if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
-                        this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
+                        this.errorLogger().info("processReRegistration(MQTT-STD) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
                         this.processRegistration(data, "reg-updates");
                         this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
                     }
@@ -669,24 +668,5 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
                 ;
             }
         }
-    }
-    
-    // get the observability of a given resource
-    protected boolean isObservableResource(Map resource) {
-        String obs_str = (String) resource.get("obs");
-        return (obs_str != null && obs_str.equalsIgnoreCase("true"));
-    }
-
-    // parse the de-registration body
-    protected String[] parseDeRegistrationBody(Map body) {
-        List list = (List) body.get("de-registrations");
-        if (list != null && list.size() > 0) {
-            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
-        }
-        list = (List) body.get("registrations-expired");
-        if (list != null && list.size() > 0) {
-            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
-        }
-        return new String[0];
     }
 }

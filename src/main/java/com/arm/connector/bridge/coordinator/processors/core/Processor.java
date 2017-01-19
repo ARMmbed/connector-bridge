@@ -54,6 +54,7 @@ public class Processor extends BaseClass {
     private String m_mds_topic_root = null;
     private TypeDecoder m_type_decoder = null;
     private boolean m_unified_format_enabled = false;
+    protected boolean m_auto_subscribe_to_obs_resources = false;
     
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
@@ -82,6 +83,9 @@ public class Processor extends BaseClass {
         // initial topic root
         this.m_mds_topic_root = "";
         
+        // initialize the auto subscription to OBS resources
+        this.initAutoSubscribe(null);
+        
         // allocate our TypeDecoder
         this.m_type_decoder = new TypeDecoder(orchestrator.errorLogger(), orchestrator.preferences());
 
@@ -99,6 +103,19 @@ public class Processor extends BaseClass {
         }
         else {
             this.errorLogger().warning("Unified Bridge Format DISABLED");
+        }
+    }
+    
+    // initialize auto OBS subscriptions
+    protected void initAutoSubscribe(String res_name) {
+        // default
+        this.m_auto_subscribe_to_obs_resources = false;
+        
+        if (res_name != null && res_name.length() > 0) {
+            boolean res_value = this.orchestrator().preferences().booleanValueOf(res_name,this.m_suffix);
+            if (res_value != this.m_auto_subscribe_to_obs_resources) {
+                this.m_auto_subscribe_to_obs_resources = res_value;
+            }
         }
     }
     
@@ -184,6 +201,25 @@ public class Processor extends BaseClass {
     // returns mbed/<domain>/response/<ep_type>/<endpoint>/<uri>
     protected String createResourceResponseTopic(String ep_type, String ep_name, String uri) {
         return this.createBaseTopic(this.m_cmd_response_key) + "/" + ep_type + "/" + ep_name + uri;
+    }
+    
+    // get the observability of a given resource
+    protected boolean isObservableResource(Map resource) {
+        String obs_str = (String) resource.get("obs");
+        return (obs_str != null && obs_str.equalsIgnoreCase("true"));
+    }
+
+    // parse the de-registration body
+    protected String[] parseDeRegistrationBody(Map body) {
+        List list = (List) body.get("de-registrations");
+        if (list != null && list.size() > 0) {
+            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
+        }
+        list = (List) body.get("registrations-expired");
+        if (list != null && list.size() > 0) {
+            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
+        }
+        return new String[0];
     }
 
     // jsonParser is broken with empty strings... so we have to fill them in with spaces.. 
