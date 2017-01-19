@@ -35,7 +35,6 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.plus.Plus;
 import com.google.api.services.plus.PlusScopes;
 import com.google.cloud.pubsub.PubSub;
-import com.google.cloud.pubsub.PubSubOptions;
 import com.google.cloud.pubsub.Topic;
 import com.google.cloud.pubsub.TopicInfo;
 import java.io.ByteArrayInputStream;
@@ -283,7 +282,7 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
                 this.errorLogger().info("processNotification(Google Cloud): Publishing notification: payload: " + coap_json + " topic: " + topic);
 
                 // publish to Google Cloud...
-                // XXXX this.mqtt().sendMessage(topic, coap_json);
+                this.sendMessage(topic, coap_json);
             }
             else {
                 // no active subscription present - so note but do not send
@@ -304,11 +303,153 @@ public class GoogleCloudProcessor extends Processor implements PeerInterface, Ge
         this.asyncResponseManager().recordAsyncResponse(response, coap_verb, this, this, response_topic, null, message, ep_name, uri);
     }
     
+    // messages from Google Cloud come here and are processed...
+    public void onMessageReceive(String topic, String message) {
+        String verb = "PUT";
+
+        // DEBUG
+        this.errorLogger().info("onMessageReceive(Google Cloud): Topic: " + topic + " message: " + message);
+
+        // Endpoint Discovery....
+        if (this.isEndpointDiscovery(topic)) {
+            Map options = (Map) this.parseJson(message);
+            String json = this.orchestrator().performDeviceDiscovery(options);
+            if (json != null && json.length() > 0) {
+                this.sendMessage(topic + "/mbed_endpoints", json);
+            }
+        }
+
+        // Get/Put/Post Endpoint Resource Value...
+        else if (this.isEndpointResourceRequest(topic)) {
+            String json = null;
+
+            // parse the topic to get the endpoint and CoAP verb
+            // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
+            String ep_name = this.getCoAPEndpointName(message);
+
+            // pull the CoAP URI and Payload from the message itself... its JSON... 
+            // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+            String uri = this.getCoAPURI(message);
+
+            // pull the CoAP verb from the message itself... its JSON... (PRIMARY)
+            // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
+            verb = this.getCoAPVerb(message);
+
+            // get the CoAP value to send
+            String value = this.getCoAPValue(message);
+
+            // if there are mDC/mDS REST options... lets add them
+            // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
+            String options = this.getRESTOptions(message);
+
+            // get the endpoint type from the endpoint name
+            String ep_type = this.getEndpointTypeFromEndpointName(ep_name);
+
+            // perform the operation
+            json = this.orchestrator().processEndpointResourceOperation(verb, ep_name, uri, value, options);
+
+            // send a response back if we have one...
+            if (json != null && json.length() > 0) {
+                // Strip the request tag
+                String response_topic = this.createResourceResponseTopic(ep_type, ep_name, uri);
+
+                // SYNC: here we have to handle AsyncResponses. if mDS returns an AsyncResponse... handle it
+                if (this.isAsyncResponse(json) == true) {
+                    if (verb.equalsIgnoreCase("get") == true || verb.equalsIgnoreCase("put") == true) {
+                        // DEBUG
+                        this.errorLogger().info("onMessageReceive(Google Cloud): saving async response (" + verb + ") on topic: " + response_topic + " value: " + json);
+
+                        // its an AsyncResponse to a GET or PUT.. so record it... 
+                        this.recordAsyncResponse(json, verb, response_topic, message, ep_name, uri);
+                    }
+                    else {
+                        // we dont process AsyncResponses to POST and DELETE
+                        this.errorLogger().info("onMessageReceive(Google Cloud): AsyncResponse (" + verb + ") ignored (OK).");
+                    }
+                }
+                else {
+                    // DEBUG
+                    this.errorLogger().info("onMessageReceive(Google Cloud): sending immediate reply (" + verb + ") on topic: " + response_topic + " value: " + json);
+
+                    // not an AsyncResponse... so just emit it immediately... (GET only)
+                    this.sendMessage(response_topic, json);
+                }
+            }
+        }
+
+        // Endpoint Resource Discovery...
+        else if (this.isEndpointResourcesDiscovery(topic)) {
+            String json = this.orchestrator().performDeviceResourceDiscovery(this.removeRequestTagFromTopic(topic));
+            if (json != null && json.length() > 0) {
+                String response_topic = this.removeRequestTagFromTopic(topic);
+                this.sendMessage(response_topic, json);
+            }
+        }
+
+        // Endpoint Notification Subscriptions
+        else if (this.isEndpointNotificationSubscriptionRequest(topic)) {
+            // message format (unsubscribe): {"ep":"<endpoint id>","ept":"<endpoint type>","path":"/123/0/1234","verb":"unsubscribe"}
+            // message format (unsubscribe): {"ep":"<endpoint id>","ept":"<endpoint type>","path":"/123/0/1234","verb":"subscribe"}
+            Map parsed = (Map) this.parseJson(message);
+            String json = null;
+            String ep_name = (String) parsed.get("ep");
+            String uri = (String) parsed.get("path");
+            String ep_type = (String) parsed.get("ept");
+            verb = (String) parsed.get("verb");
+            if (parsed != null && verb.equalsIgnoreCase("unsubscribe") == true) {
+                // Unsubscribe 
+                this.errorLogger().info("onMessageReceive(Google Cloud): sending subscription request (remove subscription)");
+                json = this.orchestrator().unsubscribeFromEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed);
+
+                // remove from the subscription list
+                this.errorLogger().info("onMessageReceive(Google Cloud): removing subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
+            }
+            else if (parsed != null && verb.equalsIgnoreCase("subscribe") == true) {
+                // Subscribe
+                this.errorLogger().info("onMessageReceive(Google Cloud): sending subscription request (add subscription)");
+                json = this.orchestrator().subscribeToEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed, true);
+
+                // add to the subscription list
+                this.errorLogger().info("onMessageReceive(Google Cloud): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, ep_type, uri);
+            }
+            else if (parsed != null) {
+                // verb not recognized
+                this.errorLogger().info("onMessageReceive(Google Cloud): Unable to process subscription request: unrecognized verb: " + verb);
+            }
+            else {
+                // invalid message
+                this.errorLogger().info("onMessageReceive(Google Cloud): Unable to process subscription request: invalid message: " + message);
+            }
+        }
+    }
+    
+    // intialize a listener for the peer
+    @Override
+    public void initListener() {
+        // XXX to do
+        this.errorLogger().info("initListener(Google Cloud): not implemented");
+        
+        // register "onMessageReceive()" to handle and process requests from Google Cloud
+    }
+
+    // stop the listener for a peer
+    @Override
+    public void stopListener() {
+        // XXX to do
+        this.errorLogger().info("stopListener(Google Cloud): not implemented");
+        
+        // stop the Google Cloud listener...
+    }
+    
     // GenericSender Implementation: send a message
     @Override
     public void sendMessage(String to, String message) {
         // send a message over Google Cloud...
-        this.errorLogger().info("Sending Message to: " + to + " message: " + message);
+        this.errorLogger().info("sendMessage(Google Cloud): Sending Message to: " + to + " message: " + message);
+        
+        // send the message over Google Cloud
     }
     
     // log into the Google Cloud as a Service Account

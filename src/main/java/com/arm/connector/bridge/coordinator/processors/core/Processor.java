@@ -55,6 +55,7 @@ public class Processor extends BaseClass {
     private TypeDecoder m_type_decoder = null;
     private boolean m_unified_format_enabled = false;
     protected boolean m_auto_subscribe_to_obs_resources = false;
+    private String m_mds_request_tag = null;
     
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
@@ -86,6 +87,9 @@ public class Processor extends BaseClass {
         // initialize the auto subscription to OBS resources
         this.initAutoSubscribe(null);
         
+        // initialize the mDS request tag
+        this.initRequestTag(null);
+        
         // allocate our TypeDecoder
         this.m_type_decoder = new TypeDecoder(orchestrator.errorLogger(), orchestrator.preferences());
 
@@ -104,6 +108,24 @@ public class Processor extends BaseClass {
         else {
             this.errorLogger().warning("Unified Bridge Format DISABLED");
         }
+    }
+    
+    // initialize the mDS request tag
+    protected void initRequestTag(String res_name) {
+        this.m_mds_request_tag = "/request";
+        
+        // mDS Request TAG
+        if (res_name != null && res_name.length() > 0) {
+            this.m_mds_request_tag = this.orchestrator().preferences().valueOf(res_name, this.m_suffix);
+            if (this.m_mds_request_tag != null) {
+                this.m_mds_request_tag = "/" + this.m_mds_request_tag;
+            }
+        }
+    }
+    
+    // get the request tag
+    protected String getRequestTag() {
+        return this.m_mds_request_tag;
     }
     
     // initialize auto OBS subscriptions
@@ -162,6 +184,136 @@ public class Processor extends BaseClass {
             return ep_type;
         }
         return null;
+    }
+    
+    // not an observation or a new_registration...
+    private boolean isNotObservationOrNewRegistration(String topic) {
+        if (topic != null) {
+            return (topic.contains(this.m_observation_key) == false && topic.contains("new_registration") == false);
+        }
+        return false;
+    }
+    
+    // test to check if a topic is requesting endpoint resource discovery
+    protected boolean isEndpointResourcesDiscovery(String topic) {
+        boolean is_discovery = false;
+
+        String request_topic = this.createEndpointResourceRequest();
+        if (topic != null && topic.contains(request_topic) == true) {
+            if (this.isNotObservationOrNewRegistration(topic) == true) {
+                is_discovery = true;
+            }
+        }
+
+        // DEBUG
+        this.errorLogger().info("isEndpointResourcesDiscovery: topic: " + topic + " is: " + is_discovery);
+        return is_discovery;
+    }
+    
+    // test to check if a topic is requesting endpoint resource itself
+    protected boolean isEndpointResourceRequest(String topic) {
+        boolean is_endpoint_resource_request = false;
+        if (this.isEndpointResourcesDiscovery(topic) == true) {
+            // get the resource URI
+            String resource_uri = this.getResourceURIFromTopic(topic);
+
+            // see what we have
+            if (resource_uri != null && resource_uri.length() > 0) {
+                if (this.isNotObservationOrNewRegistration(topic) == true) {
+                    is_endpoint_resource_request = true;
+                }
+            }
+        }
+
+        // DEBUG
+        this.errorLogger().info("isEndpointResourceRequest: topic: " + topic + " is: " + is_endpoint_resource_request);
+        return is_endpoint_resource_request;
+    }
+    
+    // test to check if a topic is requesting endpoint discovery
+    protected boolean isEndpointDiscovery(String topic) {
+        boolean is_discovery = false;
+
+        String request_topic = this.createEndpointDiscoveryRequest();
+        if (topic != null && topic.equalsIgnoreCase(request_topic) == true) {
+            is_discovery = true;
+        }
+
+        // DEBUG
+        this.errorLogger().info("isEndpointDiscovery: topic: " + topic + " is: " + is_discovery);
+        return is_discovery;
+    }
+
+    // test to check if a topic is requesting endpoint resource subscription actions
+    protected boolean isEndpointNotificationSubscriptionRequest(String topic) {
+        boolean is_endpoint_notification_subscription = false;
+
+        // simply check for "request/subscriptions"
+        if (topic.contains("request/subscriptions")) {
+            is_endpoint_notification_subscription = true;
+        }
+
+        // DEBUG
+        this.errorLogger().info("isEndpointNotificationSubscription: topic: " + topic + " is: " + is_endpoint_notification_subscription);
+        return is_endpoint_notification_subscription;
+    }
+    
+    // get the resource URI from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    private String getResourceURIFromTopic(String topic, String ep_type, String ep_name) {
+        String modified_topic = this.removeRequestTagFromTopic(topic);  // strips <topic_root>/request/endpoints/ POSITION SENSITIVE
+        return modified_topic.replace(ep_type + "/" + ep_name, "");      // strips <ep_type>/<endpoint name> POSITION SENSITIVE
+    }
+
+    // strip off the request TAG
+    // mbed/request/<ep_type>/<endpoint>/<URI> --> <ep_type>/<endpoint>/<URI> POSITION SENSITIVE
+    protected String removeRequestTagFromTopic(String topic) {
+        if (topic != null) {
+            String stripped = topic.replace(this.getTopicRoot() + this.getDomain() + this.getRequestTag() + "/", "");
+            this.errorLogger().info("removeRequestTagFromTopic: topic: " + topic + " stripped: " + stripped);
+            return stripped;
+        }
+        return null;
+    }
+
+    // response is an AsyncResponse?
+    protected boolean isAsyncResponse(String response) {
+        return (response.contains("\"async-response-id\":") == true);
+    }
+    
+    // get the endpoint name from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    private String getEndpointNameFromTopic(String topic) {
+        String modified_topic = this.removeRequestTagFromTopic(topic); // strips <topic_root>/request/endpoints/ 
+        String[] items = modified_topic.split("/");
+        if (items.length >= 2 && items[1].trim().length() > 0) { // POSITION SENSITIVE
+            return items[1].trim();                              // POSITION SENSITIVE
+        }
+        return null;
+    }
+    
+    // get the endpoint type from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    private String getEndpointTypeFromTopic(String topic) {
+        String modified_topic = this.removeRequestTagFromTopic(topic); // strips <topic_root>/request/endpoints/ 
+        String[] items = modified_topic.split("/");
+        if (items.length >= 1 && items[0].trim().length() > 0) { // POSITION SENSITIVE
+            return items[0].trim();                              // POSITION SENSITIVE
+        }
+        return null;
+    }
+
+    // get the resource URI from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI>
+    protected String getResourceURIFromTopic(String topic) {
+        // get the endpoint type 
+        String ep_type = this.getEndpointTypeFromTopic(topic);
+
+        // get the endpoint name
+        String ep_name = this.getEndpointNameFromTopic(topic);
+
+        // get the URI...
+        return this.getResourceURIFromTopic(topic, ep_type, ep_name);
     }
     
     // returns  /mbed/<domain>/<qualifier
