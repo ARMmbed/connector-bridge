@@ -22,6 +22,7 @@
  */
 package com.arm.connector.bridge.transport;
 
+import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
@@ -56,7 +57,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class MQTTTransport extends Transport {
+public class MQTTTransport extends Transport implements GenericSender {
 
     private static volatile MQTTTransport m_self = null;
     private BlockingConnection m_connection = null;

@@ -22,23 +22,18 @@
  */
 package com.arm.connector.bridge.coordinator.processors.arm;
 
-import com.arm.connector.bridge.coordinator.processors.core.AsyncResponseManager;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
-import com.arm.connector.bridge.coordinator.processors.core.SubscriptionList;
-import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
-import com.arm.connector.bridge.core.TypeDecoder;
-import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 
@@ -48,29 +43,23 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class GenericMQTTProcessor extends Processor implements Transport.ReceiveListener, PeerInterface {
-
-    protected String m_topic_root = null;
-    protected SubscriptionList m_subscriptions = null;
     protected boolean m_auto_subscribe_to_obs_resources = false;
     protected TransportReceiveThread m_mqtt_thread = null;
     protected String m_mqtt_host = null;
     protected int m_mqtt_port = 0;
     private String m_mds_mqtt_request_tag = null;
-    private String m_mds_topic_root = null;
-    protected String m_suffix = null;
-    private String m_device_data_key = null;
     protected String m_client_id = null;
     private HashMap<String, MQTTTransport> m_mqtt = null;
-    private AsyncResponseManager m_async_response_manager = null;
     private HttpTransport m_http = null;
     protected boolean m_use_clean_session = false;
-    private TypeDecoder m_type_decoder = null;
     private HashMap<String, String> m_mqtt_endpoint_type_list = null;
-    private boolean m_unified_format_enabled = false;
+    private String m_device_data_key = null;
 
-    private String m_observation_key = "observation";
-    private String m_cmd_response_key = "cmd-response";
-
+    // Factory method for initializing the Sample 3rd Party peer
+    public static GenericMQTTProcessor createPeerProcessor(Orchestrator manager, HttpTransport http) {
+        return new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
+    }
+    
     // constructor (singleton)
     public GenericMQTTProcessor(Orchestrator orchestrator, MQTTTransport mqtt, HttpTransport http) {
         this(orchestrator, mqtt, null, http);
@@ -80,36 +69,17 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     public GenericMQTTProcessor(Orchestrator orchestrator, MQTTTransport mqtt, String suffix, HttpTransport http) {
         super(orchestrator, suffix);
 
-        // allocate our TypeDecoder
-        this.m_type_decoder = new TypeDecoder(orchestrator.errorLogger(), orchestrator.preferences());
-
-        // allocate our AsyncResponse orchestrator
-        this.m_async_response_manager = new AsyncResponseManager(orchestrator);
-
-        // set our domain
-        this.m_mds_domain = orchestrator.getDomain();
-
         // HTTP support if we need it
         this.m_http = http;
 
         // MQTT transport list
         this.m_mqtt = new HashMap<>();
+        
+        // initialize the topic root (MQTT)
+        this.initTopicRoot("mqtt_mds_topic_root");
 
         // initialize the endpoint type map
         this.m_mqtt_endpoint_type_list = new HashMap<>();
-
-        // our suffix
-        this.m_suffix = suffix;
-
-        // unified format enabled or disabled
-        this.m_unified_format_enabled = orchestrator.preferences().booleanValueOf("unified_format_enabled", this.m_suffix);
-        if (this.m_unified_format_enabled == true) {
-            this.errorLogger().warning("Unified Bridge Format ENABLED");
-            this.m_observation_key = "notify";
-        }
-        else {
-            this.errorLogger().warning("Unified Bridge Format DISABLED");
-        }
 
         // Get the device data key if one exists
         this.m_device_data_key = orchestrator.preferences().valueOf("mqtt_device_data_key", this.m_suffix);
@@ -130,23 +100,11 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             this.m_mds_mqtt_request_tag = "/" + this.m_mds_mqtt_request_tag;
         }
 
-        // MDS topic root
-        this.m_mds_topic_root = orchestrator.preferences().valueOf("mqtt_mds_topic_root", this.m_suffix);
-        if (this.m_mds_topic_root == null || this.m_mds_topic_root.length() == 0) {
-            this.m_mds_topic_root = "";
-        }
-
         // assign our MQTT transport if we have one...
         if (mqtt != null) {
             this.m_client_id = mqtt.getClientID();
             this.addMQTTTransport(this.m_client_id, mqtt);
         }
-
-        // initialize subscriptions
-        this.m_subscriptions = new SubscriptionList(orchestrator.errorLogger(), orchestrator.preferences());
-
-        // initialize the topic root
-        this.initTopicRoot("mqtt_mds_topic_root");
 
         // auto-subscribe behavior
         this.m_auto_subscribe_to_obs_resources = orchestrator.preferences().booleanValueOf("mqtt_obs_auto_subscribe", this.m_suffix);
@@ -159,164 +117,89 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         }
     }
 
-    // Factory method for initializing the Sample 3rd Party peer
-    public static GenericMQTTProcessor createPeerProcessor(Orchestrator manager, HttpTransport http) {
-        return new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
-    }
-
-    // get HTTP if needed
-    protected HttpTransport http() {
-        return this.m_http;
-    }
-
-    // get TypeDecoder if needed
-    protected TypeDecoder fundamentalTypeDecoder() {
-        return this.m_type_decoder;
-    }
-
-    // unified format enabled
-    protected boolean unifiedFormatEnabled() {
-        return this.m_unified_format_enabled;
-    }
-
-    // attempt a json parse... 
-    protected Map tryJSONParse(String payload) {
-        HashMap<String, Object> result = new HashMap<>();
-        try {
-            result = (HashMap<String, Object>) this.orchestrator().getJSONParser().parseJson(payload);
-            return result;
-        }
-        catch (Exception ex) {
-            // silent
-        }
-        return result;
-    }
-
-    // get the AsyncResponseManager
-    protected AsyncResponseManager asyncResponseManager() {
-        return this.m_async_response_manager;
-    }
-
-    // record an async response to process later
+    // process a received new registration
     @Override
-    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
-        this.asyncResponseManager().recordAsyncResponse(response, uri, ep, processor);
-    }
+    protected void processRegistration(Map data, String key) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
 
-    // get our reply topic (if we specify URI, the build out the full resource response topic)
-    private String getReplyTopic(String ep_name, String ep_type, String uri, String def) {
-        return this.createResourceResponseTopic(ep_type, ep_name, uri);
-    }
+            // ensure we have the endpoint type
+            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
 
-    // get our defaulted reply topic (defaulted)
-    public String getReplyTopic(String ep_name, String ep_type, String def) {
-        return def;
-    }
+            // mimic the message that we get from direct discovery...
+            String message = "[{\"name\":\"" + endpoint.get("ep") + "\",\"type\":\"" + endpoint.get("ept") + "\",\"status\":\"ACTIVE\"}]";
+            String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
 
-    /**
-     * add a MQTT transport
-     *
-     * @param clientID
-     * @param mqtt
-     */
-    protected void addMQTTTransport(String clientID, MQTTTransport mqtt) {
-        this.m_mqtt.put(clientID, mqtt);
-    }
+            // DEBUG
+            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
+            this.mqtt().sendMessage(topic, message);
 
-    /**
-     * initialize the MQTT transport list
-     */
-    protected void initMQTTTransportList() {
-        this.closeMQTTTransportList();
-        this.m_mqtt.clear();
-    }
+            // send it also raw... over a subtopic
+            topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
+            message = this.jsonGenerator().generateJson(endpoint);
 
-    // PROTECTED: get the MQTT transport for the default clientID
-    protected MQTTTransport mqtt() {
-        return this.mqtt(this.m_client_id);
-    }
+            // DEBUG
+            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
+            this.mqtt().sendMessage(topic, message);
 
-    // PROTECTED: get the MQTT transport for a given clientID
-    protected MQTTTransport mqtt(String clientID) {
-        return this.m_mqtt.get(clientID);
-    }
+            // re-subscribe if previously subscribed to observable resources
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // re-subscribe to this resource
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 
-    // PROTECTED: remove MQTT Transport for a given clientID
-    protected void remove(String clientID) {
-        this.m_mqtt.remove(clientID);
-    }
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 
-    // close the tranports in the list
-    @SuppressWarnings("empty-statement")
-    private void closeMQTTTransportList() {
-        for (String key : this.m_mqtt.keySet()) {
-            try {
-                MQTTTransport mqtt = this.m_mqtt.get(key);
-                if (mqtt != null) {
-                    if (mqtt.isConnected()) {
-                        mqtt.disconnect(true);
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+            }
+        }
+    }
+    
+    // process a reregistration
+    @Override
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map endpoint = (Map) notifications.get(i);
+            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+                if (this.isObservableResource(resource)) {
+                    this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registration: " + endpoint + " Resource: " + resource);
+                    if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
+                        this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
+                        this.processRegistration(data, "reg-updates");
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
                     }
                 }
             }
-            catch (Exception ex) {
-                // silent
-                ;
-            }
         }
     }
 
+    // process a deregistration
     @Override
-    public String createAuthenticationHash() {
-        return this.mqtt().createAuthenticationHash();
-    }
-
-    // initialize the topic root...
-    protected void initTopicRoot(String pref) {
-        this.m_topic_root = this.preferences().valueOf(pref, this.m_suffix);
-        if (this.m_topic_root == null || this.m_topic_root.length() == 0) {
-            this.m_topic_root = "";
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistrations = this.parseDeRegistrationBody(parsed);
+        this.orchestrator().processDeregistrations(deregistrations);
+        for (int i = 0; i < deregistrations.length; ++i) {
+            this.m_mqtt_endpoint_type_list.remove(deregistrations[i]);
         }
+        return deregistrations;
     }
-
-    protected String getTopicRoot() {
-        if (this.m_topic_root == null) {
-            return "";
-        }
-        return this.m_topic_root;
-    }
-
-    // OVERRIDE: Connection stock MQTT...
-    protected boolean connectMQTT() {
-        return this.mqtt().connect(this.m_mqtt_host, this.m_mqtt_port, null, true);
-    }
-
-    // OVERRIDE: Topics for stock MQTT...
-    protected void subscribeToMQTTTopics() {
-        String request_topic_str = this.getTopicRoot() + this.m_mds_mqtt_request_tag + this.getDomain() + "/#";
-        this.errorLogger().info("subscribeToMQTTTopics(MQTT-STD): listening on REQUEST topic: " + request_topic_str);
-        Topic request_topic = new Topic(request_topic_str, QoS.AT_LEAST_ONCE);
-        Topic[] topic_list = {request_topic};
-        this.mqtt().subscribe(topic_list);
-    }
-
-    @Override
-    public void initListener() {
-        // connect and begin listening for requests (wildcard based on request TAG and domain)
-        if (this.connectMQTT()) {
-            this.subscribeToMQTTTopics();
-            if (this.m_mqtt_thread != null) {
-                this.m_mqtt_thread.start();
-            }
-        }
-    }
-
-    @Override
-    public void stopListener() {
-        if (this.mqtt() != null) {
-            this.mqtt().disconnect();
-        }
-    }
-
+    
     // process a mDS notification for generic MQTT peers
     @Override
     public void processNotification(Map data) {
@@ -364,7 +247,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             String uri = (String) notification.get("path");
 
             // make sure we have an active subscription for this notification
-            if (this.m_subscriptions.containsSubscription(this.m_mds_domain, ep_name, ep_type, uri) == true) {
+            if (this.subscriptionsList().containsSubscription(this.m_mds_domain, ep_name, ep_type, uri) == true) {
                 // send it as JSON over the observation sub topic
                 String topic = this.createObservationTopic(ep_type, ep_name, uri);
 
@@ -387,13 +270,38 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             }
         }
     }
-
-    // get the endpoint type from the endpoint name
-    protected String getEndpointTypeFromEndpointName(String ep_name) {
-        String ep_type = this.m_subscriptions.endpointTypeFromEndpointName(ep_name);
-        if (ep_type != null) {
-            return ep_type;
+    
+    // create our MQTT-based authentication hash
+    @Override
+    public String createAuthenticationHash() {
+        return this.mqtt().createAuthenticationHash();
+    }
+    
+    // start our MQTT listener
+    @Override
+    public void initListener() {
+        // connect and begin listening for requests (wildcard based on request TAG and domain)
+        if (this.connectMQTT()) {
+            this.subscribeToMQTTTopics();
+            if (this.m_mqtt_thread != null) {
+                this.m_mqtt_thread.start();
+            }
         }
+    }
+
+    // stop our MQTT listener
+    @Override
+    public void stopListener() {
+        if (this.mqtt() != null) {
+            this.mqtt().disconnect();
+        }
+    }
+    
+    // get the endpoint type from the endpoint name
+    @Override
+    protected String getEndpointTypeFromEndpointName(String ep_name) {
+        String t = super.getEndpointTypeFromEndpointName(ep_name);
+        if (t != null) return t;
         return this.m_mqtt_endpoint_type_list.get(ep_name);
     }
 
@@ -401,207 +309,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     protected void setEndpointTypeFromEndpointName(String ep_name, String ep_type) {
         this.m_mqtt_endpoint_type_list.put(ep_name, ep_type);
     }
-
-    // strip array values... not needed
-    protected String stripArrayChars(String json) {
-        return json.replace("[", "").replace("]", "");
-    }
-
-    // process a re-registration
-    @Override
-    public void processReRegistration(Map data) {
-        List notifications = (List) data.get("reg-updates");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            Map endpoint = (Map) notifications.get(i);
-            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-                if (this.isObservableResource(resource)) {
-                    this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registration: " + endpoint + " Resource: " + resource);
-                    if (this.m_subscriptions.containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
-                        this.errorLogger().info("MQTTProcessor(MQTT-STD) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
-                        this.processRegistration(data, "reg-updates");
-                        this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * process mDS deregistrations messages
-     *
-     * @param parsed
-     * @return
-     */
-    @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistrations = this.parseDeRegistrationBody(parsed);
-        this.orchestrator().processDeregistrations(deregistrations);
-        for (int i = 0; i < deregistrations.length; ++i) {
-            this.m_mqtt_endpoint_type_list.remove(deregistrations[i]);
-        }
-        return deregistrations;
-    }
-
-    // process mds registrations-expired messages 
-    @Override
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
-    }
-
-    // get the observability of a given resource
-    protected boolean isObservableResource(Map resource) {
-        String obs_str = (String) resource.get("obs");
-        return (obs_str != null && obs_str.equalsIgnoreCase("true"));
-    }
-
-    // process a received new registration
-    @Override
-    public void processNewRegistration(Map data) {
-        this.processRegistration(data, "registrations");
-    }
-
-    // process a received new registration
-    protected void processRegistration(Map data, String key) {
-        List endpoints = (List) data.get(key);
-        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
-            Map endpoint = (Map) endpoints.get(i);
-
-            // ensure we have the endpoint type
-            this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
-
-            // mimic the message that we get from direct discovery...
-            String message = "[{\"name\":\"" + endpoint.get("ep") + "\",\"type\":\"" + endpoint.get("ept") + "\",\"status\":\"ACTIVE\"}]";
-            String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
-
-            // DEBUG
-            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
-            this.mqtt().sendMessage(topic, message);
-
-            // send it also raw... over a subtopic
-            topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
-            message = this.jsonGenerator().generateJson(endpoint);
-
-            // DEBUG
-            this.errorLogger().info("processNewRegistration(MQTT-STD) : Publishing new registration topic: " + topic + " message:" + message);
-            this.mqtt().sendMessage(topic, message);
-
-            // re-subscribe if previously subscribed to observable resources
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-                if (this.m_subscriptions.containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // re-subscribe to this resource
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
-                    // auto-subscribe to observable resources... if enabled.
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-            }
-        }
-    }
-
-    // parse the de-registration body
-    protected String[] parseDeRegistrationBody(Map body) {
-        List list = (List) body.get("de-registrations");
-        if (list != null && list.size() > 0) {
-            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
-        }
-        list = (List) body.get("registrations-expired");
-        if (list != null && list.size() > 0) {
-            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
-        }
-        return new String[0];
-    }
-
-    // get the resource value from the message
-    private String getCoAPValue(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("new_value");
-        if (val == null) {
-            val = (String) parsed.get("payload");
-            if (val != null) {
-                // see if the value is Base64 encoded
-                String last = val.substring(val.length() - 1);
-                if (val.contains("==") || last.contains("=")) {
-                    // value appears to be Base64 encoded... so decode... 
-                    try {
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Value: " + val + " flagged as Base64 encoded... decoding...");
-
-                        // Decode
-                        val = new String(Base64.decodeBase64(val));
-
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Base64 Decoded Value: " + val);
-                    }
-                    catch (Exception ex) {
-                        // just use the value itself...
-                        this.errorLogger().info("getCoAPValue: Exception in base64 decode", ex);
-                    }
-                }
-            }
-        }
-        return val;
-    }
-
-    // pull the CoAP verb from the message
-    private String getCoAPVerb(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("coap_verb");
-        if (val == null) {
-            val = (String) parsed.get("method");
-        }
-        return val;
-    }
-
-    // pull the EndpointName from the message
-    private String getCoAPEndpointName(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("ep");
-        if (val == null) {
-            val = (String) parsed.get("deviceId");
-        }
-        return val;
-    }
-
-    // get the resource URI from the message
-    private String getCoAPURI(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPURI: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("path");
-        if (val == null) {
-            val = (String) parsed.get("resourceId");
-        }
-        return val;
-    }
-
-    // pull any mDC/mDS REST options from the message (optional)
-    private String getRESTOptions(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        return (String) parsed.get("options");
-    }
-
+    
     // MQTT: messages from MQTT come here and are processed...
     @Override
     public void onMessageReceive(String topic, String message) {
@@ -703,7 +411,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
 
                 // remove from the subscription list
                 this.errorLogger().info("processMessage(MQTT-STD): removing subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
-                this.m_subscriptions.removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
+                this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
             }
             else if (parsed != null && verb.equalsIgnoreCase("subscribe") == true) {
                 // Subscribe
@@ -712,7 +420,7 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
 
                 // add to the subscription list
                 this.errorLogger().info("processMessage(MQTT-STD): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
-                this.m_subscriptions.addSubscription(this.m_mds_domain, ep_name, ep_type, uri);
+                this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, ep_type, uri);
             }
             else if (parsed != null) {
                 // verb not recognized
@@ -773,45 +481,6 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
             return (topic.contains(this.m_observation_key) == false && topic.contains("new_registration") == false);
         }
         return false;
-    }
-
-    // returns  /mbed/<domain>/<qualifier
-    private String createBaseTopic(String qualifier) {
-        return this.getTopicRoot() + this.getDomain() + "/" + qualifier;
-    }
-
-    // returns /mbed/<domain>/new_registration/<ep_type>/<endpoint>
-    private String createNewRegistrationTopic(String ep_type, String ep_name) {
-        return this.createBaseTopic("new_registration") + "/" + ep_type + "/" + ep_name;
-    }
-
-    // returns /mbed/<domain>/discover
-    private String createEndpointDiscoveryRequest() {
-        return this.createBaseTopic("discover");
-    }
-
-    // returns /mbed/<domain>/request/<ep_type>
-    private String createEndpointResourceRequest() {
-        return this.createEndpointResourceRequest(null);
-    }
-
-    // returns /mbed/<domain>/request/<ep_type>
-    private String createEndpointResourceRequest(String ep_type) {
-        String suffix = "";
-        if (ep_type != null && ep_type.length() > 0) {
-            suffix = "/" + ep_type;
-        }
-        return this.createBaseTopic("request") + suffix;
-    }
-
-    // returns mbed/<domain>/observation/<ep_type>/<endpoint>/<uri>
-    private String createObservationTopic(String ep_type, String ep_name, String uri) {
-        return this.createBaseTopic(this.m_observation_key) + "/" + ep_type + "/" + ep_name + uri;
-    }
-
-    // returns mbed/<domain>/response/<ep_type>/<endpoint>/<uri>
-    private String createResourceResponseTopic(String ep_type, String ep_name, String uri) {
-        return this.createBaseTopic(this.m_cmd_response_key) + "/" + ep_type + "/" + ep_name + uri;
     }
 
     // strip off the request TAG
@@ -894,209 +563,14 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
         return (response.contains("\"async-response-id\":") == true);
     }
 
-    // record AsyncResponses
-    protected void recordAsyncResponse(String response, String coap_verb, MQTTTransport mqtt, GenericMQTTProcessor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
-        this.asyncResponseManager().recordAsyncResponse(response, coap_verb, mqtt, proc, response_topic, reply_topic, message, ep_name, uri);
+    // record an async response to process later (override for MQTT-based peers)
+    protected void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
+        this.asyncResponseManager().recordAsyncResponse(response, coap_verb, sender, proc, response_topic, reply_topic, message, ep_name, uri);
     }
 
-    // record AsyncResponses
-    private void recordAsyncResponse(String response, String coap_verb, MQTTTransport mqtt, GenericMQTTProcessor proc, String response_topic, String message, String ep_name, String uri) {
-        this.asyncResponseManager().recordAsyncResponse(response, coap_verb, mqtt, proc, response_topic, this.getReplyTopic(ep_name, this.getEndpointTypeFromEndpointName(ep_name), uri, response_topic), message, ep_name, uri);
-    }
-
-    // process AsyncResponses
-    @Override
-    public void processAsyncResponses(Map data) {
-        List responses = (List) data.get("async-responses");
-        for (int i = 0; responses != null && i < responses.size(); ++i) {
-            this.asyncResponseManager().processAsyncResponse((Map) responses.get(i));
-        }
-    }
-
-    // split AsyncID
-    private String[] splitAsyncID(String id) {
-        String[] parts = null;
-
-        if (id != null && id.length() > 0) {
-            // copy the string
-            String tmp = id;
-
-            // loop through and remove key delimiters
-            tmp = tmp.replace('#', ' ');
-            tmp = tmp.replace('@', ' ');
-            tmp = tmp.replace('/', ' ');
-
-            // split
-            parts = tmp.split(" ");
-        }
-
-        // return the parsed parts
-        return parts;
-    }
-
-    // extract the URI from the async-id
-    // format: 1408956550#cc69e7c5-c24f-43cf-8365-8d23bb01c707@decd06cc-2a32-4e5e-80d0-7a7c65b90e6e/303/0/5700
-    protected String getURIFromAsyncID(String id) {
-        String uri = null;
-
-        // split
-        String[] parts = this.splitAsyncID(id);
-
-        // re-assemble the URI
-        uri = "/";
-        for (int i = 3; i < parts.length; ++i) {
-            uri += parts[i];
-            if (i < (parts.length - 1)) {
-                uri += "/";
-            }
-        }
-
-        // DEBUG
-        this.errorLogger().info("getURIFromAsyncID: URI: " + uri);
-
-        // return the URI
-        return uri;
-    }
-
-    // extract the endpoint name from the async-id
-    // format: 1408956550#cc69e7c5-c24f-43cf-8365-8d23bb01c707@decd06cc-2a32-4e5e-80d0-7a7c65b90e6e/303/0/5700
-    protected String getEndpointNameFromAsyncID(String id) {
-        // split
-        String[] parts = this.splitAsyncID(id);
-
-        // DEBUG
-        this.errorLogger().info("getEndpointNameFromAsyncID: endpoint: " + parts[1]);
-
-        // return the endpoint name
-        return parts[1];
-    }
-
-    // create the observation
-    private String createObservation(String verb, String ep_name, String uri, String value) {
-        Map notification = new HashMap<>();
-
-        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
-        notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue(value));
-        notification.put("path", uri);
-        notification.put("ep", ep_name);
-
-        // add a new field to denote its a GET
-        notification.put("coap_verb", verb);
-
-        // Unified Format?
-        if (this.unifiedFormatEnabled() == true) {
-            notification.put("resourceId", uri);
-            notification.put("deviceId", ep_name);
-            notification.put("method", verb);
-        }
-
-        // we will send the raw CoAP JSON... AWSIoT can parse that... 
-        String coap_raw_json = this.jsonGenerator().generateJson(notification);
-
-        // strip off []...
-        String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-
-        // encapsulate into a coap/device packet...
-        String coap_json = coap_json_stripped;
-
-        // DEBUG
-        this.errorLogger().info("MQTT-STD: CoAP notification(" + verb + " REPLY): " + coap_json);
-
-        // return the generic MQTT observation JSON...
-        return coap_json;
-    }
-
-    // default formatter for AsyncResponse replies
-    public String formatAsyncResponseAsReply(Map async_response, String verb) {
-        // DEBUG
-        this.errorLogger().info("MQTT-STD(" + verb + ") AsyncResponse: " + async_response);
-
-        // Handle AsyncReplies that are CoAP GETs
-        if (verb != null && verb.equalsIgnoreCase("GET") == true) {
-            try {
-                // check to see if we have a payload or not...
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("MQTT-STD: Created(" + verb + ") GET observation: " + message + " reply topic: " + async_response.get("reply_topic"));
-
-                        // return the message
-                        return message;
-                    }
-                }
-                else {
-                    // GET should always have a payload
-                    this.errorLogger().warning("MQTT-STD (" + verb + "): GET Observation has NULL payload... Ignoring...");
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("MQTT-STD(GET): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
-        }
-
-        // Handle AsyncReplies that are CoAP PUTs
-        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
-            try {
-                // check to see if we have a payload or not... 
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("MQTT-STD: Created(" + verb + ") PUT Observation: " + message);
-
-                        // return the message
-                        return message;
-                    }
-                }
-                else {
-                    // no payload... so we simply return the async-id
-                    String message = (String) async_response.get("async-id");
-
-                    // DEBUG
-                    this.errorLogger().info("MQTT-STD: Created(" + verb + ") PUT Observation: " + message);
-
-                    // return message
-                    return message;
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse PUT reply... 
-                this.errorLogger().warning("MQTT-STD(PUT): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
-        }
-
-        // return null message
-        return null;
+    // record an async response to process later (override for MQTT-based peers)
+    private void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String message, String ep_name, String uri) {
+        this.asyncResponseManager().recordAsyncResponse(response, coap_verb, sender, proc, response_topic, this.getReplyTopic(ep_name, this.getEndpointTypeFromEndpointName(ep_name), uri, response_topic), message, ep_name, uri);
     }
 
     // process new device registration
@@ -1121,5 +595,98 @@ public class GenericMQTTProcessor extends Processor implements Transport.Receive
     protected Boolean expireDeviceRegistration(String device) {
         // not implemented
         return false;
+    }
+
+    // OVERRIDE: Connection stock MQTT...
+    protected boolean connectMQTT() {
+        return this.mqtt().connect(this.m_mqtt_host, this.m_mqtt_port, null, true);
+    }
+
+    // OVERRIDE: Topics for stock MQTT...
+    protected void subscribeToMQTTTopics() {
+        String request_topic_str = this.getTopicRoot() + this.m_mds_mqtt_request_tag + this.getDomain() + "/#";
+        this.errorLogger().info("subscribeToMQTTTopics(MQTT-STD): listening on REQUEST topic: " + request_topic_str);
+        Topic request_topic = new Topic(request_topic_str, QoS.AT_LEAST_ONCE);
+        Topic[] topic_list = {request_topic};
+        this.mqtt().subscribe(topic_list);
+    }
+
+    // get HTTP if needed
+    protected HttpTransport http() {
+        return this.m_http;
+    }
+
+    // get our reply topic (if we specify URI, the build out the full resource response topic)
+    private String getReplyTopic(String ep_name, String ep_type, String uri, String def) {
+        return this.createResourceResponseTopic(ep_type, ep_name, uri);
+    }
+
+    // get our defaulted reply topic (defaulted)
+    public String getReplyTopic(String ep_name, String ep_type, String def) {
+        return def;
+    }
+
+    // add a MQTT transport instance
+    protected void addMQTTTransport(String clientID, MQTTTransport mqtt) {
+        this.m_mqtt.put(clientID, mqtt);
+    }
+
+    // initialize the MQTT transport instance list
+    protected void initMQTTTransportList() {
+        this.closeMQTTTransportList();
+        this.m_mqtt.clear();
+    }
+
+    // PROTECTED: get the MQTT transport for the default clientID
+    protected MQTTTransport mqtt() {
+        return this.mqtt(this.m_client_id);
+    }
+
+    // PROTECTED: get the MQTT transport for a given clientID
+    protected MQTTTransport mqtt(String clientID) {
+        return this.m_mqtt.get(clientID);
+    }
+
+    // PROTECTED: remove MQTT Transport for a given clientID
+    protected void remove(String clientID) {
+        this.m_mqtt.remove(clientID);
+    }
+
+    // close the tranports in the list
+    @SuppressWarnings("empty-statement")
+    private void closeMQTTTransportList() {
+        for (String key : this.m_mqtt.keySet()) {
+            try {
+                MQTTTransport mqtt = this.m_mqtt.get(key);
+                if (mqtt != null) {
+                    if (mqtt.isConnected()) {
+                        mqtt.disconnect(true);
+                    }
+                }
+            }
+            catch (Exception ex) {
+                // silent
+                ;
+            }
+        }
+    }
+    
+    // get the observability of a given resource
+    protected boolean isObservableResource(Map resource) {
+        String obs_str = (String) resource.get("obs");
+        return (obs_str != null && obs_str.equalsIgnoreCase("true"));
+    }
+
+    // parse the de-registration body
+    protected String[] parseDeRegistrationBody(Map body) {
+        List list = (List) body.get("de-registrations");
+        if (list != null && list.size() > 0) {
+            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
+        }
+        list = (List) body.get("registrations-expired");
+        if (list != null && list.size() > 0) {
+            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
+        }
+        return new String[0];
     }
 }

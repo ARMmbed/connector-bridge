@@ -38,9 +38,7 @@ import org.fusesource.mqtt.client.QoS;
  * @author Doug Anson
  */
 public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements PeerInterface {
-
     private String m_mqtt_ip_address = null;
-    private int m_mqtt_port = 0;
     private String m_starterkit_observe_notification_topic = null;
     private String m_starterkit_device_type = null;
     private String m_starterkit_device_data_key = null;
@@ -79,6 +77,204 @@ public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements Pee
 
         // DEBUG
         //this.errorLogger().info("StarterKit Credentials: Username: " + this.m_mqtt.getUsername() + " PW: " + this.m_mqtt.getPassword());
+    }
+    
+    // OVERRIDE: process a received new registration for StarterKit
+    protected void processRegistration(Map data, String key, boolean new_starterkit_connection) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+
+                // re-subscribe
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // if we arrived here from a re-registration handler, we may need to re-generate the starterkit conneciton...its likely been deleted.
+                    if (new_starterkit_connection == true) {
+                        // we arrived from a re-registration and the starterkit connection has been deleted
+                        if (this.addNewMQTTConnection((String) endpoint.get("ep")) == true) {
+                            // we added a new starterkit connection... succeeded!  lets announce and re-subscribe to the rsource
+                            this.errorLogger().info("processRegistration: re-establishing QuickStart connection... SUCCESS. Re-subscribing...");
+
+                            // re-subscribe to this resource
+                            this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                            // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                            this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                            this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        }
+                        else {
+                            // we were not able to recreate the starterkit connection... so just bail... we'll try again... 
+                            this.errorLogger().info("processRegistration: re-establishing QuickStart connection... failed!");
+                            this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        }
+                    }
+                    else {
+                        // we do not need to re-create the starterkit connection... it already exists... so just handle the subscription check..
+                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it... 
+                        this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    }
+                }
+
+                // auto-subscribe
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // create a specific StarterKit MQTT connection with a clientID having the endpoint name as its device_id
+                    if (this.addNewMQTTConnection((String) endpoint.get("ep")) == true) {
+                        // auto-subscribe to observable resources... if enabled.
+                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                        this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    }
+                }
+            }
+        }
+    }
+
+    // OVERRIDE: process a re-registration in StarterKit
+    @Override
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map entry = (Map) notifications.get(i);
+            this.errorLogger().info("StarterKit: CoAP re-registration: " + entry);
+            boolean existing_connection = this.hasMQTTConnection((String) entry.get("ep"));
+            if (existing_connection == false) {
+                this.removeMQTTConnection((String) entry.get("ep"));
+                this.processRegistration(data, "reg-updates", true);
+            }
+        }
+    }
+
+    // OVERRIDE: handle de-registrations for StarterKit
+    @Override
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistration = super.processDeregistrations(parsed);
+        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("StarterKit : CoAP de-registration: " + deregistration[i]);
+
+            // Simply remove the StarterKit MQTT Connection... 
+            this.removeMQTTConnection(deregistration[i]);
+        }
+        return deregistration;
+    }
+    
+    // OVERRIDE: process notification for StarterKit
+    @Override
+    public void processNotification(Map data) {
+        // DEBUG
+        //this.errorLogger().info("processsNotification(StarterKit)...");
+
+        // get the list of parsed notifications
+        List notifications = (List) data.get("notifications");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            // we have to process the payload... this may be dependent on being a string core type... 
+            Map notification = (Map) notifications.get(i);
+
+            // decode the Payload...
+            String b64_coap_payload = (String) notification.get("payload");
+            String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
+
+            // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
+            Map json_parsed = this.tryJSONParse(decoded_coap_payload);
+            if (json_parsed != null) {
+                // add in a JSON object payload value directly... 
+                notification.put("value", json_parsed);
+            }
+            else {
+                // add in a decoded payload value as a string type...
+                notification.put("value", decoded_coap_payload);
+            }
+
+            // StarterKit
+            notification.put("myName", (String) notification.get("ep"));
+
+            // we will send the raw CoAP JSON... StarterKit can parse that... 
+            String coap_raw_json = this.jsonGenerator().generateJson(notification);
+
+            // strip off []...
+            String coap_json_stripped = this.stripArrayChars(coap_raw_json);
+
+            // encapsulate into a coap/device packet...
+            String starterkit_coap_json = coap_json_stripped;
+            if (this.m_starterkit_device_data_key != null && this.m_starterkit_device_data_key.length() > 0) {
+                starterkit_coap_json = "{ \"" + this.m_starterkit_device_data_key + "\":" + coap_json_stripped + "}";
+            }
+
+            // DEBUG
+            this.errorLogger().info("StarterKit: CoAP notification: " + starterkit_coap_json);
+
+            // build out the clientID
+            String clientID = this.createStarterKitClientID((String) notification.get("ep"), m_mds_domain);
+
+            // send to StarterKit...
+            if (this.mqtt(clientID) != null) {
+                this.mqtt(clientID).sendMessage(this.m_starterkit_observe_notification_topic, starterkit_coap_json, QoS.AT_MOST_ONCE);
+            }
+            else {
+                this.errorLogger().info("StarterKit: CoAP notification: clientID: " + clientID + " connection reset");
+                this.removeMQTTConnection((String) notification.get("ep"));
+            }
+        }
+    }
+    
+    // we override the authentication hash creation and set it the same for all...
+    @Override
+    public String createAuthenticationHash() {
+        if (this.m_auth_hash == null) {
+            // we create a pretend device
+            String ep_name = "_fake_device_";
+
+            // create the clientID
+            String clientID = this.createStarterKitClientID(ep_name, this.m_mds_domain);
+
+            // Create the MQTT Transport
+            MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+            mqtt.setClientID(clientID);
+
+            // add the transport
+            this.addMQTTTransport(clientID, mqtt);
+
+            // we use no username/password in StarterKit mode
+            this.mqtt(clientID).setUsername("off");
+            this.mqtt(clientID).setPassword("off");
+
+            // now get the hash
+            this.m_auth_hash = this.mqtt(clientID).createAuthenticationHash();
+
+            // delete the device
+            this.removeMQTTConnection(ep_name);
+        }
+
+        // return the hash
+        return this.m_auth_hash;
+    }
+    
+    // OVERRIDE: (Listening) Topics for StarterKit vs. stock MQTT...
+    @Override
+    @SuppressWarnings("empty-statement")
+    protected void subscribeToMQTTTopics() {
+        // not used for StarterKit - we only see notifications, no flow to the device...
+        ;
+    }
+
+    // create the StarterKit compatible clientID
+    private String createStarterKitClientID(String device_id, String domain) {
+        //
+        // StarterKit clientID format:  "d:<org>:<type>:<device id>"
+        // Where:
+        // org - "quickstart" 
+        // type - we list it as "iotsample-mbed"
+        // deviceID - we bring in the custom name
+        //
+        String device_type = this.prefValue("starterkit_device_type", this.m_suffix);
+        return "d:quickstart:" + device_type + ":" + device_id;
     }
 
     // add new MQTT Connection for a specific device
@@ -146,224 +342,14 @@ public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements Pee
         // return the connection state
         return has_connection;
     }
-
-    // we override the authentication hash creation and set it the same for all...
-    @Override
-    public String createAuthenticationHash() {
-        if (this.m_auth_hash == null) {
-            // we create a pretend device
-            String ep_name = "_fake_device_";
-
-            // create the clientID
-            String clientID = this.createStarterKitClientID(ep_name, this.m_mds_domain);
-
-            // Create the MQTT Transport
-            MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
-            mqtt.setClientID(clientID);
-
-            // add the transport
-            this.addMQTTTransport(clientID, mqtt);
-
-            // we use no username/password in StarterKit mode
-            this.mqtt(clientID).setUsername("off");
-            this.mqtt(clientID).setPassword("off");
-
-            // now get the hash
-            this.m_auth_hash = this.mqtt(clientID).createAuthenticationHash();
-
-            // delete the device
-            this.removeMQTTConnection(ep_name);
-        }
-
-        // return the hash
-        return this.m_auth_hash;
-    }
-
+    
     // OVERRIDE: Connection to StarterKit vs. stock MQTT...
     @Override
     protected boolean connectMQTT() {
         // we simply return true
         return true;
     }
-
-    // OVERRIDE: (Listening) Topics for StarterKit vs. stock MQTT...
-    @Override
-    @SuppressWarnings("empty-statement")
-    protected void subscribeToMQTTTopics() {
-        // not used for StarterKit - we only see notifications, no flow to the device...
-        ;
-    }
-
-    // OVERRIDE: process notification for StarterKit
-    @Override
-    public void processNotification(Map data) {
-        // DEBUG
-        //this.errorLogger().info("processsNotification(StarterKit)...");
-
-        // get the list of parsed notifications
-        List notifications = (List) data.get("notifications");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            // we have to process the payload... this may be dependent on being a string core type... 
-            Map notification = (Map) notifications.get(i);
-
-            // decode the Payload...
-            String b64_coap_payload = (String) notification.get("payload");
-            String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
-
-            // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
-            Map json_parsed = this.tryJSONParse(decoded_coap_payload);
-            if (json_parsed != null) {
-                // add in a JSON object payload value directly... 
-                notification.put("value", json_parsed);
-            }
-            else {
-                // add in a decoded payload value as a string type...
-                notification.put("value", decoded_coap_payload);
-            }
-
-            // StarterKit
-            notification.put("myName", (String) notification.get("ep"));
-
-            // we will send the raw CoAP JSON... StarterKit can parse that... 
-            String coap_raw_json = this.jsonGenerator().generateJson(notification);
-
-            // strip off []...
-            String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-
-            // encapsulate into a coap/device packet...
-            String starterkit_coap_json = coap_json_stripped;
-            if (this.m_starterkit_device_data_key != null && this.m_starterkit_device_data_key.length() > 0) {
-                starterkit_coap_json = "{ \"" + this.m_starterkit_device_data_key + "\":" + coap_json_stripped + "}";
-            }
-
-            // DEBUG
-            this.errorLogger().info("StarterKit: CoAP notification: " + starterkit_coap_json);
-
-            // build out the clientID
-            String clientID = this.createStarterKitClientID((String) notification.get("ep"), m_mds_domain);
-
-            // send to StarterKit...
-            if (this.mqtt(clientID) != null) {
-                this.mqtt(clientID).sendMessage(this.m_starterkit_observe_notification_topic, starterkit_coap_json, QoS.AT_MOST_ONCE);
-            }
-            else {
-                this.errorLogger().info("StarterKit: CoAP notification: clientID: " + clientID + " connection reset");
-                this.removeMQTTConnection((String) notification.get("ep"));
-            }
-        }
-    }
-
-    // OVERRIDE: process a re-registration in StarterKit
-    @Override
-    public void processReRegistration(Map data) {
-        List notifications = (List) data.get("reg-updates");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            Map entry = (Map) notifications.get(i);
-            this.errorLogger().info("StarterKit: CoAP re-registration: " + entry);
-            boolean existing_connection = this.hasMQTTConnection((String) entry.get("ep"));
-            if (existing_connection == false) {
-                this.removeMQTTConnection((String) entry.get("ep"));
-                this.processRegistration(data, "reg-updates", true);
-            }
-        }
-    }
-
-    // OVERRIDE: handle de-registrations for StarterKit
-    @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("StarterKit : CoAP de-registration: " + deregistration[i]);
-
-            // Simply remove the StarterKit MQTT Connection... 
-            this.removeMQTTConnection(deregistration[i]);
-        }
-        return deregistration;
-    }
-
-    // OVERRIDE: process mds registrations-expired messages 
-    @Override
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
-    }
-
-    // OVERRIDE: process a received new registration for StarterKit
-    @Override
-    public void processNewRegistration(Map data) {
-        this.processRegistration(data, "registrations", false);
-    }
-
-    // OVERRIDE: process a received new registration for StarterKit
-    protected void processRegistration(Map data, String key, boolean new_starterkit_connection) {
-        List endpoints = (List) data.get(key);
-        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
-            Map endpoint = (Map) endpoints.get(i);
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-
-                // re-subscribe
-                if (this.m_subscriptions.containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // if we arrived here from a re-registration handler, we may need to re-generate the starterkit conneciton...its likely been deleted.
-                    if (new_starterkit_connection == true) {
-                        // we arrived from a re-registration and the starterkit connection has been deleted
-                        if (this.addNewMQTTConnection((String) endpoint.get("ep")) == true) {
-                            // we added a new starterkit connection... succeeded!  lets announce and re-subscribe to the rsource
-                            this.errorLogger().info("processRegistration: re-establishing QuickStart connection... SUCCESS. Re-subscribing...");
-
-                            // re-subscribe to this resource
-                            this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                            // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                            this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                            this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        }
-                        else {
-                            // we were not able to recreate the starterkit connection... so just bail... we'll try again... 
-                            this.errorLogger().info("processRegistration: re-establishing QuickStart connection... failed!");
-                            this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        }
-                    }
-                    else {
-                        // we do not need to re-create the starterkit connection... it already exists... so just handle the subscription check..
-                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it... 
-                        this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    }
-                }
-
-                // auto-subscribe
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
-                    // create a specific StarterKit MQTT connection with a clientID having the endpoint name as its device_id
-                    if (this.addNewMQTTConnection((String) endpoint.get("ep")) == true) {
-                        // auto-subscribe to observable resources... if enabled.
-                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                        this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    }
-                }
-            }
-        }
-    }
-
-    // create the StarterKit compatible clientID
-    private String createStarterKitClientID(String device_id, String domain) {
-        //
-        // StarterKit clientID format:  "d:<org>:<type>:<device id>"
-        // Where:
-        // org - "quickstart" 
-        // type - we list it as "iotsample-mbed"
-        // deviceID - we bring in the custom name
-        //
-        String device_type = this.prefValue("starterkit_device_type", this.m_suffix);
-        return "d:quickstart:" + device_type + ":" + device_id;
-    }
-
+    
     // connect
     private boolean connect(String clientID) {
         // if not connected attempt

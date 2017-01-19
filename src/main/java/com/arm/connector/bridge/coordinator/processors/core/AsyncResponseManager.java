@@ -23,11 +23,10 @@
 package com.arm.connector.bridge.coordinator.processors.core;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
-import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.json.JSONParser;
-import com.arm.connector.bridge.transport.MQTTTransport;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -72,12 +71,12 @@ public class AsyncResponseManager {
     }
 
     // record an AsyncResponse
-    public void recordAsyncResponse(String response, String coap_verb, MQTTTransport mqtt, GenericMQTTProcessor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
-        this.recordAsyncResponse(response, coap_verb, mqtt, proc, response_topic, reply_topic, message, ep_name, uri, null, null);
+    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
+        this.recordAsyncResponse(response, coap_verb, sender, proc, response_topic, reply_topic, message, ep_name, uri, null, null);
     }
 
     // record an AsyncResponse
-    public void recordAsyncResponse(String response, String coap_verb, MQTTTransport mqtt, GenericMQTTProcessor proc, String response_topic, String reply_topic, String message, String ep_name, String uri, AsyncResponseProcessor processor, Map orig_endpoint) {
+    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String reply_topic, String message, String ep_name, String uri, AsyncResponseProcessor processor, Map orig_endpoint) {
         // we have to catch exceptions from the JSON parser... 
         try {
             if (response != null && response.length() > 0) {
@@ -98,8 +97,8 @@ public class AsyncResponseManager {
                     if (response != null) {
                         record.put("response", response);
                     }
-                    if (mqtt != null) {
-                        record.put("mqtt", mqtt);
+                    if (sender != null) {
+                        record.put("sender", sender);
                     }
                     if (proc != null) {
                         record.put("proc", proc);
@@ -159,18 +158,18 @@ public class AsyncResponseManager {
             // Get the record
             HashMap<String, Object> record = this.m_responses.get(id);
 
-            // call MQTT responder if registered...
-            MQTTTransport mqtt = (MQTTTransport) record.get("mqtt");
-            if (mqtt != null) {
-                // MQTT responder registered for this.. to pull the other values.. 
+            // call GenericSender if registered...
+            GenericSender sender = (GenericSender) record.get("sender");
+            if (sender != null) {
+                // GenericSender responder registered for this.. to pull the other values.. 
                 String response_topic = (String) record.get("response_topic");
+                Processor proc = (Processor) record.get("proc");
                 String verb = (String) record.get("verb");
-                GenericMQTTProcessor proc = (GenericMQTTProcessor) record.get("proc");
 
                 // construct the reply message value
                 String reply = proc.formatAsyncResponseAsReply(response, verb);
                 if (reply != null) {
-                    // Get the reply MQTT topic...default is the response topic
+                    // Get the reply GenericSender "to"...default is the response topic
                     String target_topic = response_topic;
 
                     // If the reply topic is different that the response topic... it takes preference...
@@ -182,14 +181,14 @@ public class AsyncResponseManager {
                     this.errorLogger().info("processAsyncResponse: sending reply(" + verb + ") to AsyncResponse: ID: " + id + " Topic: " + target_topic + " Message: " + reply);
 
                     // send the reply...
-                    mqtt.sendMessage(target_topic, reply);
+                    sender.sendMessage(target_topic, reply);
                 }
                 else {
                     // DEBUG
                     this.errorLogger().info("processAsyncResponse: not sending reply(" + verb + ") to AsyncResponse: ID: " + id + " (OK).");
                 }
             }
-
+            
             // call AsyncResponseProcessor if registered....
             AsyncResponseProcessor processor = (AsyncResponseProcessor) record.get("processor");
             if (processor != null) {

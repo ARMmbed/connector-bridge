@@ -21,8 +21,6 @@
  *
  */
 package com.arm.connector.bridge.coordinator.processors.interfaces;
-
-import com.arm.connector.bridge.coordinator.processors.core.AsyncResponseManager;
 import java.util.Map;
 
 /**
@@ -50,14 +48,15 @@ public interface PeerInterface {
     // process an endpoint async response result from mDS
     public void processAsyncResponses(Map message);
 
-    // record an async response to process later
-    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor);
-
     // process an endpoint resource notification message from mDS
     public void processNotification(Map message);
 
-    // start/stop peer listeners
+    // init/start peer listeners
     public void initListener();
 
+    // stop peer listeners
     public void stopListener();
+    
+    // record async responses
+    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor);
 }

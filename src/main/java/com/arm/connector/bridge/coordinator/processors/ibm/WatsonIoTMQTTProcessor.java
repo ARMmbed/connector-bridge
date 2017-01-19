@@ -30,7 +30,6 @@ import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
-import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,12 +43,6 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
-
-    public static int NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
-
-    private String m_observation_type = "notify";
-    private String m_async_response_type = "cmd-response";
-
     private String m_mqtt_ip_address = null;
     private String m_watson_iot_observe_notification_topic = null;
     private String m_watson_iot_coap_cmd_topic_get = null;
@@ -92,12 +85,16 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         this.m_watson_iot_org_key = this.orchestrator().preferences().valueOf("iotf_org_key", this.m_suffix);
         this.m_mqtt_ip_address = this.orchestrator().preferences().valueOf("iotf_mqtt_ip_address", this.m_suffix);
         this.m_mqtt_port = this.orchestrator().preferences().intValueOf("iotf_mqtt_port", this.m_suffix);
+        
+        // set defaults for keys
+        this.m_observation_key = "notify";
+        this.m_cmd_response_key = "cmd-response";
 
         // legacy bridge?
         this.m_watson_legacy_bridge = this.orchestrator().preferences().booleanValueOf("iotf_legacy_bridge", this.m_suffix);
         if (this.m_watson_legacy_bridge == true) {
             this.errorLogger().warning("Watson IoT Bridge in Legacy Mode");
-            this.m_observation_type = "observation";
+            this.m_observation_key = "observation";
         }
 
         // get our configured device data key (legacy mode only)
@@ -113,7 +110,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
 
         // Observation notifications
-        this.m_watson_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("iotf_observe_notification_topic", this.m_suffix).replace("__EVENT_TYPE__", this.m_observation_type);
+        this.m_watson_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("iotf_observe_notification_topic", this.m_suffix).replace("__EVENT_TYPE__", this.m_observation_key);
 
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
         if (this.legacyBridge() == true) {
@@ -179,58 +176,77 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         //this.errorLogger().info("WatsonIoT Credentials: Username: " + this.m_mqtt.getUsername() + " PW: " + this.m_mqtt.getPassword());
     }
 
-    // legacy mode
-    private boolean legacyBridge() {
-        return this.m_watson_legacy_bridge;
-    }
-
-    // get our defaulted reply topic
-    public String getReplyTopic(String ep_name, String ep_type, String def) {
-        String val = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_type, this.m_async_response_type);
-        //this.errorLogger().warning("REPLY TOPIC DOUG: " + val);
-        return val;
-    }
-
-    // parse the WatsonIoT Username
-    private void parseWatsonIoTUsername() {
-        String[] elements = this.m_watson_iot_api_key.replace("-", " ").split(" ");
-        if (elements != null && elements.length >= 3) {
-            this.m_watson_iot_org_id = elements[1];
-            this.m_watson_iot_org_key = elements[2];
-            //this.errorLogger().info("WatsonIoT: org_id: " + elements[1] + " apikey: " + elements[2]);
-        }
-        else {
-            this.errorLogger().info("Watson IoT: unable to parse WatsonIoT Username: " + this.m_watson_iot_api_key);
-        }
-    }
-
-    // OVERRIDE: Connection to WatsonIoT vs. stock MQTT...
+    // OVERRIDE: process a received new registration for WatsonIoT
     @Override
-    protected boolean connectMQTT() {
-        // if not connected attempt
-        if (!this.isConnected()) {
-            if (this.mqtt().connect(this.m_mqtt_ip_address, this.m_mqtt_port, this.m_client_id, this.m_use_clean_session)) {
-                this.orchestrator().errorLogger().info("Watson IoT: Setting CoAP command listener...");
-                this.mqtt().setOnReceiveListener(this);
-                this.orchestrator().errorLogger().info("Watson IoT: connection completed successfully");
+    protected void processRegistration(Map data, String key) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+
+                // re-subscribe
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // re-subscribe to this resource
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+
+                // auto-subscribe
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+            }
+
+            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            this.retrieveEndpointAttributes(endpoint);
+        }
+    }
+    
+    // OVERRIDE: process a re-registration in WatsonIoT
+    @Override
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map entry = (Map) notifications.get(i);
+            // DEBUG
+            // this.errorLogger().info("WatsonIoT: CoAP re-registration: " + entry);
+            if (this.hasSubscriptions((String) entry.get("ep")) == false) {
+                // no subscriptions - so process as a new registration
+                this.errorLogger().info("Watson IoT : CoAP re-registration: no subscriptions.. processing as new registration...");
+                this.processRegistration(data,"reg-updates");
+            }
+            else {
+                // already subscribed (OK)
+                this.errorLogger().info("Watson IoT : CoAP re-registration: already subscribed (OK)");
             }
         }
-        else {
-            // already connected
-            this.orchestrator().errorLogger().info("Watson IoT: Already connected (OK)...");
-        }
-
-        // return our connection status
-        this.orchestrator().errorLogger().info("Watson IoT: Connection status: " + this.isConnected());
-        return this.isConnected();
     }
 
-    // OVERRIDE: (Listening) Topics for WatsonIoT vs. stock MQTT...
+    // OVERRIDE: handle de-registrations for WatsonIoT
     @Override
-    @SuppressWarnings("empty-statement")
-    protected void subscribeToMQTTTopics() {
-        // do nothing... WatsonIoT will have "listenable" topics for the CoAP verbs via the CMD event type...
-        ;
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistration = super.processDeregistrations(parsed);
+        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT : CoAP de-registration: " + deregistration[i]);
+
+            // WatsonIoT add-on... 
+            this.unsubscribe(deregistration[i]);
+
+            // Remove from WatsonIoT
+            this.deregisterDevice(deregistration[i]);
+        }
+        return deregistration;
     }
 
     // OVERRIDE: process a mDS notification for WatsonIoT
@@ -306,101 +322,61 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
     }
 
-    // OVERRIDE: process a re-registration in WatsonIoT
+    // get our defaulted reply topic
     @Override
-    public void processReRegistration(Map data) {
-        List notifications = (List) data.get("reg-updates");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            Map entry = (Map) notifications.get(i);
-            // DEBUG
-            // this.errorLogger().info("WatsonIoT: CoAP re-registration: " + entry);
-            if (this.hasSubscriptions((String) entry.get("ep")) == false) {
-                // no subscriptions - so process as a new registration
-                this.errorLogger().info("Watson IoT : CoAP re-registration: no subscriptions.. processing as new registration...");
-                this.processRegistration(data, "reg-updates");
+    public String getReplyTopic(String ep_name, String ep_type, String def) {
+        String val = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_key, this.m_cmd_response_key);
+        //this.errorLogger().warning("REPLY TOPIC DOUG: " + val);
+        return val;
+    }
 
-                /*
-                boolean do_register = this.unsubscribe((String)entry.get("ep"));
-                if (do_register == true) {
-                    this.processRegistration(data,"reg-updates");
-                }
-                else {
-                    this.subscribe((String)entry.get("ep"),(String)entry.get("ept"));
-                }
-                 */
-            }
-            else {
-                // already subscribed (OK)
-                this.errorLogger().info("Watson IoT : CoAP re-registration: already subscribed (OK)");
+    // OVERRIDE: Connection to WatsonIoT vs. stock MQTT...
+    @Override
+    protected boolean connectMQTT() {
+        // if not connected attempt
+        if (!this.isConnected()) {
+            if (this.mqtt().connect(this.m_mqtt_ip_address, this.m_mqtt_port, this.m_client_id, this.m_use_clean_session)) {
+                this.orchestrator().errorLogger().info("Watson IoT: Setting CoAP command listener...");
+                this.mqtt().setOnReceiveListener(this);
+                this.orchestrator().errorLogger().info("Watson IoT: connection completed successfully");
             }
         }
-    }
-
-    // OVERRIDE: handle de-registrations for WatsonIoT
-    @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("Watson IoT : CoAP de-registration: " + deregistration[i]);
-
-            // WatsonIoT add-on... 
-            this.unsubscribe(deregistration[i]);
-
-            // Remove from WatsonIoT
-            this.deregisterDevice(deregistration[i]);
+        else {
+            // already connected
+            this.orchestrator().errorLogger().info("Watson IoT: Already connected (OK)...");
         }
-        return deregistration;
+
+        // return our connection status
+        this.orchestrator().errorLogger().info("Watson IoT: Connection status: " + this.isConnected());
+        return this.isConnected();
     }
 
-    // OVERRIDE: process mds registrations-expired messages 
+    // OVERRIDE: (Listening) Topics for WatsonIoT vs. stock MQTT...
     @Override
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
+    @SuppressWarnings("empty-statement")
+    protected void subscribeToMQTTTopics() {
+        // do nothing... WatsonIoT will have "listenable" topics for the CoAP verbs via the CMD event type...
+        ;
     }
 
-    // OVERRIDE: process a received new registration for WatsonIoT
-    @Override
-    public void processNewRegistration(Map data) {
-        this.processRegistration(data, "registrations");
+    // legacy mode
+    private boolean legacyBridge() {
+        return this.m_watson_legacy_bridge;
     }
-
-    // OVERRIDE: process a received new registration for WatsonIoT
-    @Override
-    protected void processRegistration(Map data, String key) {
-        List endpoints = (List) data.get(key);
-        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
-            Map endpoint = (Map) endpoints.get(i);
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-
-                // re-subscribe
-                if (this.m_subscriptions.containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // re-subscribe to this resource
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-
-                // auto-subscribe
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
-                    // auto-subscribe to observable resources... if enabled.
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-            }
-
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
-            this.retrieveEndpointAttributes(endpoint);
+    
+    // parse the WatsonIoT Username
+    private void parseWatsonIoTUsername() {
+        String[] elements = this.m_watson_iot_api_key.replace("-", " ").split(" ");
+        if (elements != null && elements.length >= 3) {
+            this.m_watson_iot_org_id = elements[1];
+            this.m_watson_iot_org_key = elements[2];
+            //this.errorLogger().info("WatsonIoT: org_id: " + elements[1] + " apikey: " + elements[2]);
+        }
+        else {
+            this.errorLogger().info("Watson IoT: unable to parse WatsonIoT Username: " + this.m_watson_iot_api_key);
         }
     }
-
+    
     // create the WatsonIoT clientID
     private String createWatsonIoTClientID(String domain) {
         int length = 12;
@@ -441,21 +417,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
         this.errorLogger().info("Watson IoT:  Customized Topic: " + cust_topic);
         return cust_topic;
-    }
-
-    /* disconnect
-    private void disconnect() {
-        if (this.isConnected()) {
-            this.mqtt().disconnect();
-        }
-    }
-     */
-    // are we connected
-    private boolean isConnected() {
-        if (this.mqtt() != null) {
-            return this.mqtt().isConnected();
-        }
-        return false;
     }
 
     // subscribe to the WatsonIoT MQTT topics
@@ -546,122 +507,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         // return the unsubscribe status
         return do_register;
     }
-
-    // retrieve a specific element from the topic structure
-    private String getTopicElement(String topic, int index) {
-        String element = "";
-        String[] parsed = topic.split("/");
-        if (parsed != null && parsed.length > index) {
-            element = parsed[index];
-        }
-
-        // map to lower case.. 
-        if (element != null) {
-            element = element.toLowerCase();
-        }
-        return element;
-    }
-
-    // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
-        // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
-        return this.getTopicElement(topic, 4);
-    }
-
-    // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
-        // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
-        return this.getTopicElement(topic, 6);
-    }
-
-    // get the resource URI from the message
-    private String getCoAPURI(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPURI: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("path");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("resourceId");
-        }
-
-        // adapt for those variants that have path as "311/0/5850" vs. "/311/0/5850"... 
-        if (val != null && val.charAt(0) != '/') {
-            // prepend a "/"
-            val = "/" + val;
-        }
-        return val;
-    }
-
-    // get the resource value from the message
-    private String getCoAPValue(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("new_value");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("payload");
-            if (val != null) {
-                // see if the value is Base64 encoded
-                String last = val.substring(val.length() - 1);
-                if (val.contains("==") || last.contains("=")) {
-                    // value appears to be Base64 encoded... so decode... 
-                    try {
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Value: " + val + " flagged as Base64 encoded... decoding...");
-
-                        // Decode
-                        val = new String(Base64.decodeBase64(val));
-
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Base64 Decoded Value: " + val);
-                    }
-                    catch (Exception ex) {
-                        // just use the value itself...
-                        this.errorLogger().info("getCoAPValue: Exception in base64 decode", ex);
-                    }
-                }
-            }
-        }
-        return val;
-    }
-
-    // pull the EndpointName from the message
-    private String getCoAPEndpointName(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("ep");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("deviceId");
-        }
-        return val;
-    }
-
-    // pull the CoAP verb from the message
-    private String getCoAPVerb(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("coap_verb");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("method");
-        }
-
-        // map to lower case
-        if (val != null) {
-            val = val.toLowerCase();
-        }
-        return val;
-    }
-
-    // pull any mDC/mDS REST options from the message (optional)
-    private String getRESTOptions(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        return (String) parsed.get("options");
-    }
-
+    
     // CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
     public void onMessageReceive(String topic, String message) {
@@ -728,7 +574,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                 // send the observation (GET reply)...
                 if (this.mqtt() != null) {
                     String reply_topic = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_watson_iot_device_manager.getDeviceType(ep_name));
-                    reply_topic = reply_topic.replace(this.m_observation_type, this.m_async_response_type);
+                    reply_topic = reply_topic.replace(this.m_observation_key, this.m_cmd_response_key);
                     boolean status = this.mqtt().sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
                     if (status == true) {
                         // success
@@ -954,5 +800,25 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         catch (Exception ex) {
             this.errorLogger().warning("Watson IoT: completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint, ex);
         }
+    }
+    
+    // are we connected
+    private boolean isConnected() {
+        if (this.mqtt() != null) {
+            return this.mqtt().isConnected();
+        }
+        return false;
+    }
+    
+    // get the endpoint name from the MQTT topic
+    private String getEndpointNameFromTopic(String topic) {
+        // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
+        return this.getTopicElement(topic, 4);
+    }
+
+    // get the CoAP verb from the MQTT topic
+    private String getCoAPVerbFromTopic(String topic) {
+        // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
+        return this.getTopicElement(topic, 6);
     }
 }

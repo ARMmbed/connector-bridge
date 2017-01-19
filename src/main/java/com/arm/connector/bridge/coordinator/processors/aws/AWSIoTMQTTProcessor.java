@@ -31,7 +31,6 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
-import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,13 +44,6 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
-
-    public static int NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
-    //public static int NUM_COAP_TOPICS = 1;                                // # of MQTT Topics for CoAP verbs
-
-    private String m_observation_type = "observation";
-    private String m_async_response_type = "cmd-response";
-
     private String m_aws_iot_observe_notification_topic = null;
     private String m_aws_iot_coap_cmd_topic_get = null;
     private String m_aws_iot_coap_cmd_topic_put = null;
@@ -83,16 +75,14 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         this.m_mqtt_thread_list = new HashMap<>();
 
         // Observation notification topic
-        this.m_aws_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("aws_iot_observe_notification_topic", this.m_suffix);
+        this.m_aws_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("aws_iot_observe_notification_topic",this.m_suffix);
 
         // if unified format enabled, observation == notify
         if (this.unifiedFormatEnabled()) {
-            String old_type = this.m_observation_type;
-            this.m_observation_type = "notify";
-            this.m_aws_iot_observe_notification_topic = this.m_aws_iot_observe_notification_topic.replace(old_type, this.m_observation_type);
+            this.m_aws_iot_observe_notification_topic = this.m_aws_iot_observe_notification_topic.replace("observation", this.m_observation_key);
         }
 
-        // initialize the topic root
+        // initialize the topic root (AWS customized)
         this.initTopicRoot("aws_iot_topic_root");
 
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
@@ -107,61 +97,81 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // initialize our MQTT transport list
         this.initMQTTTransportList();
     }
-
-    // get our defaulted reply topic
+    
+    // OVERRIDE: process a new registration in AWSIoT
     @Override
-    public String getReplyTopic(String ep_name, String ep_type, String def) {
-        return this.customizeTopic(this.m_aws_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_type, this.m_async_response_type);
+    protected synchronized void processRegistration(Map data, String key) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+
+                // re-subscribe
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // re-subscribe to this resource
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+
+                // auto-subscribe
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+            }
+
+            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            this.retrieveEndpointAttributes(endpoint);
+        }
     }
 
-    // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
+    // OVERRIDE: process a re-registration in AWSIoT
     @Override
-    public String createAuthenticationHash() {
-        return Utils.createHash(this.prefValue("aws_iot_gw_sas_token", this.m_suffix));
-    }
-
-    // OVERRIDE: initListener() needs to accomodate a MQTT connection for each endpoint
-    @Override
-    @SuppressWarnings("empty-statement")
-    public void initListener() {
-        // do nothing...
-        ;
-    }
-
-    // OVERRIDE: stopListener() needs to accomodate a MQTT connection for each endpoint
-    @Override
-    @SuppressWarnings("empty-statement")
-    public void stopListener() {
-        // do nothing...
-        ;
-    }
-
-    /* Connection to AWSIoT MQTT vs. generic MQTT...
-    private boolean connect(String ep_name) {
-        return this.connect(ep_name,ep_name);
-    }
-     */
-    // Connection to AWSIoT MQTT vs. generic MQTT...
-    private boolean connect(String ep_name, String client_id) {
-        // if not connected attempt
-        if (!this.isConnected(ep_name)) {
-            if (this.mqtt(ep_name).connect(this.m_mqtt_host, this.m_mqtt_port, client_id, this.m_use_clean_session)) {
-                this.orchestrator().errorLogger().info("AWSIoT: Setting CoAP command listener...");
-                this.mqtt(ep_name).setOnReceiveListener(this);
-                this.orchestrator().errorLogger().info("AWSIoT: connection completed successfully");
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map entry = (Map) notifications.get(i);
+            // DEBUG
+            // this.errorLogger().info("AWSIoT : CoAP re-registration: " + entry);
+            if (this.hasSubscriptions((String) entry.get("ep")) == false) {
+                // no subscriptions - so process as a new registration
+                this.errorLogger().info("AWSIoT : CoAP re-registration: no subscriptions.. processing as new registration...");
+                this.processRegistration(data, "reg-updates");
+            }
+            else {
+                // already subscribed (OK)
+                this.errorLogger().info("AWSIoT : CoAP re-registration: already subscribed (OK)");
             }
         }
-        else {
-            // already connected
-            this.orchestrator().errorLogger().info("AWSIoT: Already connected (OK)...");
-        }
-
-        // return our connection status
-        this.orchestrator().errorLogger().info("AWSIoT: Connection status: " + this.isConnected(ep_name));
-        return this.isConnected(ep_name);
     }
 
-    // OVERRIDE: process a mDS notification for AWSIoT
+    // OVERRIDE: handle de-registrations for AWSIoT
+    @Override
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistration = super.processDeregistrations(parsed);
+        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("AWSIoT : CoAP de-registration: " + deregistration[i]);
+
+            // AWSIoT add-on... 
+            this.unsubscribe(deregistration[i]);
+
+            // Remove from AWSIoT
+            this.deregisterDevice(deregistration[i]);
+        }
+        return deregistration;
+    }
+    
+    // OVERRIDE: process a notification/observation in AWSIoT
     @Override
     public void processNotification(Map data) {
         // DEBUG
@@ -231,91 +241,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         }
     }
 
-    // OVERRIDE: process a re-registration in AWSIoT
-    @Override
-    public void processReRegistration(Map data) {
-        List notifications = (List) data.get("reg-updates");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            Map entry = (Map) notifications.get(i);
-            // DEBUG
-            // this.errorLogger().info("AWSIoT : CoAP re-registration: " + entry);
-            if (this.hasSubscriptions((String) entry.get("ep")) == false) {
-                // no subscriptions - so process as a new registration
-                this.errorLogger().info("AWSIoT : CoAP re-registration: no subscriptions.. processing as new registration...");
-                this.processRegistration(data, "reg-updates");
-            }
-            else {
-                // already subscribed (OK)
-                this.errorLogger().info("AWSIoT : CoAP re-registration: already subscribed (OK)");
-            }
-        }
-    }
-
-    // OVERRIDE: handle de-registrations for AWSIoT
-    @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("AWSIoT : CoAP de-registration: " + deregistration[i]);
-
-            // AWSIoT add-on... 
-            this.unsubscribe(deregistration[i]);
-
-            // Remove from AWSIoT
-            this.deregisterDevice(deregistration[i]);
-        }
-        return deregistration;
-    }
-
-    // OVERRIDE: process mds registrations-expired messages 
-    @Override
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
-    }
-
-    // OVERRIDE: process a received new registration for AWSIoT
-    @Override
-    public void processNewRegistration(Map data) {
-        this.processRegistration(data, "registrations");
-    }
-
-    // OVERRIDE: process a received new registration for AWSIoT
-    @Override
-    protected synchronized void processRegistration(Map data, String key) {
-        List endpoints = (List) data.get(key);
-        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
-            Map endpoint = (Map) endpoints.get(i);
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-
-                // re-subscribe
-                if (this.m_subscriptions.containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // re-subscribe to this resource
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-
-                // auto-subscribe
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
-                    // auto-subscribe to observable resources... if enabled.
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-            }
-
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
-            this.retrieveEndpointAttributes(endpoint);
-        }
-    }
-
     // create the endpoint AWSIoT topic data
     private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
         HashMap<String, Object> topic_data = null;
@@ -339,281 +264,12 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
     // final customization of a MQTT Topic...
     private String customizeTopic(String topic, String ep_name, String ep_type) {
-        String cust_topic = topic.replace("__EPNAME__", ep_name).replace("__TOPIC_ROOT__", this.m_topic_root);
+        String cust_topic = topic.replace("__EPNAME__", ep_name).replace("__TOPIC_ROOT__", this.getTopicRoot());
         if (ep_type != null) {
             cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
         }
         this.errorLogger().info("AWSIoT Customized Topic: " + cust_topic);
         return cust_topic;
-    }
-
-    // disconnect
-    private void disconnect(String ep_name) {
-        if (this.isConnected(ep_name)) {
-            this.mqtt(ep_name).disconnect(true);
-        }
-        this.remove(ep_name);
-    }
-
-    // are we connected
-    private boolean isConnected(String ep_name) {
-        if (this.mqtt(ep_name) != null) {
-            return this.mqtt(ep_name).isConnected();
-        }
-        return false;
-    }
-
-    // subscribe to the AWSIoT MQTT topics
-    private void subscribe_to_topics(String ep_name, Topic topics[]) {
-        this.mqtt(ep_name).subscribe(topics);
-    }
-
-    // does this endpoint already have registered subscriptions?
-    private boolean hasSubscriptions(String ep_name) {
-        try {
-            if (this.m_aws_iot_gw_endpoints.get(ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
-                if (topic_data != null && topic_data.size() > 0) {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ex) {
-            //silent
-        }
-        return false;
-    }
-
-    // register topics for CoAP commands
-    private void subscribe(String ep_name, String ep_type) {
-        if (ep_name != null && this.validateMQTTConnection(ep_name, ep_type)) {
-            // DEBUG
-            this.orchestrator().errorLogger().info("AWSIoT: Subscribing to CoAP command topics for endpoint: " + ep_name + " type: " + ep_type);
-            try {
-                HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
-                if (topic_data != null) {
-                    // get,put,post,delete enablement
-                    this.m_aws_iot_gw_endpoints.remove(ep_name);
-                    this.m_aws_iot_gw_endpoints.put(ep_name, topic_data);
-                    this.subscribe_to_topics(ep_name, (Topic[]) topic_data.get("topic_list"));
-                }
-                else {
-                    this.orchestrator().errorLogger().warning("AWSIoT: GET/PUT/POST/DELETE topic data NULL. GET/PUT/POST/DELETE disabled");
-                }
-            }
-            catch (Exception ex) {
-                this.orchestrator().errorLogger().info("AWSIoT: Exception in subscribe for " + ep_name + " : " + ex.getMessage());
-            }
-        }
-        else {
-            this.orchestrator().errorLogger().info("AWSIoT: NULL Endpoint name in subscribe()... ignoring...");
-        }
-    }
-
-    // un-register topics for CoAP commands
-    private boolean unsubscribe(String ep_name) {
-        boolean unsubscribed = false;
-        if (ep_name != null && this.mqtt(ep_name) != null) {
-            // DEBUG
-            this.orchestrator().errorLogger().info("AWSIoT: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
-            try {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
-                if (topic_data != null) {
-                    // unsubscribe...
-                    this.mqtt(ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
-                }
-                else {
-                    // not in subscription list (OK)
-                    this.orchestrator().errorLogger().info("AWSIoT: Endpoint: " + ep_name + " not in subscription list (OK).");
-                    unsubscribed = true;
-                }
-            }
-            catch (Exception ex) {
-                this.orchestrator().errorLogger().info("AWSIoT: Exception in unsubscribe for " + ep_name + " : " + ex.getMessage());
-            }
-        }
-        else if (this.mqtt(ep_name) != null) {
-            this.orchestrator().errorLogger().info("AWSIoT: NULL Endpoint name... ignoring unsubscribe()...");
-            unsubscribed = true;
-        }
-        else {
-            this.orchestrator().errorLogger().info("AWSIoT: No MQTT connection for " + ep_name + "... ignoring unsubscribe()...");
-            unsubscribed = true;
-        }
-
-        // clean up
-        if (ep_name != null) {
-            this.m_aws_iot_gw_endpoints.remove(ep_name);
-        }
-
-        // return the unsubscribe status
-        return unsubscribed;
-    }
-
-    // retrieve a specific element from the topic structure
-    private String getTopicElement(String topic, int index) {
-        String element = "";
-        String[] parsed = topic.split("/");
-        if (parsed != null && parsed.length > index) {
-            element = parsed[index];
-        }
-        return element;
-    }
-
-    /* get a topic element (parsed as a URL)
-    @SuppressWarnings("empty-statement")
-    private String getTopicElement(String topic,String key) {
-        String value = null;
-        
-        try {
-            // split by forward slash
-            String tmp_slash[] = topic.split("/");
-            
-            // take the last element and split it again, by &
-            if (tmp_slash != null && tmp_slash.length > 0) {
-                String tmp_properties[] = tmp_slash[tmp_slash.length-1].split("&");
-                for(int i=0;tmp_properties != null && i<tmp_properties.length && value == null;++i) {
-                    String prop[] = tmp_properties[i].split("=");
-                    if (prop != null && prop.length == 2 && prop[0].equalsIgnoreCase(key) == true) {
-                        value = prop[1];
-                    }
-                }
-            }
-        }
-        catch (Exception ex) {
-            // Exception during parse
-            this.errorLogger().info("WARNING: getTopicElement: Exception: " + ex.getMessage());
-        }
-        
-        // DEBUG
-        if (value != null) {
-            // value found
-            this.errorLogger().info("AWSIoT: getTopicElement: key: " + key + "  value: " + value);
-        }
-        else {
-            // value not found
-            this.errorLogger().info("AWSIoT: getTopicElement: key: " + key + "  value: NULL");
-        }
-        
-        // return the value
-        return value;
-    }
-     */
-    // create the URI path from the topic
-    private String getURIPathFromTopic(String topic, int start_index) {
-        try {
-            // split by forward slash
-            String tmp_slash[] = topic.split("/");
-
-            // we now re-assemble starting from a specific index
-            StringBuilder buf = new StringBuilder();
-            for (int i = start_index; tmp_slash.length > 5 && i < tmp_slash.length; ++i) {
-                buf.append("/");
-                buf.append(tmp_slash[i]);
-            }
-
-            return buf.toString();
-        }
-        catch (Exception ex) {
-            // Exception during parse
-            this.errorLogger().info("WARNING: getURIPathFromTopic: Exception: " + ex.getMessage());
-        }
-        return null;
-    }
-
-    // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
-        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getTopicElement(topic, 3);                                   // POSITION SENSITIVE
-    }
-
-    // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
-        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getTopicElement(topic, 1);                                   // POSITION SENSITIVE
-    }
-
-    // get the CoAP URI from the MQTT topic
-    private String getCoAPURIFromTopic(String topic) {
-        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getURIPathFromTopic(topic, 4);                               // POSITION SENSITIVE
-    }
-
-    // get the resource URI from the message
-    private String getCoAPURI(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get"}
-        //this.errorLogger().info("getCoAPURI: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("path");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("resourceId");
-        }
-        return val;
-    }
-
-    // get the resource value from the message
-    private String getCoAPValue(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe" , "coap_verb": "get"}
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("new_value");
-        if (val == null) {
-            val = (String) parsed.get("payload");
-            if (val != null && val.length() > 0) {              // XXX
-                // see if the value is Base64 encoded
-                String last = val.substring(val.length() - 1);
-                if (val.contains("==") || last.contains("=")) {
-                    // value appears to be Base64 encoded... so decode... 
-                    try {
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Value: " + val + " flagged as Base64 encoded... decoding...");
-
-                        // Decode
-                        val = new String(Base64.decodeBase64(val));
-
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Base64 Decoded Value: " + val);
-                    }
-                    catch (Exception ex) {
-                        // just use the value itself...
-                        this.errorLogger().info("getCoAPValue: Exception in base64 decode", ex);
-                    }
-                }
-            }
-        }
-        return val;
-    }
-
-    // pull the EndpointName from the message
-    private String getCoAPEndpointName(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("ep");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("deviceId");
-        }
-        return val;
-    }
-
-    // pull the CoAP verb from the message
-    private String getCoAPVerb(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("coap_verb");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("method");
-        }
-        return val;
-    }
-
-    // pull any mDC/mDS REST options from the message (optional)
-    private String getRESTOptions(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        return (String) parsed.get("options");
     }
 
     // CoAP command handler - processes CoAP commands coming over MQTT channel
@@ -692,7 +348,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 // send the observation (GET reply)...
                 if (this.mqtt(ep_name) != null) {
                     String reply_topic = this.customizeTopic(this.m_aws_iot_observe_notification_topic, ep_name, ep_type);
-                    reply_topic = reply_topic.replace(this.m_observation_type, this.m_async_response_type);
+                    reply_topic = reply_topic.replace(this.m_observation_key, this.m_cmd_response_key);
                     boolean status = this.mqtt(ep_name).sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
                     if (status == true) {
                         // success
@@ -854,13 +510,91 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         return null;
     }
 
-    // validate the MQTT Connection
-    private synchronized boolean validateMQTTConnection(String ep_name, String ep_type) {
-        // create a MQTT connection for this endpoint... 
-        this.createAndStartMQTTForEndpoint(ep_name, ep_type);
+    // subscribe to the AWSIoT MQTT topics
+    private void subscribe_to_topics(String ep_name, Topic topics[]) {
+        this.mqtt(ep_name).subscribe(topics);
+    }
 
-        // return our connection status
-        return this.isConnected(ep_name);
+    // does this endpoint already have registered subscriptions?
+    private boolean hasSubscriptions(String ep_name) {
+        try {
+            if (this.m_aws_iot_gw_endpoints.get(ep_name) != null) {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
+                if (topic_data != null && topic_data.size() > 0) {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex) {
+            //silent
+        }
+        return false;
+    }
+
+    // register topics for CoAP commands
+    private void subscribe(String ep_name, String ep_type) {
+        if (ep_name != null && this.validateMQTTConnection(ep_name, ep_type)) {
+            // DEBUG
+            this.orchestrator().errorLogger().info("AWSIoT: Subscribing to CoAP command topics for endpoint: " + ep_name + " type: " + ep_type);
+            try {
+                HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
+                if (topic_data != null) {
+                    // get,put,post,delete enablement
+                    this.m_aws_iot_gw_endpoints.remove(ep_name);
+                    this.m_aws_iot_gw_endpoints.put(ep_name, topic_data);
+                    this.subscribe_to_topics(ep_name, (Topic[]) topic_data.get("topic_list"));
+                }
+                else {
+                    this.orchestrator().errorLogger().warning("AWSIoT: GET/PUT/POST/DELETE topic data NULL. GET/PUT/POST/DELETE disabled");
+                }
+            }
+            catch (Exception ex) {
+                this.orchestrator().errorLogger().info("AWSIoT: Exception in subscribe for " + ep_name + " : " + ex.getMessage());
+            }
+        }
+        else {
+            this.orchestrator().errorLogger().info("AWSIoT: NULL Endpoint name in subscribe()... ignoring...");
+        }
+    }
+
+    // un-register topics for CoAP commands
+    private boolean unsubscribe(String ep_name) {
+        boolean unsubscribed = false;
+        if (ep_name != null && this.mqtt(ep_name) != null) {
+            // DEBUG
+            this.orchestrator().errorLogger().info("AWSIoT: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
+            try {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
+                if (topic_data != null) {
+                    // unsubscribe...
+                    this.mqtt(ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
+                }
+                else {
+                    // not in subscription list (OK)
+                    this.orchestrator().errorLogger().info("AWSIoT: Endpoint: " + ep_name + " not in subscription list (OK).");
+                    unsubscribed = true;
+                }
+            }
+            catch (Exception ex) {
+                this.orchestrator().errorLogger().info("AWSIoT: Exception in unsubscribe for " + ep_name + " : " + ex.getMessage());
+            }
+        }
+        else if (this.mqtt(ep_name) != null) {
+            this.orchestrator().errorLogger().info("AWSIoT: NULL Endpoint name... ignoring unsubscribe()...");
+            unsubscribed = true;
+        }
+        else {
+            this.orchestrator().errorLogger().info("AWSIoT: No MQTT connection for " + ep_name + "... ignoring unsubscribe()...");
+            unsubscribed = true;
+        }
+
+        // clean up
+        if (ep_name != null) {
+            this.m_aws_iot_gw_endpoints.remove(ep_name);
+        }
+
+        // return the unsubscribe status
+        return unsubscribed;
     }
 
     // process new device registration
@@ -934,13 +668,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                         // ClientID is the endpoint name
                         String client_id = ep_name;
 
-                        // DEBUG override for testing internally... do not enable
-                        //if (this.prefBoolValue("mqtt_debug_internal") == true) {
-                        //    this.m_mqtt_host = "192.168.1.213";
-                        //    client_id = null;
-                        //    mqtt.useUserPass();
-                        //     mqtt.enableMQTTVersionSet(false);
-                        //}
                         // add it to the list indexed by the endpoint name... not the clientID...
                         this.addMQTTTransport(ep_name, mqtt);
 
@@ -998,6 +725,46 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             this.errorLogger().critical("AWSIoT: createAndStartMQTTForEndpoint(): exception: " + ex.getMessage() + " endpoint: " + ep_name, ex);
         }
     }
+    
+    // AsyncResponse response processor
+    @Override
+    public boolean processAsyncResponse(Map endpoint) {
+        // with the attributes added, we finally create the device in Watson IoT
+        this.completeNewDeviceRegistration(endpoint);
+
+        // return our processing status
+        return true;
+    }
+    
+    // get our defaulted reply topic
+    @Override
+    public String getReplyTopic(String ep_name, String ep_type, String def) {
+        return this.customizeTopic(this.m_aws_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_key, this.m_cmd_response_key);
+    }
+
+    // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
+    @Override
+    public String createAuthenticationHash() {
+        return Utils.createHash(this.prefValue("aws_iot_gw_sas_token", this.m_suffix));
+    }
+    
+    // get the endpoint name from the MQTT topic
+    private String getEndpointNameFromTopic(String topic) {
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getTopicElement(topic, 3);                                   // POSITION SENSITIVE
+    }
+
+    // get the CoAP verb from the MQTT topic
+    private String getCoAPVerbFromTopic(String topic) {
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getTopicElement(topic, 1);                                   // POSITION SENSITIVE
+    }
+
+    // get the CoAP URI from the MQTT topic
+    private String getCoAPURIFromTopic(String topic) {
+        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
+        return this.getURIPathFromTopic(topic, 4);                               // POSITION SENSITIVE
+    }
 
     // get the endpoint type from the endpoint name
     private String getTypeFromEndpointName(String ep_name) {
@@ -1009,16 +776,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         }
 
         return ep_type;
-    }
-
-    // AsyncResponse response processor
-    @Override
-    public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Watson IoT
-        this.completeNewDeviceRegistration(endpoint);
-
-        // return our processing status
-        return true;
     }
 
     // discover the endpoint attributes
@@ -1051,5 +808,66 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         catch (Exception ex) {
             this.errorLogger().warning("completeNewDeviceRegistration: caught exception in subscribe(): " + endpoint, ex);
         }
+    }
+    
+    // validate the MQTT Connection
+    private synchronized boolean validateMQTTConnection(String ep_name, String ep_type) {
+        // create a MQTT connection for this endpoint... 
+        this.createAndStartMQTTForEndpoint(ep_name, ep_type);
+
+        // return our connection status
+        return this.isConnected(ep_name);
+    }
+    
+    // Connection to AWSIoT MQTT vs. generic MQTT...
+    private boolean connect(String ep_name, String client_id) {
+        // if not connected attempt
+        if (!this.isConnected(ep_name)) {
+            if (this.mqtt(ep_name).connect(this.m_mqtt_host, this.m_mqtt_port, client_id, this.m_use_clean_session)) {
+                this.orchestrator().errorLogger().info("AWSIoT: Setting CoAP command listener...");
+                this.mqtt(ep_name).setOnReceiveListener(this);
+                this.orchestrator().errorLogger().info("AWSIoT: connection completed successfully");
+            }
+        }
+        else {
+            // already connected
+            this.orchestrator().errorLogger().info("AWSIoT: Already connected (OK)...");
+        }
+
+        // return our connection status
+        this.orchestrator().errorLogger().info("AWSIoT: Connection status: " + this.isConnected(ep_name));
+        return this.isConnected(ep_name);
+    }
+    
+    // are we connected
+    private boolean isConnected(String ep_name) {
+        if (this.mqtt(ep_name) != null) {
+            return this.mqtt(ep_name).isConnected();
+        }
+        return false;
+    }
+    
+    // disconnect
+    private void disconnect(String ep_name) {
+        if (this.isConnected(ep_name)) {
+            this.mqtt(ep_name).disconnect(true);
+        }
+        this.remove(ep_name);
+    }
+    
+    // OVERRIDE: initListener() needs to accomodate a MQTT connection for each endpoint
+    @Override
+    @SuppressWarnings("empty-statement")
+    public void initListener() {
+        // do nothing...
+        ;
+    }
+
+    // OVERRIDE: stopListener() needs to accomodate a MQTT connection for each endpoint
+    @Override
+    @SuppressWarnings("empty-statement")
+    public void stopListener() {
+        // do nothing...
+        ;
     }
 }

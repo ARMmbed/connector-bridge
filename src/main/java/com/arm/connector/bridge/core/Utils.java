@@ -688,4 +688,19 @@ public class Utils {
 
         return remap;
     }
+    
+    // simple ugly replacement of oddball characters
+    public static String my_replace(String my_string,char out_char,char in_char) {
+        // fix up from config file
+        if (my_string != null && my_string.length() > 0) {
+            char[] tmp_array = my_string.toCharArray();
+            for(int i=0;i<tmp_array.length;++i) {
+                if (tmp_array[i] == out_char) {
+                    tmp_array[i] = in_char;
+                }
+            }
+            return String.valueOf(tmp_array);
+        }
+        return my_string;
+    }
 }

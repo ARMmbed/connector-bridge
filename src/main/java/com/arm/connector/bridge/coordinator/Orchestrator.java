@@ -23,6 +23,7 @@
 package com.arm.connector.bridge.coordinator;
 
 import com.arm.connector.bridge.console.ConsoleManager;
+import com.arm.connector.bridge.coordinator.processor.google.GoogleCloudProcessor;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorFactory;
@@ -127,6 +128,11 @@ public class Orchestrator implements MDSInterface, PeerInterface {
             this.errorLogger().info("Orchestrator: adding AWS IoT MQTT Processor");
             this.m_peer_processor_list.add(AWSIoTPeerProcessorFactory.createPeerProcessor(this, this.m_http));
         }
+        if (this.googleCloudPeerEnabled()) {
+            // Google Cloud: create the Google Cloud peer processor...
+            this.errorLogger().info("Orchestrator: adding Google Cloud Processor");
+            this.m_peer_processor_list.add(GoogleCloudProcessor.createPeerProcessor(this));
+        }
         if (this.genericMQTTPeerEnabled()) {
             // Create the sample peer processor...
             this.errorLogger().info("Orchestrator: adding Generic MQTT Processor");
@@ -152,6 +158,11 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     // use AWS peer processor?
     private Boolean awsPeerEnabled() {
         return (this.preferences().booleanValueOf("enable_aws_iot_gw_addon"));
+    }
+    
+    // use Google Cloud peer processor?
+    private Boolean googleCloudPeerEnabled() {
+        return (this.preferences().booleanValueOf("enable_google_cloud_addon"));
     }
 
     // use sample 3rd Party peer processor?

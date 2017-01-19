@@ -31,7 +31,6 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
-import com.arm.connector.bridge.json.JSONParser;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,26 +44,14 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
-
-    // public static final int NUM_COAP_VERBS = 4;                                   // GET, PUT, POST, DELETE
-    public static final int NUM_COAP_TOPICS = 1;                                  // # of MQTT Topics for CoAP verbs
-
-    private String m_observation_type = "observation";
-    private String m_async_response_type = "cmd-response";
-
+    private int m_num_coap_topics = 1;                                  // # of MQTT Topics for CoAP verbs in IoTHub implementation
     private String m_iot_hub_observe_notification_topic = null;
     private String m_iot_hub_coap_cmd_topic_base = null;
-
     private String m_iot_hub_name = null;
     private String m_iot_hub_password_template = null;
-
     private HashMap<String, Object> m_iot_hub_endpoints = null;
     private HashMap<String, TransportReceiveThread> m_mqtt_thread_list = null;
-
-    // IoTHub Device Manager
     private IoTHubDeviceManager m_iot_hub_device_manager = null;
-
-    // IoTHub Device ID prefixing...
     private boolean m_iot_event_hub_enable_device_id_prefix = false;
     private String m_iot_event_hub_device_id_prefix = null;
 
@@ -86,17 +73,12 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // initialize the listener thread map
         this.m_mqtt_thread_list = new HashMap<>();
 
-        // if unified format enabled, observation == notify
-        if (this.unifiedFormatEnabled()) {
-            this.m_observation_type = "notify";
-        }
-
         // get our defaults
         this.m_iot_hub_name = this.orchestrator().preferences().valueOf("iot_event_hub_name", this.m_suffix);
         this.m_mqtt_host = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_ip_address", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name);
 
         // Observation notification topic
-        this.m_iot_hub_observe_notification_topic = this.orchestrator().preferences().valueOf("iot_event_hub_observe_notification_topic", this.m_suffix) + this.m_observation_type;
+        this.m_iot_hub_observe_notification_topic = this.orchestrator().preferences().valueOf("iot_event_hub_observe_notification_topic", this.m_suffix) + this.m_observation_key;
 
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
         this.m_iot_hub_coap_cmd_topic_base = this.orchestrator().preferences().valueOf("iot_event_hub_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "#");
@@ -123,90 +105,89 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         this.initMQTTTransportList();
     }
 
-    // IoTHub DeviceID Prefix enabler
-    private String addDeviceIDPrefix(String ep_name) {
-        String iothub_ep_name = ep_name;
-        if (this.m_iot_event_hub_device_id_prefix != null && ep_name != null) {
-            if (ep_name.contains(this.m_iot_event_hub_device_id_prefix) == false) {
-                iothub_ep_name = this.m_iot_event_hub_device_id_prefix + ep_name;
+    // OVERRIDE: process a received new registration for IoTHub
+    @Override
+    protected synchronized void processRegistration(Map data, String key) {
+        List endpoints = (List) data.get(key);
+        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
+            Map endpoint = (Map) endpoints.get(i);
+            List resources = (List) endpoint.get("resources");
+            for (int j = 0; resources != null && j < resources.size(); ++j) {
+                Map resource = (Map) resources.get(j);
+
+                // get the endpoint name
+                String ep_name = (String) endpoint.get("ep");
+
+                // re-subscribe
+                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                    // re-subscribe to this resource
+                    this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+
+                // auto-subscribe
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                }
+            }
+
+            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            this.retrieveEndpointAttributes(endpoint);
+        }
+    }
+
+    // OVERRIDE: process a re-registration in IoTHub
+    @Override
+    public void processReRegistration(Map data) {
+        List notifications = (List) data.get("reg-updates");
+        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
+            Map entry = (Map) notifications.get(i);
+
+            // IOTHUB Prefix
+            String iothub_ep_name = this.addDeviceIDPrefix((String) entry.get("ep"));
+
+            // DEBUG
+            // this.errorLogger().info("IoTHub : CoAP re-registration: " + entry);
+            if (this.hasSubscriptions(iothub_ep_name) == false) {
+                // no subscriptions - so process as a new registration
+                this.errorLogger().info("IoTHub : CoAP re-registration: no subscriptions.. processing as new registration...");
+                this.processRegistration(data, "reg-updates");
+            }
+            else {
+                // already subscribed (OK)
+                this.errorLogger().info("IoTHub : CoAP re-registration: already subscribed (OK)");
             }
         }
-
-        // DEBUG
-        //this.errorLogger().info("addDeviceIDPrefix: ep_name: " + ep_name + " --> iothub_ep_name: " + iothub_ep_name);
-        return iothub_ep_name;
     }
 
-    // IoTHub DeviceID Prefix remover
-    private String removeDeviceIDPrefix(String iothub_ep_name) {
-        String ep_name = iothub_ep_name;
-        if (this.m_iot_event_hub_device_id_prefix != null && iothub_ep_name != null) {
-            return iothub_ep_name.replace(this.m_iot_event_hub_device_id_prefix, "");
-        }
-
-        // trim..
-        if (ep_name != null) {
-            ep_name = ep_name.trim();
-        }
-
-        // DEBUG
-        //this.errorLogger().info("removeDeviceIDPrefix: iothub_ep_name: " + iothub_ep_name + " --> ep_name: " + ep_name);
-        return ep_name;
-    }
-
-    // get our defaulted reply topic
+    // OVERRIDE: handle de-registrations for IoTHub
     @Override
-    public String getReplyTopic(String ep_name, String ep_type, String def) {
-        // IOTHUB DeviceID Prefix
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-        return this.customizeTopic(this.m_iot_hub_observe_notification_topic, iothub_ep_name, ep_type).replace(this.m_observation_type, this.m_async_response_type);
-    }
+    public String[] processDeregistrations(Map parsed) {
+        String[] deregistration = super.processDeregistrations(parsed);
+        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("IoTHub : CoAP de-registration: " + deregistration[i]);
 
-    // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
-    @Override
-    public String createAuthenticationHash() {
-        return Utils.createHash(this.prefValue("iot_event_hub_sas_token", this.m_suffix));
-    }
+            // IOTHUB Prefix
+            String iothub_ep_name = this.addDeviceIDPrefix(deregistration[i]);
 
-    // OVERRIDE: initListener() needs to accomodate a MQTT connection for each endpoint
-    @Override
-    @SuppressWarnings("empty-statement")
-    public void initListener() {
-        // do nothing...
-        ;
-    }
+            // IoTHub add-on... 
+            this.unsubscribe(iothub_ep_name);
 
-    // OVERRIDE: stopListener() needs to accomodate a MQTT connection for each endpoint
-    @Override
-    @SuppressWarnings("empty-statement")
-    public void stopListener() {
-        // do nothing...
-        ;
-    }
-
-    // Connection to IoTHub MQTT vs. generic MQTT...
-    private boolean connect(String ep_name) {
-        // IOTHUB Prefix 
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-
-        // if not connected attempt
-        if (!this.isConnected(iothub_ep_name)) {
-            if (this.mqtt(iothub_ep_name).connect(this.m_mqtt_host, this.m_mqtt_port, iothub_ep_name, this.m_use_clean_session)) {
-                this.orchestrator().errorLogger().info("IoTHub: Setting CoAP command listener...");
-                this.mqtt(iothub_ep_name).setOnReceiveListener(this);
-                this.orchestrator().errorLogger().info("IoTHub: connection completed successfully");
-            }
+            // Remove from IoTHub
+            this.deregisterDevice(iothub_ep_name);
         }
-        else {
-            // already connected
-            this.orchestrator().errorLogger().info("IoTHub: Already connected (OK)...");
-        }
-
-        // return our connection status
-        this.orchestrator().errorLogger().info("IoTHub: Connection status: " + this.isConnected(iothub_ep_name));
-        return this.isConnected(iothub_ep_name);
+        return deregistration;
     }
-
+    
     // OVERRIDE: process a mDS notification for IoTHub
     @Override
     public void processNotification(Map data) {
@@ -274,152 +255,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 this.errorLogger().warning("IoTHub: CoAP notification not sent. NOT CONNECTED");
             }
         }
-    }
-
-    // OVERRIDE: process a re-registration in IoTHub
-    @Override
-    public void processReRegistration(Map data) {
-        List notifications = (List) data.get("reg-updates");
-        for (int i = 0; notifications != null && i < notifications.size(); ++i) {
-            Map entry = (Map) notifications.get(i);
-
-            // IOTHUB Prefix
-            String iothub_ep_name = this.addDeviceIDPrefix((String) entry.get("ep"));
-
-            // DEBUG
-            // this.errorLogger().info("IoTHub : CoAP re-registration: " + entry);
-            if (this.hasSubscriptions(iothub_ep_name) == false) {
-                // no subscriptions - so process as a new registration
-                this.errorLogger().info("IoTHub : CoAP re-registration: no subscriptions.. processing as new registration...");
-                this.processRegistration(data, "reg-updates");
-            }
-            else {
-                // already subscribed (OK)
-                this.errorLogger().info("IoTHub : CoAP re-registration: already subscribed (OK)");
-            }
-        }
-    }
-
-    // OVERRIDE: handle de-registrations for IoTHub
-    @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("IoTHub : CoAP de-registration: " + deregistration[i]);
-
-            // IOTHUB Prefix
-            String iothub_ep_name = this.addDeviceIDPrefix(deregistration[i]);
-
-            // IoTHub add-on... 
-            this.unsubscribe(iothub_ep_name);
-
-            // Remove from IoTHub
-            this.deregisterDevice(iothub_ep_name);
-        }
-        return deregistration;
-    }
-
-    // OVERRIDE: process mds registrations-expired messages 
-    @Override
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
-    }
-
-    // OVERRIDE: process a received new registration for IoTHub
-    @Override
-    public void processNewRegistration(Map data) {
-        this.processRegistration(data, "registrations");
-    }
-
-    // OVERRIDE: process a received new registration for IoTHub
-    @Override
-    protected synchronized void processRegistration(Map data, String key) {
-        List endpoints = (List) data.get(key);
-        for (int i = 0; endpoints != null && i < endpoints.size(); ++i) {
-            Map endpoint = (Map) endpoints.get(i);
-            List resources = (List) endpoint.get("resources");
-            for (int j = 0; resources != null && j < resources.size(); ++j) {
-                Map resource = (Map) resources.get(j);
-
-                // get the endpoint name
-                String ep_name = (String) endpoint.get("ep");
-
-                // re-subscribe
-                if (this.m_subscriptions.containsSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // re-subscribe to this resource
-                    this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-
-                // auto-subscribe
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
-                    // auto-subscribe to observable resources... if enabled.
-                    this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
-
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.m_subscriptions.removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.m_subscriptions.addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                }
-            }
-
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
-            this.retrieveEndpointAttributes(endpoint);
-        }
-    }
-
-    // create the endpoint IoTHub topic data
-    private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
-        HashMap<String, Object> topic_data = null;
-        if (this.m_iot_hub_coap_cmd_topic_base != null) {
-            Topic[] list = new Topic[NUM_COAP_TOPICS];
-            String[] topic_string_list = new String[NUM_COAP_TOPICS];
-
-            // IOTHUB DeviceID Prefix
-            String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-
-            topic_string_list[0] = this.customizeTopic(this.m_iot_hub_coap_cmd_topic_base, iothub_ep_name, ep_type);
-            for (int i = 0; i < NUM_COAP_TOPICS; ++i) {
-                list[i] = new Topic(topic_string_list[i], QoS.AT_LEAST_ONCE);
-            }
-            topic_data = new HashMap<>();
-            topic_data.put("topic_list", list);
-            topic_data.put("topic_string_list", topic_string_list);
-        }
-        return topic_data;
-    }
-
-    // final customization of a MQTT Topic...
-    private String customizeTopic(String topic, String ep_name, String ep_type) {
-        String cust_topic = topic.replace("__EPNAME__", ep_name);
-        if (ep_type != null) {
-            cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
-        }
-        this.errorLogger().info("IoTHub Customized Topic: " + cust_topic);
-        return cust_topic;
-    }
-
-    // disconnect
-    private void disconnect(String ep_name) {
-        // IOTHUB DeviceID Prefix
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-        if (this.isConnected(iothub_ep_name)) {
-            this.mqtt(iothub_ep_name).disconnect(true);
-        }
-        this.remove(iothub_ep_name);
-    }
-
-    // are we connected
-    private boolean isConnected(String ep_name) {
-        // IOTHUB DeviceID Prefix
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-        if (this.mqtt(iothub_ep_name) != null) {
-            return this.mqtt(iothub_ep_name).isConnected();
-        }
-        return false;
     }
 
     // subscribe to the IoTHub MQTT topics
@@ -520,16 +355,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         return unsubscribed;
     }
 
-    // retrieve a specific element from the topic structure
-    private String getTopicElement(String topic, int index) {
-        String element = "";
-        String[] parsed = topic.split("/");
-        if (parsed != null && parsed.length > index) {
-            element = parsed[index];
-        }
-        return element;
-    }
-
     // get a topic element (parsed as a URL)
     @SuppressWarnings("empty-statement")
     private String getTopicElement(String topic, String key) {
@@ -567,101 +392,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // return the value
         return value;
-    }
-
-    // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
-        // format: devices/__EPNAME__/messages/devicebound/#
-        return this.getTopicElement(topic, 1);
-    }
-
-    // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
-        // format: devices/__EPNAME__/messages/devicebound/coap_verb=put....
-        return this.getTopicElement(topic, "coap_verb");
-    }
-
-    // get the CoAP URI from the MQTT topic
-    private String getCoAPURIFromTopic(String topic) {
-        // format: devices/__EPNAME__/messages/devicebound/coap_uri=....
-        return this.getTopicElement(topic, "coap_uri");
-    }
-
-    // get the resource URI from the message
-    private String getCoAPURI(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get"}
-        //this.errorLogger().info("getCoAPURI: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("path");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("resourceId");
-        }
-        return val;
-    }
-
-    // get the resource value from the message
-    private String getCoAPValue(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe" , "coap_verb": "get"}
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("new_value");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("payload");
-            if (val != null) {
-                // see if the value is Base64 encoded
-                String last = val.substring(val.length() - 1);
-                if (val.contains("==") || last.contains("=")) {
-                    // value appears to be Base64 encoded... so decode... 
-                    try {
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Value: " + val + " flagged as Base64 encoded... decoding...");
-
-                        // Decode
-                        val = new String(Base64.decodeBase64(val));
-
-                        // DEBUG
-                        this.errorLogger().info("getCoAPValue: Base64 Decoded Value: " + val);
-                    }
-                    catch (Exception ex) {
-                        // just use the value itself...
-                        this.errorLogger().info("getCoAPValue: Exception in base64 decode", ex);
-                    }
-                }
-            }
-        }
-        return val;
-    }
-
-    // pull the EndpointName from the message
-    private String getCoAPEndpointName(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("ep");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("deviceId");
-        }
-        return val;
-    }
-
-    // pull the CoAP verb from the message
-    private String getCoAPVerb(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        String val = (String) parsed.get("coap_verb");
-        if (val == null || val.length() == 0) {
-            val = (String) parsed.get("method");
-        }
-        return val;
-    }
-
-    // pull any mDC/mDS REST options from the message (optional)
-    private String getRESTOptions(String message) {
-        // expected format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
-        //this.errorLogger().info("getCoAPValue: payload: " + message);
-        Map parsed = this.tryJSONParse(message);
-        return (String) parsed.get("options");
     }
 
     // CoAP command handler - processes CoAP commands coming over MQTT channel
@@ -738,7 +468,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 // send the observation (GET reply)...
                 if (this.mqtt(iothub_ep_name) != null) {
                     String reply_topic = this.customizeTopic(this.m_iot_hub_observe_notification_topic, iothub_ep_name, null);
-                    reply_topic = reply_topic.replace(this.m_observation_type, this.m_async_response_type);
+                    reply_topic = reply_topic.replace(this.m_observation_key, this.m_cmd_response_key);
                     boolean status = this.mqtt(iothub_ep_name).sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
                     if (status == true) {
                         // success
@@ -906,21 +636,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         return null;
     }
 
-    // validate the MQTT Connection
-    private synchronized boolean validateMQTTConnection(String ep_name, String ep_type) {
-        // IOTHUB DeviceID Prefix
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-
-        // see if we already have a connection for this endpoint...
-        if (this.mqtt(iothub_ep_name) == null) {
-            // create a MQTT connection for this endpoint... 
-            this.createAndStartMQTTForEndpoint(iothub_ep_name, ep_type);
-        }
-
-        // return our connection status
-        return this.isConnected(iothub_ep_name);
-    }
-
     // process new device registration
     @Override
     protected synchronized Boolean registerNewDevice(Map message) {
@@ -975,6 +690,140 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         return true;
     }
 
+    // AsyncResponse response processor
+    @Override
+    public boolean processAsyncResponse(Map endpoint) {
+        // with the attributes added, we finally create the device in Watson IoT
+        this.completeNewDeviceRegistration(endpoint);
+
+        // return our processing status
+        return true;
+    }
+
+    // complete processing of adding the new device
+    private void completeNewDeviceRegistration(Map endpoint) {
+        try {
+            // create the device in IoTHub
+            this.errorLogger().info("completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);
+            this.registerNewDevice(endpoint);
+            this.errorLogger().info("completeNewDeviceRegistration: registerNewDevice() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint, ex);
+        }
+
+        try {
+            // subscribe for IoTHub as well..
+            this.errorLogger().info("completeNewDeviceRegistration: calling subscribe(): " + endpoint);
+            this.subscribe((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+            this.errorLogger().info("completeNewDeviceRegistration: subscribe() completed");
+        }
+        catch (Exception ex) {
+            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in subscribe(): " + endpoint, ex);
+        }
+    }
+    
+    // discover the endpoint attributes
+    private void retrieveEndpointAttributes(Map endpoint) {
+        // DEBUG
+        this.errorLogger().warning("IoTHub: Creating New Device: " + endpoint);
+
+        // pre-populate the new endpoint with initial values for registration
+        this.orchestrator().pullDeviceMetadata(endpoint, this);
+    }
+    
+    // IoTHub DeviceID Prefix enabler
+    private String addDeviceIDPrefix(String ep_name) {
+        String iothub_ep_name = ep_name;
+        if (this.m_iot_event_hub_device_id_prefix != null && ep_name != null) {
+            if (ep_name.contains(this.m_iot_event_hub_device_id_prefix) == false) {
+                iothub_ep_name = this.m_iot_event_hub_device_id_prefix + ep_name;
+            }
+        }
+
+        // DEBUG
+        //this.errorLogger().info("addDeviceIDPrefix: ep_name: " + ep_name + " --> iothub_ep_name: " + iothub_ep_name);
+        return iothub_ep_name;
+    }
+
+    // IoTHub DeviceID Prefix remover
+    private String removeDeviceIDPrefix(String iothub_ep_name) {
+        String ep_name = iothub_ep_name;
+        if (this.m_iot_event_hub_device_id_prefix != null && iothub_ep_name != null) {
+            return iothub_ep_name.replace(this.m_iot_event_hub_device_id_prefix, "");
+        }
+
+        // trim..
+        if (ep_name != null) {
+            ep_name = ep_name.trim();
+        }
+
+        // DEBUG
+        //this.errorLogger().info("removeDeviceIDPrefix: iothub_ep_name: " + iothub_ep_name + " --> ep_name: " + ep_name);
+        return ep_name;
+    }
+    
+    // create the endpoint IoTHub topic data
+    private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
+        HashMap<String, Object> topic_data = null;
+        if (this.m_iot_hub_coap_cmd_topic_base != null) {
+            Topic[] list = new Topic[m_num_coap_topics];
+            String[] topic_string_list = new String[m_num_coap_topics];
+
+            // IOTHUB DeviceID Prefix
+            String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+
+            topic_string_list[0] = this.customizeTopic(this.m_iot_hub_coap_cmd_topic_base, iothub_ep_name, ep_type);
+            for (int i = 0; i < m_num_coap_topics; ++i) {
+                list[i] = new Topic(topic_string_list[i], QoS.AT_LEAST_ONCE);
+            }
+            topic_data = new HashMap<>();
+            topic_data.put("topic_list", list);
+            topic_data.put("topic_string_list", topic_string_list);
+        }
+        return topic_data;
+    }
+    
+    // get our defaulted reply topic
+    @Override
+    public String getReplyTopic(String ep_name, String ep_type, String def) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        return this.customizeTopic(this.m_iot_hub_observe_notification_topic, iothub_ep_name, ep_type).replace(this.m_observation_key, this.m_cmd_response_key);
+    }
+
+    // final customization of a MQTT Topic...
+    private String customizeTopic(String topic, String ep_name, String ep_type) {
+        String cust_topic = topic.replace("__EPNAME__", ep_name);
+        if (ep_type != null) {
+            cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
+        }
+        this.errorLogger().info("IoTHub Customized Topic: " + cust_topic);
+        return cust_topic;
+    }
+    
+    // we have to override the creation of the authentication hash.. it has to be dependent on a given endpoint name
+    @Override
+    public String createAuthenticationHash() {
+        return Utils.createHash(this.prefValue("iot_event_hub_sas_token", this.m_suffix));
+    }
+
+    // OVERRIDE: initListener() needs to accomodate a MQTT connection for each endpoint
+    @Override
+    @SuppressWarnings("empty-statement")
+    public void initListener() {
+        // do nothing...
+        ;
+    }
+
+    // OVERRIDE: stopListener() needs to accomodate a MQTT connection for each endpoint
+    @Override
+    @SuppressWarnings("empty-statement")
+    public void stopListener() {
+        // do nothing...
+        ;
+    }
+    
     // add a MQTT transport for a given endpoint - this is how MS IoTHub MQTT integration works... 
     private synchronized void createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
         // IOTHUB DeviceID Prefix
@@ -1038,45 +887,79 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         }
     }
 
-    // AsyncResponse response processor
-    @Override
-    public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Watson IoT
-        this.completeNewDeviceRegistration(endpoint);
+    // validate the MQTT Connection
+    private synchronized boolean validateMQTTConnection(String ep_name, String ep_type) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
-        // return our processing status
-        return true;
+        // see if we already have a connection for this endpoint...
+        if (this.mqtt(iothub_ep_name) == null) {
+            // create a MQTT connection for this endpoint... 
+            this.createAndStartMQTTForEndpoint(iothub_ep_name, ep_type);
+        }
+
+        // return our connection status
+        return this.isConnected(iothub_ep_name);
+    }
+    
+    // Connection to IoTHub MQTT vs. generic MQTT...
+    private boolean connect(String ep_name) {
+        // IOTHUB Prefix 
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+
+        // if not connected attempt
+        if (!this.isConnected(iothub_ep_name)) {
+            if (this.mqtt(iothub_ep_name).connect(this.m_mqtt_host, this.m_mqtt_port, iothub_ep_name, this.m_use_clean_session)) {
+                this.orchestrator().errorLogger().info("IoTHub: Setting CoAP command listener...");
+                this.mqtt(iothub_ep_name).setOnReceiveListener(this);
+                this.orchestrator().errorLogger().info("IoTHub: connection completed successfully");
+            }
+        }
+        else {
+            // already connected
+            this.orchestrator().errorLogger().info("IoTHub: Already connected (OK)...");
+        }
+
+        // return our connection status
+        this.orchestrator().errorLogger().info("IoTHub: Connection status: " + this.isConnected(iothub_ep_name));
+        return this.isConnected(iothub_ep_name);
+    }
+    
+    // disconnect
+    private void disconnect(String ep_name) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        if (this.isConnected(iothub_ep_name)) {
+            this.mqtt(iothub_ep_name).disconnect(true);
+        }
+        this.remove(iothub_ep_name);
     }
 
-    // discover the endpoint attributes
-    private void retrieveEndpointAttributes(Map endpoint) {
-        // DEBUG
-        this.errorLogger().warning("IoTHub: Creating New Device: " + endpoint);
-
-        // pre-populate the new endpoint with initial values for registration
-        this.orchestrator().pullDeviceMetadata(endpoint, this);
+    // are we connected
+    private boolean isConnected(String ep_name) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        if (this.mqtt(iothub_ep_name) != null) {
+            return this.mqtt(iothub_ep_name).isConnected();
+        }
+        return false;
+    }
+    
+    // get the endpoint name from the MQTT topic
+    private String getEndpointNameFromTopic(String topic) {
+        // format: devices/__EPNAME__/messages/devicebound/#
+        return this.getTopicElement(topic, 1);
     }
 
-    // complete processing of adding the new device
-    private void completeNewDeviceRegistration(Map endpoint) {
-        try {
-            // create the device in IoTHub
-            this.errorLogger().info("completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);
-            this.registerNewDevice(endpoint);
-            this.errorLogger().info("completeNewDeviceRegistration: registerNewDevice() completed");
-        }
-        catch (Exception ex) {
-            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint, ex);
-        }
+    // get the CoAP verb from the MQTT topic
+    private String getCoAPVerbFromTopic(String topic) {
+        // format: devices/__EPNAME__/messages/devicebound/coap_verb=put....
+        return this.getTopicElement(topic, "coap_verb");
+    }
 
-        try {
-            // subscribe for IoTHub as well..
-            this.errorLogger().info("completeNewDeviceRegistration: calling subscribe(): " + endpoint);
-            this.subscribe((String) endpoint.get("ep"), (String) endpoint.get("ept"));
-            this.errorLogger().info("completeNewDeviceRegistration: subscribe() completed");
-        }
-        catch (Exception ex) {
-            this.errorLogger().warning("completeNewDeviceRegistration: caught exception in subscribe(): " + endpoint, ex);
-        }
+    // get the CoAP URI from the MQTT topic
+    private String getCoAPURIFromTopic(String topic) {
+        // format: devices/__EPNAME__/messages/devicebound/coap_uri=....
+        return this.getTopicElement(topic, "coap_uri");
     }
 }

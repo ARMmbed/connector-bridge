@@ -24,27 +24,25 @@ package com.arm.connector.bridge.coordinator.processors.sample;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
-import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.util.Map;
 
 /**
- * Sample 3rd Party peer processor
+ * Sample 3rd Party peer processor (derived from Processor.. may want to switch to GenericMQTTProcessor)
  *
  * @author Doug Anson
  */
 public class Sample3rdPartyProcessor extends Processor implements PeerInterface {
 
     private HttpTransport m_http = null;
-    private String m_suffix = null;
 
-    // Factory method for initializing the Sample 3rd Party peer
+    // (OPTIONAL) Factory method for initializing the Sample 3rd Party peer
     public static Sample3rdPartyProcessor createPeerProcessor(Orchestrator manager, HttpTransport http) {
         // create me
         Sample3rdPartyProcessor me = new Sample3rdPartyProcessor(manager, http);
 
-        // initialize me
         // return me
         return me;
     }
@@ -56,70 +54,48 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
 
     // constructor
     public Sample3rdPartyProcessor(Orchestrator orchestrator, HttpTransport http, String suffix) {
-        super(orchestrator, null);
+        super(orchestrator,suffix);
         this.m_http = http;
         this.m_mds_domain = orchestrator.getDomain();
-        this.m_suffix = suffix;
 
         // Sample 3rd Party peer Processor Announce
         this.errorLogger().info("Sample 3rd Party peer Processor ENABLED.");
     }
-
-    // process a received new registration
+    
+    //
+    // OVERRIDES for Sample3rdPartyProcessor...
+    //
+    // These methods are stubbed out by default... but need to be implemented in derived classes.
+    // They are the "responders" to mDS events for devices
+    //
+    
+    // process a received new registration/registration update/deregistration, 
     @Override
-    public void processNewRegistration(Map message) {
-        // XXX to do
-        this.errorLogger().info("processNewRegistration(Sample): message: " + message);
+    protected void processRegistration(Map data, String key) {
+        // XXX TO DO 
+        this.errorLogger().info("processRegistration(BASE): key: " + key + " data: " + data);
     }
-
-    // process a received new registration
+    
+    // process a reregistration
     @Override
     public void processReRegistration(Map message) {
         // XXX to do
-        this.errorLogger().info("processReRegistration(Sample): message: " + message);
+        this.errorLogger().info("processReRegistration(BASE): message: " + message);
     }
 
-    // process a received new registration
+    // process a deregistration
     @Override
     public String[] processDeregistrations(Map message) {
         // XXX to do
-        this.errorLogger().info("processDeregistrations(Sample): message: " + message);
+        this.errorLogger().info("processDeregistrations(BASE): message: " + message);
         return null;
     }
-
-    // process mds registrations-expired messages 
-    @Override
-    public void processRegistrationsExpired(Map message) {
-        this.errorLogger().info("processRegistrationsExpired(Sample): message: " + message);
-        this.processDeregistrations(message);
-    }
-
-    // process a received new registration
-    @Override
-    public void processAsyncResponses(Map data) {
-        // XXX to do
-        this.errorLogger().info("processAsyncResponses(Sample): data: " + data);
-    }
-
-    // process a received new registration/registration update/deregistration, 
-    protected void processRegistration(Map data, String key) {
-        // XXX TO DO 
-        this.errorLogger().info("processRegistration(Sample): key: " + key + " data: " + data);
-    }
-
-    // process an observation
+    
+    // process an observation/notification
     @Override
     public void processNotification(Map data) {
         // XXXX TO DO
-        this.errorLogger().info("processNotification(Sample): data: " + data);
-    }
-
-    // Create the authentication hash
-    @Override
-    public String createAuthenticationHash() {
-        // XXX TO DO
-        this.errorLogger().info("createAuthenticationHash(Sample)");
-        return "";
+        this.errorLogger().info("processNotification(BASE): data: " + data);
     }
 
     // initialize any Sample 3rd Party peer listeners
@@ -135,10 +111,12 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
         // XXX to do
         this.errorLogger().info("stopListener(Sample)");
     }
-
+    
+    // Create the authentication hash
     @Override
-    public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
-        // XXX TO DO
-        this.errorLogger().info("recordAsyncResponse(Sample): response: " + response + " URI: " + uri + " EP: " + ep);
+    public String createAuthenticationHash() {
+        // just create a hash of something unique to the peer side... 
+        String peer_secret = "";
+        return Utils.createHash(peer_secret);
     }
 }

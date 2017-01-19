@@ -358,13 +358,13 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private boolean useAPITokenAuth() {
         return this.m_use_api_token;
     }
-
+    
     // validate the notification
     private Boolean validateNotification(HttpServletRequest request) {
         if (request != null) {
             boolean validated = false;
             if (this.validatableNotifications() == true && request.getHeader("Authentication") != null) {
-                String calc_hash = this.createAuthenticationHash();
+                String calc_hash = this.orchestrator().createAuthenticationHash();
                 String header_hash = request.getHeader("Authentication");
                 validated = Utils.validateHash(header_hash, calc_hash);
 
@@ -394,7 +394,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // create any authentication header JSON that may be necessary
     private String createCallbackHeaderAuthJSON() {
-        String hash = this.createAuthenticationHash();
+        String hash = this.orchestrator().createAuthenticationHash();
 
         try {
             Double ver = Double.valueOf(this.m_mds_version);
