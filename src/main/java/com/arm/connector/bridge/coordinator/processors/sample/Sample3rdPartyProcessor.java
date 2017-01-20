@@ -23,18 +23,18 @@
 package com.arm.connector.bridge.coordinator.processors.sample;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
-import com.arm.connector.bridge.coordinator.processors.core.Processor;
+import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
-import java.util.Map;
 
 /**
- * Sample 3rd Party peer processor (derived from Processor.. may want to switch to GenericMQTTProcessor)
+ * Sample 3rd Party peer processor (derived from PeerProcessor.. may want to switch to GenericMQTTProcessor)
  *
  * @author Doug Anson
  */
-public class Sample3rdPartyProcessor extends Processor implements PeerInterface {
+public class Sample3rdPartyProcessor extends PeerProcessor implements PeerInterface, GenericSender {
 
     private HttpTransport m_http = null;
 
@@ -58,7 +58,7 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
         this.m_http = http;
         this.m_mds_domain = orchestrator.getDomain();
 
-        // Sample 3rd Party peer Processor Announce
+        // Sample 3rd Party peer PeerProcessor Announce
         this.errorLogger().info("Sample 3rd Party peer Processor ENABLED.");
     }
     
@@ -66,38 +66,14 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
     // OVERRIDES for Sample3rdPartyProcessor...
     //
     // These methods are stubbed out by default... but need to be implemented in derived classes.
-    // They are the "responders" to mDS events for devices
+    // They are the "responders" to mDS events for devices and initialize/start and stop "listeners"
+    // that are appropriate for the peer/3rd Party...(for example MQTT...)
+    //
+    // If the peer does not support tree-like organizations of input data in a pub/sub fashion, additional
+    // overrides may need to be implemented. Additionally, if special per-device message sending is required,
+    // additional overrides will need to be implemented. See AWSIoT, IoTHub, and WatsonIoT peers as examples. 
     //
     
-    // process a received new registration/registration update/deregistration, 
-    @Override
-    protected void processRegistration(Map data, String key) {
-        // XXX TO DO 
-        this.errorLogger().info("processRegistration(BASE): key: " + key + " data: " + data);
-    }
-    
-    // process a reregistration
-    @Override
-    public void processReRegistration(Map message) {
-        // XXX to do
-        this.errorLogger().info("processReRegistration(BASE): message: " + message);
-    }
-
-    // process a deregistration
-    @Override
-    public String[] processDeregistrations(Map message) {
-        // XXX to do
-        this.errorLogger().info("processDeregistrations(BASE): message: " + message);
-        return null;
-    }
-    
-    // process an observation/notification
-    @Override
-    public void processNotification(Map data) {
-        // XXXX TO DO
-        this.errorLogger().info("processNotification(BASE): data: " + data);
-    }
-
     // initialize any Sample 3rd Party peer listeners
     @Override
     public void initListener() {
@@ -118,5 +94,14 @@ public class Sample3rdPartyProcessor extends Processor implements PeerInterface 
         // just create a hash of something unique to the peer side... 
         String peer_secret = "";
         return Utils.createHash(peer_secret);
+    }
+    
+    // GenericSender Implementation: send a message
+    @Override
+    public void sendMessage(String to, String message) {
+        // send a message over Google Cloud...
+        this.errorLogger().info("sendMessage(Sample): Sending Message to: " + to + " message: " + message);
+        
+        // send this message to the peer
     }
 }

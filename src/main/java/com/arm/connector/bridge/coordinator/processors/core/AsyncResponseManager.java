@@ -71,12 +71,12 @@ public class AsyncResponseManager {
     }
 
     // record an AsyncResponse
-    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
+    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, PeerProcessor proc, String response_topic, String reply_topic, String message, String ep_name, String uri) {
         this.recordAsyncResponse(response, coap_verb, sender, proc, response_topic, reply_topic, message, ep_name, uri, null, null);
     }
 
     // record an AsyncResponse
-    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, Processor proc, String response_topic, String reply_topic, String message, String ep_name, String uri, AsyncResponseProcessor processor, Map orig_endpoint) {
+    public void recordAsyncResponse(String response, String coap_verb, GenericSender sender, PeerProcessor proc, String response_topic, String reply_topic, String message, String ep_name, String uri, AsyncResponseProcessor processor, Map orig_endpoint) {
         // we have to catch exceptions from the JSON parser... 
         try {
             if (response != null && response.length() > 0) {
@@ -163,7 +163,7 @@ public class AsyncResponseManager {
             if (sender != null) {
                 // GenericSender responder registered for this.. to pull the other values.. 
                 String response_topic = (String) record.get("response_topic");
-                Processor proc = (Processor) record.get("proc");
+                PeerProcessor proc = (PeerProcessor) record.get("proc");
                 String verb = (String) record.get("verb");
 
                 // construct the reply message value

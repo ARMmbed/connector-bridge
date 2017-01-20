@@ -792,192 +792,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         // return the discovery URL
         return url;
     }
-
-    // get the last response code
-    public int getLastResponseCode() {
-        return this.m_http.getLastResponseCode();
-    }
-
-    // invoke peristent HTTP Get
-    public String persistentHTTPGet(String url) {
-        return this.persistentHTTPGet(url, this.m_content_type);
-    }
-
-    // invoke peristent HTTPS Get
-    private String persistentHTTPGet(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpPersistentGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpPeristentGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("persistentHTTPGet: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke peristent HTTPS Get
-    public String persistentHTTPSGet(String url) {
-        return this.persistentHTTPSGet(url, this.m_content_type);
-    }
-
-    // invoke peristent HTTPS Get
-    private String persistentHTTPSGet(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsPersistentGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpsPeristentGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("persistentHTTPSGet: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP GET request (SSL)
-    private String httpsGet(String url) {
-        return this.httpsGet(url, this.m_content_type);
-    }
-
-    // invoke HTTP GET request (SSL)
-    private String httpsGet(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpsGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpsGet: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP GET request
-    private String httpGet(String url) {
-        return this.httpGet(url, this.m_content_type);
-    }
-
-    // invoke HTTP GET request
-    private String httpGet(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpGet: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP PUT request (SSL)
-    private String httpsPut(String url) {
-        return this.httpsPut(url, null);
-    }
-
-    // invoke HTTP PUT request (SSL)
-    private String httpsPut(String url, String data) {
-        return this.httpsPut(url, data, this.m_content_type);
-    }
-
-    // invoke HTTP PUT request (SSL)
-    private String httpsPut(String url, String data, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpsPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpsPut: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP PUT request
-    private String httpPut(String url) {
-        return this.httpPut(url, null);
-    }
-
-    // invoke HTTP PUT request
-    private String httpPut(String url, String data) {
-        return this.httpPut(url, data, this.m_content_type);
-    }
-
-    // invoke HTTP PUT request
-    private String httpPut(String url, String data, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpPut: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP POST request (SSL)
-    private String httpsPost(String url, String data, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpsPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpsPost: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP POST request - set the content_type to "plain/text" forcefully...
-    private String httpPost(String url, String data, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpPost: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP DELETE request
-    private String httpsDelete(String url) {
-        return this.httpsDelete(url, this.m_content_type);
-    }
-
-    // invoke HTTP DELETE request
-    private String httpsDelete(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpsDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpDelete: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
-    // invoke HTTP DELETE request
-    private String httpDelete(String url) {
-        return this.httpDelete(url, this.m_content_type);
-    }
-
-    // invoke HTTP DELETE request
-    private String httpDelete(String url, String content_type) {
-        String response = null;
-        if (this.useAPITokenAuth()) {
-            response = this.m_http.httpDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
-        }
-        else {
-            response = this.m_http.httpDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
-        }
-        this.errorLogger().info("httpDelete: response: " + this.m_http.getLastResponseCode());
-        return response;
-    }
-
+    
     // process the notification
     @Override
     public void processMDSMessage(HttpServletRequest request, HttpServletResponse response) {
@@ -1569,5 +1384,190 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private void pullDeviceLocationDescriptionInfo(Map endpoint) {
         //this.m_device_descriptive_location_res
         endpoint.put("meta_location", "n/a");
+    }
+    
+    // get the last response code
+    public int getLastResponseCode() {
+        return this.m_http.getLastResponseCode();
+    }
+
+    // invoke peristent HTTP Get
+    public String persistentHTTPGet(String url) {
+        return this.persistentHTTPGet(url, this.m_content_type);
+    }
+
+    // invoke peristent HTTPS Get
+    private String persistentHTTPGet(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpPersistentGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpPeristentGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("persistentHTTPGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke peristent HTTPS Get
+    public String persistentHTTPSGet(String url) {
+        return this.persistentHTTPSGet(url, this.m_content_type);
+    }
+
+    // invoke peristent HTTPS Get
+    private String persistentHTTPSGet(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsPersistentGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsPeristentGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("persistentHTTPSGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP GET request (SSL)
+    private String httpsGet(String url) {
+        return this.httpsGet(url, this.m_content_type);
+    }
+
+    // invoke HTTP GET request (SSL)
+    private String httpsGet(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpsGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP GET request
+    private String httpGet(String url) {
+        return this.httpGet(url, this.m_content_type);
+    }
+
+    // invoke HTTP GET request
+    private String httpGet(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpGet: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP PUT request (SSL)
+    private String httpsPut(String url) {
+        return this.httpsPut(url, null);
+    }
+
+    // invoke HTTP PUT request (SSL)
+    private String httpsPut(String url, String data) {
+        return this.httpsPut(url, data, this.m_content_type);
+    }
+
+    // invoke HTTP PUT request (SSL)
+    private String httpsPut(String url, String data, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpsPut: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP PUT request
+    private String httpPut(String url) {
+        return this.httpPut(url, null);
+    }
+
+    // invoke HTTP PUT request
+    private String httpPut(String url, String data) {
+        return this.httpPut(url, data, this.m_content_type);
+    }
+
+    // invoke HTTP PUT request
+    private String httpPut(String url, String data, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpPut: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP POST request (SSL)
+    private String httpsPost(String url, String data, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpsPost: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP POST request - set the content_type to "plain/text" forcefully...
+    private String httpPost(String url, String data, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpPost: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP DELETE request
+    private String httpsDelete(String url) {
+        return this.httpsDelete(url, this.m_content_type);
+    }
+
+    // invoke HTTP DELETE request
+    private String httpsDelete(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpsDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpsDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpDelete: response: " + this.m_http.getLastResponseCode());
+        return response;
+    }
+
+    // invoke HTTP DELETE request
+    private String httpDelete(String url) {
+        return this.httpDelete(url, this.m_content_type);
+    }
+
+    // invoke HTTP DELETE request
+    private String httpDelete(String url, String content_type) {
+        String response = null;
+        if (this.useAPITokenAuth()) {
+            response = this.m_http.httpDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+        }
+        else {
+            response = this.m_http.httpDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
+        }
+        this.errorLogger().info("httpDelete: response: " + this.m_http.getLastResponseCode());
+        return response;
     }
 }

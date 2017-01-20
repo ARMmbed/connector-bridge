@@ -32,11 +32,11 @@ import java.util.ArrayList;
 import java.util.Map;
 
 /**
- * Base Peer Processor Manager: Manages a collection of MQTT-based processors (including a generic one) for MS IoTEventHub Services
+ * Base Peer PeerProcessor Manager: Manages a collection of MQTT-based processors (including a generic one) for MS IoTEventHub Services
  *
  * @author Doug Anson
  */
-public class BasePeerProcessorFactory extends Processor implements Transport.ReceiveListener, PeerInterface {
+public class BasePeerProcessorFactory extends PeerProcessor implements Transport.ReceiveListener, PeerInterface {
 
     protected ArrayList<GenericMQTTProcessor> m_mqtt_list = null;
     protected HttpTransport m_http = null;
