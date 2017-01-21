@@ -1,6 +1,6 @@
 /*
- * @file  GenericSender.java
- * @brief interface for generic sending of messages
+ * @file  SubscriptionProcessor.java
+ * @brief interface for for additional handling of subscribe/unsubscribe events (OPTIONAL)
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -22,10 +22,13 @@
 package com.arm.connector.bridge.coordinator.processors.interfaces;
 
 /**
- * GenericSender Interface defines how each "sender" must send a given message
+ * Subscription Processor for handling events during subscription processing
  * @author Doug Anson
  */
-public interface GenericSender {
-    // send a message
-    public void sendMessage(String to,String message);
+public interface SubscriptionProcessor {
+    // subscription
+    public void subscribe(String domain, String ep, String ept, String path);
+    
+    // unsubscribe
+    public void unsubscribe(String domain, String ep, String ept, String path);
 }

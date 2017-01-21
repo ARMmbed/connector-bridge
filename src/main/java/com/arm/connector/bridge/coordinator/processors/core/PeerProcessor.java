@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.core;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
+import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
 import com.arm.connector.bridge.core.TypeDecoder;
 import com.arm.connector.bridge.core.Utils;
 import java.util.HashMap;
@@ -39,7 +40,7 @@ import org.apache.commons.codec.binary.Base64;
  */
 public class PeerProcessor extends Processor implements GenericSender {
     private AsyncResponseManager m_async_response_manager = null;
-    private SubscriptionList m_subscriptions = null;
+    private SubscriptionList m_subscription_list_manager = null;
     private String m_mds_topic_root = null;
     private TypeDecoder m_type_decoder = null;
     private boolean m_unified_format_enabled = false;
@@ -59,7 +60,7 @@ public class PeerProcessor extends Processor implements GenericSender {
         this.m_async_response_manager = new AsyncResponseManager(orchestrator);
         
         // initialize subscriptions
-        this.m_subscriptions = new SubscriptionList(orchestrator.errorLogger(), orchestrator.preferences());
+        this.m_subscription_list_manager = new SubscriptionList(orchestrator.errorLogger(), orchestrator.preferences());
         
         // set our domain
         this.m_mds_domain = orchestrator.getDomain();
@@ -90,6 +91,13 @@ public class PeerProcessor extends Processor implements GenericSender {
         }
     }
     
+    // add a subscriptions processor
+    protected void addSubscriptionHandler(SubscriptionProcessor subscription_processor) {
+        if (this.m_subscription_list_manager != null) {
+            this.m_subscription_list_manager.addSubscriptionHandler(subscription_processor);
+        }
+    }
+    
     // process a received new registration
     protected void processRegistration(Map data, String key) {
         List endpoints = (List) data.get(key);
@@ -104,7 +112,7 @@ public class PeerProcessor extends Processor implements GenericSender {
             String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
 
             // DEBUG
-            this.errorLogger().info("processNewRegistration(Google Cloud) : Publishing new registration topic: " + topic + " message:" + message);
+            this.errorLogger().info("processNewRegistration(Peer) : Publishing new registration topic: " + topic + " message:" + message);
             this.sendMessage(topic, message);
 
             // send it also raw... over a subtopic
@@ -112,7 +120,7 @@ public class PeerProcessor extends Processor implements GenericSender {
             message = this.jsonGenerator().generateJson(endpoint);
 
             // DEBUG
-            this.errorLogger().info("processNewRegistration(Google Cloud) : Publishing new registration topic: " + topic + " message:" + message);
+            this.errorLogger().info("processNewRegistration(Peer) : Publishing new registration topic: " + topic + " message:" + message);
             this.sendMessage(topic, message);
 
             // re-subscribe if previously subscribed to observable resources
@@ -149,9 +157,9 @@ public class PeerProcessor extends Processor implements GenericSender {
             for (int j = 0; resources != null && j < resources.size(); ++j) {
                 Map resource = (Map) resources.get(j);
                 if (this.isObservableResource(resource)) {
-                    this.errorLogger().info("processReRegistration(Google Cloud) : CoAP re-registration: " + endpoint + " Resource: " + resource);
+                    this.errorLogger().info("processReRegistration(Peer) : CoAP re-registration: " + endpoint + " Resource: " + resource);
                     if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
-                        this.errorLogger().info("processReRegistration(Google Cloud) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
+                        this.errorLogger().info("processReRegistration(Peer) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
                         this.processRegistration(data, "reg-updates");
                         this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
                     }
@@ -165,6 +173,9 @@ public class PeerProcessor extends Processor implements GenericSender {
         String[] deregistrations = this.parseDeRegistrationBody(parsed);
         this.orchestrator().processDeregistrations(deregistrations);
         for (int i = 0; i < deregistrations.length; ++i) {
+            this.subscriptionsList().removeEndpointSubscriptions(deregistrations[i]);
+        }
+        for (int i = 0; i < deregistrations.length; ++i) {
             this.m_endpoint_type_list.remove(deregistrations[i]);
         }
         return deregistrations;
@@ -173,7 +184,7 @@ public class PeerProcessor extends Processor implements GenericSender {
     // process an observation
     public void processNotification(Map data) {
         // DEBUG
-        //this.errorLogger().info("processNotification(Google Cloud)...");
+        //this.errorLogger().info("processNotification(Peer)...");
 
         // get the list of parsed notifications
         List notifications = (List) data.get("notifications");
@@ -185,7 +196,7 @@ public class PeerProcessor extends Processor implements GenericSender {
             String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
 
             // DEBUG
-            //this.errorLogger().info("processNotification(Google Cloud): Decoded Payload: " + decoded_coap_payload);
+            //this.errorLogger().info("processNotification(Peer): Decoded Payload: " + decoded_coap_payload);
             // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
             Map json_parsed = this.tryJSONParse(decoded_coap_payload);
             if (json_parsed != null && json_parsed.isEmpty() == false) {
@@ -227,7 +238,7 @@ public class PeerProcessor extends Processor implements GenericSender {
                 this.errorLogger().info("processNotification(Peer): Active subscription for ep_name: " + ep_name + " ep_type: " + ep_type + " uri: " + uri);
                 this.errorLogger().info("processNotification(Peer): Publishing notification: payload: " + coap_json + " topic: " + topic);
 
-                // publish to Google Cloud...
+                // publish to Peer...
                 this.sendMessage(topic, coap_json);
             }
             else {
@@ -359,7 +370,7 @@ public class PeerProcessor extends Processor implements GenericSender {
         }
     }
     
-    // record an async response to process later (Google Cloud Peer)
+    // record an async response to process later (Peer Peer)
     private void recordAsyncResponse(String response, String coap_verb, String response_topic, String message, String ep_name, String uri) {
         this.asyncResponseManager().recordAsyncResponse(response, coap_verb, this, this, response_topic, null, message, ep_name, uri);
     }
@@ -435,7 +446,7 @@ public class PeerProcessor extends Processor implements GenericSender {
     
     // subscriptions list
     protected SubscriptionList subscriptionsList() {
-        return this.m_subscriptions;
+        return this.m_subscription_list_manager;
     }
 
     // get the AsyncResponseManager
@@ -999,7 +1010,7 @@ public class PeerProcessor extends Processor implements GenericSender {
     // GenericSender Implementation: send a message
     @Override
     public void sendMessage(String to, String message) {
-        // send a message over Google Cloud...
+        // send a message over Peer...
         this.errorLogger().info("sendMessage(Peer): Sending Message to: " + to + " message: " + message);
         
         // send the message to the peer environment

@@ -24,14 +24,12 @@ package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
-import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
 import java.util.HashMap;
-import java.util.Map;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 
