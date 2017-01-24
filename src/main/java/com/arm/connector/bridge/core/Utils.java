@@ -703,4 +703,31 @@ public class Utils {
         }
         return my_string;
     }
+    
+    // replace "n" occurances of a given char within a string (Google Cloud specific formatting)
+    public static String replaceCharOccurances(String data,char m,char r,int num_to_replace) {
+        if (data != null && data.length() > 0) {
+            // first are going to strip out the first 3 "slashes" and leave the rest... additional formatting will be applied later
+            StringBuilder sb = new StringBuilder();
+            int length = data.length();
+            for(int i=0;i<length;++i) {
+                if (data.charAt(i) == m && num_to_replace > 0) {
+                    sb.append(r);
+                    --num_to_replace;
+                }
+                else if (data.charAt(i) == m && num_to_replace == 0) {
+                    // we found another ... so add one more delimiter then add the original and continue... do this only once...
+                    // (Google Cloud specific formatting)
+                    sb.append(r);
+                    sb.append(m);
+                    num_to_replace = -1;
+                }
+                else {
+                    sb.append(data.charAt(i));
+                }
+            }
+            return sb.toString();
+        }
+        return data;
+    }
 }

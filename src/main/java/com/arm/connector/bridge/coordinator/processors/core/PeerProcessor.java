@@ -26,6 +26,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.TopicParseInterface;
 import com.arm.connector.bridge.core.TypeDecoder;
 import com.arm.connector.bridge.core.Utils;
 import java.util.HashMap;
@@ -38,7 +39,7 @@ import org.apache.commons.codec.binary.Base64;
  *
  * @author Doug Anson
  */
-public class PeerProcessor extends Processor implements GenericSender {
+public class PeerProcessor extends Processor implements GenericSender, TopicParseInterface {
     private AsyncResponseManager m_async_response_manager = null;
     private SubscriptionList m_subscription_list_manager = null;
     private String m_mds_topic_root = null;
@@ -536,32 +537,20 @@ public class PeerProcessor extends Processor implements GenericSender {
         return is_endpoint_notification_subscription;
     }
     
-    // get the resource URI from the topic (request topic sent) 
-    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
-    private String getResourceURIFromTopic(String topic, String ep_type, String ep_name) {
-        String modified_topic = this.removeRequestTagFromTopic(topic);  // strips <topic_root>/request/endpoints/ POSITION SENSITIVE
-        return modified_topic.replace(ep_type + "/" + ep_name, "");      // strips <ep_type>/<endpoint name> POSITION SENSITIVE
-    }
-
-    // strip off the request TAG
-    // mbed/request/<ep_type>/<endpoint>/<URI> --> <ep_type>/<endpoint>/<URI> POSITION SENSITIVE
-    protected String removeRequestTagFromTopic(String topic) {
-        if (topic != null) {
-            String stripped = topic.replace(this.getTopicRoot() + this.getDomain() + this.getRequestTag() + "/", "");
-            this.errorLogger().info("removeRequestTagFromTopic: topic: " + topic + " stripped: " + stripped);
-            return stripped;
-        }
-        return null;
-    }
-
     // response is an AsyncResponse?
     protected boolean isAsyncResponse(String response) {
         return (response.contains("\"async-response-id\":") == true);
     }
     
+    // returns  /mbed/<domain>/<qualifier>
+    protected String createBaseTopic(String qualifier) {
+        return this.getTopicRoot() + this.getDomain() + "/" + qualifier;
+    }
+    
     // get the endpoint name from the topic (request topic sent) 
     // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
-    private String getEndpointNameFromTopic(String topic) {
+    @Override
+    public String getEndpointNameFromTopic(String topic) {
         String modified_topic = this.removeRequestTagFromTopic(topic); // strips <topic_root>/request/endpoints/ 
         String[] items = modified_topic.split("/");
         if (items.length >= 2 && items[1].trim().length() > 0) { // POSITION SENSITIVE
@@ -572,7 +561,8 @@ public class PeerProcessor extends Processor implements GenericSender {
     
     // get the endpoint type from the topic (request topic sent) 
     // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
-    private String getEndpointTypeFromTopic(String topic) {
+    @Override
+    public String getEndpointTypeFromTopic(String topic) {
         String modified_topic = this.removeRequestTagFromTopic(topic); // strips <topic_root>/request/endpoints/ 
         String[] items = modified_topic.split("/");
         if (items.length >= 1 && items[0].trim().length() > 0) { // POSITION SENSITIVE
@@ -583,7 +573,8 @@ public class PeerProcessor extends Processor implements GenericSender {
 
     // get the resource URI from the topic (request topic sent) 
     // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI>
-    protected String getResourceURIFromTopic(String topic) {
+    @Override
+    public String getResourceURIFromTopic(String topic) {
         // get the endpoint type 
         String ep_type = this.getEndpointTypeFromTopic(topic);
 
@@ -594,9 +585,30 @@ public class PeerProcessor extends Processor implements GenericSender {
         return this.getResourceURIFromTopic(topic, ep_type, ep_name);
     }
     
-    // returns  /mbed/<domain>/<qualifier
-    protected String createBaseTopic(String qualifier) {
-        return this.getTopicRoot() + this.getDomain() + "/" + qualifier;
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    @Override
+    public String getCoAPVerbFromTopic(String topic) {
+        // not present in topic by default 
+        this.errorLogger().warning("getCoAPVerbFromTopic(Peer): WARNING topic: " + topic + " requesting CoAP verb (not present)");
+        return null;
+    }
+    
+    // get the resource URI from the topic (request topic sent) 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    protected String getResourceURIFromTopic(String topic, String ep_type, String ep_name) {
+        String modified_topic = this.removeRequestTagFromTopic(topic);  // strips <topic_root>/request/endpoints/ POSITION SENSITIVE
+        return modified_topic.replace(ep_type + "/" + ep_name, "");      // strips <ep_type>/<endpoint name> POSITION SENSITIVE
+    }
+    
+    // strip off the request TAG
+    // mbed/request/<ep_type>/<endpoint>/<URI> --> <ep_type>/<endpoint>/<URI> POSITION SENSITIVE
+    protected String removeRequestTagFromTopic(String topic) {
+        if (topic != null) {
+            String stripped = topic.replace(this.getTopicRoot() + this.getDomain() + this.getRequestTag() + "/", "");
+            this.errorLogger().info("removeRequestTagFromTopic(Peer): topic: " + topic + " stripped: " + stripped);
+            return stripped;
+        }
+        return null;
     }
 
     // returns /mbed/<domain>/new_registration/<ep_type>/<endpoint>

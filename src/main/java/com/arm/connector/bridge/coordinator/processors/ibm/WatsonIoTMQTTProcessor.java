@@ -811,13 +811,15 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     }
     
     // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
+    @Override
+    public String getEndpointNameFromTopic(String topic) {
         // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
         return this.getTopicElement(topic, 4);
     }
 
     // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
+    @Override
+    public String getCoAPVerbFromTopic(String topic) {
         // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
         return this.getTopicElement(topic, 6);
     }

@@ -749,13 +749,15 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     }
     
     // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
+    @Override
+    public String getEndpointNameFromTopic(String topic) {
         // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
         return this.getTopicElement(topic, 3);                                   // POSITION SENSITIVE
     }
 
     // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
+    @Override
+    public String getCoAPVerbFromTopic(String topic) {
         // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
         return this.getTopicElement(topic, 1);                                   // POSITION SENSITIVE
     }

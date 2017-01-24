@@ -410,7 +410,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         String uri = this.getCoAPURI(message);
         if (uri == null || uri.length() == 0) {
             // optionally pull the CoAP URI Path from the MQTT topic (SECONDARY)
-            uri = this.getCoAPURIFromTopic(topic);
+            uri = this.getResourceURIFromTopic(topic);
         }
 
         // pull the CoAP Payload from the message itself... its JSON... 
@@ -946,19 +946,22 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     }
     
     // get the endpoint name from the MQTT topic
-    private String getEndpointNameFromTopic(String topic) {
+    @Override
+    public String getEndpointNameFromTopic(String topic) {
         // format: devices/__EPNAME__/messages/devicebound/#
         return this.getTopicElement(topic, 1);
     }
 
     // get the CoAP verb from the MQTT topic
-    private String getCoAPVerbFromTopic(String topic) {
+    @Override
+    public String getCoAPVerbFromTopic(String topic) {
         // format: devices/__EPNAME__/messages/devicebound/coap_verb=put....
         return this.getTopicElement(topic, "coap_verb");
     }
 
     // get the CoAP URI from the MQTT topic
-    private String getCoAPURIFromTopic(String topic) {
+    @Override
+    public String getResourceURIFromTopic(String topic) {
         // format: devices/__EPNAME__/messages/devicebound/coap_uri=....
         return this.getTopicElement(topic, "coap_uri");
     }
