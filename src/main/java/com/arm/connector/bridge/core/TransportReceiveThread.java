@@ -36,10 +36,10 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
     /**
      * Constructor
      *
-     * @param mqtt
+     * @param transport
      */
-    public TransportReceiveThread(Transport mqtt) {
-        this.m_transport = mqtt;
+    public TransportReceiveThread(Transport transport) {
+        this.m_transport = transport;
         this.m_transport.setOnReceiveListener(this);
         this.m_running = false;
         this.m_listener = null;

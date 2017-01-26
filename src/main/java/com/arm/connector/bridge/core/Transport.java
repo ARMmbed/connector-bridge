@@ -62,6 +62,7 @@ public abstract class Transport extends BaseClass {
 
     /**
      * main thread loop
+     * @return  processing status
      */
     public abstract boolean receiveAndProcess();
 

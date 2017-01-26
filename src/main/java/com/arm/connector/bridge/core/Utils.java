@@ -690,7 +690,7 @@ public class Utils {
     }
     
     // simple ugly replacement of oddball characters
-    public static String my_replace(String my_string,char out_char,char in_char) {
+    public static String replaceAllCharOccurances(String my_string,char out_char,char in_char) {
         // fix up from config file
         if (my_string != null && my_string.length() > 0) {
             char[] tmp_array = my_string.toCharArray();

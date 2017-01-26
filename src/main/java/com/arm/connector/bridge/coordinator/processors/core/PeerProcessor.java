@@ -134,7 +134,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                     this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
                 else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
                     // auto-subscribe to observable resources... if enabled.
@@ -142,7 +142,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                     this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
             }
         }
@@ -162,7 +162,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                     if (this.subscriptionsList().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
                         this.errorLogger().info("processReRegistration(Peer) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
                         this.processRegistration(data, "reg-updates");
-                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                     }
                 }
             }
@@ -254,7 +254,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         String verb = "PUT";
 
         // DEBUG
-        this.errorLogger().info("onMessageReceive(MQTT-STD): Topic: " + topic + " message: " + message);
+        this.errorLogger().info("onMessageReceive(Peer): Topic: " + topic + " message: " + message);
 
         // Endpoint Discovery....
         if (this.isEndpointDiscovery(topic)) {
@@ -303,19 +303,19 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                 if (this.isAsyncResponse(json) == true) {
                     if (verb.equalsIgnoreCase("get") == true || verb.equalsIgnoreCase("put") == true) {
                         // DEBUG
-                        this.errorLogger().info("onMessageReceive(MQTT-STD): saving async response (" + verb + ") on topic: " + response_topic + " value: " + json);
+                        this.errorLogger().info("onMessageReceive(Peer): saving async response (" + verb + ") on topic: " + response_topic + " value: " + json);
 
                         // its an AsyncResponse to a GET or PUT.. so record it... 
                         this.recordAsyncResponse(json, verb, response_topic, message, ep_name, uri);
                     }
                     else {
                         // we dont process AsyncResponses to POST and DELETE
-                        this.errorLogger().info("onMessageReceive(MQTT-STD): AsyncResponse (" + verb + ") ignored (OK).");
+                        this.errorLogger().info("onMessageReceive(Peer): AsyncResponse (" + verb + ") ignored (OK).");
                     }
                 }
                 else {
                     // DEBUG
-                    this.errorLogger().info("onMessageReceive(MQTT-STD): sending immediate reply (" + verb + ") on topic: " + response_topic + " value: " + json);
+                    this.errorLogger().info("onMessageReceive(Peer): sending immediate reply (" + verb + ") on topic: " + response_topic + " value: " + json);
 
                     // not an AsyncResponse... so just emit it immediately... (GET only)
                     this.sendMessage(response_topic, json);
@@ -344,29 +344,29 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             verb = (String) parsed.get("verb");
             if (parsed != null && verb.equalsIgnoreCase("unsubscribe") == true) {
                 // Unsubscribe 
-                this.errorLogger().info("onMessageReceive(MQTT-STD): sending subscription request (remove subscription)");
+                this.errorLogger().info("onMessageReceive(Peer): sending subscription request (remove subscription)");
                 json = this.orchestrator().unsubscribeFromEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed);
 
                 // remove from the subscription list
-                this.errorLogger().info("onMessageReceive(MQTT-STD): removing subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                this.errorLogger().info("onMessageReceive(Peer): removing subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
                 this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
             }
             else if (parsed != null && verb.equalsIgnoreCase("subscribe") == true) {
                 // Subscribe
-                this.errorLogger().info("onMessageReceive(MQTT-STD): sending subscription request (add subscription)");
+                this.errorLogger().info("onMessageReceive(Peer): sending subscription request (add subscription)");
                 json = this.orchestrator().subscribeToEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed, true);
 
                 // add to the subscription list
-                this.errorLogger().info("onMessageReceive(MQTT-STD): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
-                this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, ep_type, uri);
+                this.errorLogger().info("onMessageReceive(Peer): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, ep_type, uri, true); // assume resource is observable...
             }
             else if (parsed != null) {
                 // verb not recognized
-                this.errorLogger().info("onMessageReceive(MQTT-STD): Unable to process subscription request: unrecognized verb: " + verb);
+                this.errorLogger().info("onMessageReceive(Peer): Unable to process subscription request: unrecognized verb: " + verb);
             }
             else {
                 // invalid message
-                this.errorLogger().info("onMessageReceive(MQTT-STD): Unable to process subscription request: invalid message: " + message);
+                this.errorLogger().info("onMessageReceive(Peer): Unable to process subscription request: invalid message: " + message);
             }
         }
     }

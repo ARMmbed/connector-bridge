@@ -193,7 +193,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                     this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
 
                 // auto-subscribe
@@ -203,7 +203,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                     this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
             }
 

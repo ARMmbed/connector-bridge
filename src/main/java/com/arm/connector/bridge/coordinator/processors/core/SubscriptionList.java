@@ -54,13 +54,13 @@ public class SubscriptionList extends BaseClass {
     }
 
     // add subscription
-    public void addSubscription(String domain, String endpoint, String ep_type, String uri) {
+    public void addSubscription(String domain, String endpoint, String ep_type, String uri, boolean is_observable) {
         domain = this.checkAndDefaultDomain(domain);
         if (!this.containsSubscription(domain, endpoint, ep_type, uri)) {
             this.errorLogger().info("Adding Subscription: " + domain + ":" + endpoint + ":" + ep_type + ":" + uri);
             this.m_subscriptions.add(this.makeSubscription(domain, endpoint, ep_type, uri));
             if (this.m_subscription_processor != null) {
-                this.m_subscription_processor.subscribe(domain,endpoint,ep_type,uri);
+                this.m_subscription_processor.subscribe(domain,endpoint,ep_type,uri,is_observable);
             }
         }
     }

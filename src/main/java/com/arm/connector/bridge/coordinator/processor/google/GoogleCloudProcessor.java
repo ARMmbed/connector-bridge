@@ -38,14 +38,16 @@ import com.google.api.services.pubsub.model.PublishRequest;
 import com.google.api.services.pubsub.model.PubsubMessage;
 import com.google.common.collect.ImmutableList;
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Google Cloud peer processor
+ * Google Cloud PubSub peer processor
  *
  * @author Doug Anson
  */
-public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface, GenericSender, SubscriptionProcessor {
+public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface, GenericSender, SubscriptionProcessor, GoogleCloudReceiveThread.ReceiveListener {
     private GoogleCredential m_credential = null;
     private Pubsub m_pubsub = null;
     private String m_app_name = null;
@@ -53,8 +55,9 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private boolean m_logged_in = false;
     private String m_google_cloud_topic_slash_delimiter = null;
     private String m_google_cloud_topic_segment_delimiter = null;
-    
-    private HashMap<String, Object> m_google_cloud_gw_endpoints = null;
+    private int m_sleep_time = 0;
+    private int m_max_messages = 0;
+    private ArrayList<HashMap<String,Object>> m_receivers = null;
 
     // (OPTIONAL) Factory method for initializing the Sample 3rd Party peer
     public static GoogleCloudProcessor createPeerProcessor(Orchestrator manager) {
@@ -76,17 +79,24 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         this.m_mds_domain = manager.getDomain();
         this.m_suffix = suffix;
         
+        // Google Cloud peer PeerProcessor Announce
+        this.errorLogger().info("Google Cloud Processor ENABLED.");
+        
+        // get the parameters for the receiver thread
+        this.m_sleep_time = this.orchestrator().preferences().intValueOf("google_cloud_sleep_time",this.m_suffix);
+        this.m_max_messages = this.orchestrator().preferences().intValueOf("google_cloud_max_messages",this.m_suffix);
+        
         // we need extended subscription handling
         this.addSubscriptionHandler(this);
+        
+        // initialize the receivers list
+        this.m_receivers = new ArrayList<>();
         
         // initialize the topic root
         this.initTopicRoot("google_cloud_topic_root");
         
         // auto-subscribe behavior
-        this.initAutoSubscribe("google_cloud_obs_auto_subscribe");
-        
-        // Google Cloud peer PeerProcessor Announce
-        this.errorLogger().info("Google Cloud Processor ENABLED.");
+        this.initAutoSubscribe("google_cloud_obs_auto_subscribe");     
         
         // Google Cloud has odd topics... that are not hierarchy-oriented... so we have delimit them... 
         this.m_google_cloud_topic_slash_delimiter = this.orchestrator().preferences().valueOf("google_cloud_topic_slash_delimiter",this.m_suffix);
@@ -107,33 +117,24 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         return com.arm.connector.bridge.core.Utils.createHash(this.m_auth_json);
     }
     
-    // intialize a listener for the peer
+    // message receiver
     @Override
-    public void initListener() {
-        // XXX to do
-        this.errorLogger().info("initListener(Google Cloud): not implemented");
+    public void onMessageReceive(String topic, String message) {
+        // DEBUG
+        this.errorLogger().info("onMessageReceive: topic: " + topic + " message: " + message);
         
-        // register "onMessageReceive()" to handle and process requests from Google Cloud
-    }
-
-    // stop the listener for a peer
-    @Override
-    public void stopListener() {
-        // XXX to do
-        this.errorLogger().info("stopListener(Google Cloud): not implemented");
-        
-        // stop the Google Cloud listener...
+        // call the superclass to process it
+        super.onMessageReceive(topic, message);
     }
     
-    // create the topic/subscription from the values
-    // FORMAT: __TOPIC_ROOT__:__COMMAND_TYPE__:__DEVICE_TYPE__:__EPNAME__:__URI__
+    //
+    // create the topic/subscription from the values (connector-bridge format)
+    // FORMAT: <TOPIC_ROOT>/<COMMAND_TYPE>/<ENDPOINT_TYPE>/<ENDPOINT_NAME><URI>
     // URI has a leading slash already...
+    // COMNAND_TYPE is either "notify" ("observations" for legacy) or "request/endpoints"
+    //
     private String createBaseTopicAndSubscriptionStructure(String root,String cmd,String ep,String ept,String uri) {
-        String base = root + this.m_google_cloud_topic_segment_delimiter + 
-                      cmd + this.m_google_cloud_topic_segment_delimiter + 
-                      ept + this.m_google_cloud_topic_segment_delimiter + 
-                      ep + this.m_google_cloud_topic_segment_delimiter + 
-                      uri;
+        String base = root + "/" + cmd + "/" + ept + "/" +ep + uri;
         return base;
     }
     
@@ -148,6 +149,57 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
         }
         return null;
+    }
+    
+    // get the observability of a given resource
+    @Override
+    protected boolean isObservableResource(Map resource) {
+        // we have to make (fake) everything as observable so that we can setup the appropriate subscriptions
+        return true;
+    }
+    
+    // get specific description
+    private int getSubscription(String subscription) {
+        int index = -1;
+        
+        if (subscription != null && subscription.length() > 0) {
+            for(int i=0;i<this.m_receivers.size() && index < 0;++i) {
+                HashMap<String,Object> entry = this.m_receivers.get(i);
+                String t_subscription = (String)entry.get("subscription");
+                if (t_subscription.equalsIgnoreCase(subscription) == true) {
+                    index = i;
+                }
+            }
+        }
+        return index;
+    }
+    
+    // subscription in list?
+    private boolean subscribed(String subscription) {
+        return (this.getSubscription(subscription) >= 0);
+    }
+    
+    // add subscription
+    private void addSubscription(String subscription) {
+        if (this.subscribed(subscription) == false) {
+            HashMap<String,Object> entry = new HashMap<>();
+            entry.put("subscription", subscription);
+            GoogleCloudReceiveThread receiver = new GoogleCloudReceiveThread(this,this.m_pubsub,this.m_sleep_time,this.m_max_messages,this.connectorSubscriptionToGoogleSubscription(subscription));
+            receiver.start_listening();
+            entry.put("receiver",receiver);
+            this.m_receivers.add(entry);
+        }
+    }
+    
+    // remove subscription
+    public void removeSubscription(String subscription) {
+        int index = this.getSubscription(subscription);
+        if (index >= 0) {
+            HashMap<String,Object> entry = this.m_receivers.get(index);
+            GoogleCloudReceiveThread receiver = (GoogleCloudReceiveThread)entry.get("receiver");
+            receiver.stop_listening();
+            this.m_receivers.remove(entry);
+        }
     }
     
     // get the endpoint name from the topic (request topic sent) 
@@ -173,6 +225,11 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     
     // subscribe (cmd)
     private void subscribe(String domain, String ep, String ept, String path, String cmd) {
+        this.subscribe(domain,ep,ept,path,cmd,true);
+    }
+    
+    // subscribe (cmd), optional listener
+    private void subscribe(String domain, String ep, String ept, String path, String cmd,boolean enable_listener) {
         // Topic created
         String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         this.googleCloudCreateTopic(topic);
@@ -180,31 +237,57 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         // Subscription created
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         this.googleCloudCreateSubscription(topic,subscription);
+        
+        // add a listener (if requested)
+        if (enable_listener == true) {
+            this.addSubscription(subscription);
+        }
     }
     
     // unsubscribe (cmd)
     void unsubscribe(String domain, String ep, String ept, String path, String cmd) {
-        // Topic removed
-        String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.googleCloudRemoveTopic(topic);
-        
         // Subscription removed
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         this.googleCloudRemoveSubscription(subscription);
+        this.removeSubscription(subscription);
+        
+        // Topic removed
+        String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
+        this.googleCloudRemoveTopic(topic);
     } 
     
+    // create the "request" token 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
+    private String createRequestToken() {
+        return "request" + this.m_google_cloud_topic_segment_delimiter + "endpoints";
+    }
+    
     // additional subscription handling 
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
     @Override
-    public void subscribe(String domain, String ep, String ept, String path) {
-        // subscribe to notifications
-        this.subscribe(domain, ep, ept, path, this.m_observation_key);
+    public void subscribe(String domain, String ep, String ept, String path, boolean is_observable) {
+        // subscribe to notifications (no listener)
+        this.subscribe(domain, ep, ept, path, this.m_observation_key,false);
+        
+        // also subscribe to CoAP request for: get, put, post, delete processing (listen on these...)
+        this.subscribe(domain, ep, ept, path, this.createRequestToken(),true);
+        
+        // also setup the CoAP command response topic (no listener)
+        this.subscribe(domain, ep, ept, path, "cmd-response", false);
     }
     
     // unsubscribe handling
+    // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
     @Override
     public void unsubscribe(String domain, String ep, String ept, String path) {
         // unsubscribe to notifications
         this.unsubscribe(domain, ep, ept, path, this.m_observation_key);
+        
+        // also unsubscribe from CoAP request for get, put, post, delete processing
+        this.unsubscribe(domain, ep, ept, path, this.createRequestToken());
+        
+        // also remove the CoAP command response topic
+        this.unsubscribe(domain, ep, ept, path, "cmd-response");
     }
     
     // GenericSender Implementation: send a message
@@ -218,7 +301,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             else {
                 try {
                     // ensure we have proper delimiting
-                    String goo_topic = this.convertMessageTopicStructure(topic);
+                    String goo_topic = this.connectorTopicToGoogleTopic(topic);
 
                     // DEBUG
                     //this.errorLogger().info("sendMessage(GoogleCloud): orig topic: " + topic + " converted: " + goo_topic);
@@ -253,7 +336,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             
             // remove \\00A0 as it can be copied during config setting of the auth json by the configurator...
             // hex(A0) = dec(160)... just replace with an ordinary space... that will make Google's JSON parser happy...
-            edited_auth_json = com.arm.connector.bridge.core.Utils.my_replace(auth_json,(char)160,' ');
+            edited_auth_json = com.arm.connector.bridge.core.Utils.replaceAllCharOccurances(auth_json,(char)160,' ');
             
             // DEBUG
             //this.errorLogger().info("googleCloudLogin():AUTH:" + edited_auth_json);
@@ -272,7 +355,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             this.m_pubsub = new Pubsub.Builder(Utils.getDefaultTransport(),Utils.getDefaultJsonFactory(), initializer)
                              .setApplicationName(this.m_app_name)
                              .build();
-
+        
             // success!
             success = true;
             
@@ -294,14 +377,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         if (this.m_pubsub != null) {
             try {
                 // Create the google-compatiable subscription
-                String goo_subscription = this.convertSubscriptionStructure(subscription);
+                String goo_subscription = this.connectorSubscriptionToGoogleSubscription(subscription);
                 
                 // remove the subscription
                 this.errorLogger().info("googleCloudRemoveSubscription: removing subscription: " + goo_subscription + "...");
                 this.m_pubsub.projects().subscriptions().delete(goo_subscription).execute();
             }
             catch (Exception ex) {
-                this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
+                // DEBUG
+                // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
             }
         }
     }
@@ -311,14 +395,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         if (this.m_pubsub != null) {
             try {
                 // Create the google-compatiable topic
-                String goo_topic = this.convertTopicStructure(topic);
+                String goo_topic = this.connectorTopicToGoogleTopic(topic);
                 
                 // remove the topic
                 this.errorLogger().info("googleCloudRemoveTopic: removing topic: " + goo_topic + "...");
                 this.m_pubsub.projects().topics().delete(goo_topic).execute();
             }
             catch (Exception ex) {
-                this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
+                // DEBUG
+                //this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
             }
         }
     }
@@ -331,7 +416,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.googleCloudRemoveTopic(topic);
                 
                 // Create the google-compatiable topic
-                String goo_topic = this.convertTopicStructure(topic);
+                String goo_topic = this.connectorTopicToGoogleTopic(topic);
                 
                 // Create the Topic
                 this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
@@ -357,10 +442,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.googleCloudRemoveSubscription(subscription);
                 
                 // Create the google-compatiable topic
-                String goo_topic = this.convertTopicStructure(topic);
+                String goo_topic = this.connectorTopicToGoogleTopic(topic);
                 
                 // Create the google-compatiable subscription
-                String goo_subscription = this.convertSubscriptionStructure(subscription);
+                String goo_subscription = this.connectorSubscriptionToGoogleSubscription(subscription);
                 
                 // Create the Observation Subscription
                 this.errorLogger().info("googleCloudCreateSubscription: Creating Subscription: " + goo_subscription);
@@ -379,33 +464,98 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         return null;
     }
     
-    // convert the format "a/b/c" to "a.b.c" since Google PubSub Cloud Topics/Subscriptions can't have "/" in them... 
-    private String convertStructure(String data,String type) {
-        String base = "projects/" + this.m_app_name + "/" + type + "/";
+    // create preamble
+    private String createPreamble(String type) {
+        return "projects/" + this.m_app_name + "/" + type + "/";
+    }
+
+    // Connector-bridge topic format conversion TO Google Cloud PubSub format
+    private String convertToPubSubFormat(String data,String type,int num_occurances) {
+        // create the preamble
+        String preamble = this.createPreamble(type);
         
         // prevent having the base entered twice... 
-        if (data != null && data.contains(base) == true)
+        if (data != null && data.contains(preamble) == true) {
+            // DEBUG
+            this.errorLogger().info("convertToPubSubFormat: Already converted to Google: " + data);
+            
             // already formatted... just return
             return data;
+        }
+
+        // convert the segment delimiter in the original format
+        String t1 = com.arm.connector.bridge.core.Utils.replaceCharOccurances(data, '/', this.m_google_cloud_topic_segment_delimiter.charAt(0),num_occurances);
+
+        // now replace the URI delimiter and prefix with the preamble
+        String result = preamble + t1.replace('/', this.m_google_cloud_topic_slash_delimiter.charAt(0));
         
-        // append and return
-        String formatted_data = com.arm.connector.bridge.core.Utils.my_replace(data,'/',this.m_google_cloud_topic_slash_delimiter.charAt(0));
-        return base + formatted_data;
+        // DEBUG
+        this.errorLogger().info("convertToPubSubFormat: Connector: " + data + " Google: " + result);
+        
+        // return the result
+        return result;
     }
-    
-    // convert the format "a/b/c" to "a.b.c" since Google PubSub Cloud Topics can have "/" in them... 
-    private String convertTopicStructure(String topic) {
-        return this.convertStructure(topic,"topics");
+
+    // Connector-bridge topic format conversion FROM Google Cloud PubSub format
+    private String convertToConnectorFormat(String data,String type) {
+        // create the preamble
+        String preamble = this.createPreamble(type);
+   
+        // prevent having the base entered twice... 
+        if (data != null && data.contains(preamble) == false) {
+            // DEBUG
+            this.errorLogger().info("convertToConnectorFormat: Already converted to Connector: " + data);
+        
+            // already formatted... just return
+            return data;
+        }
+
+        // remove the preamble
+        String t1 = data.replace(preamble, "");
+        
+        // replace double segment and slash with just a segment... (URI boundary)
+        String uri_boundary = this.m_google_cloud_topic_segment_delimiter + this.m_google_cloud_topic_slash_delimiter;
+        String t2 = t1.replace(uri_boundary,this.m_google_cloud_topic_segment_delimiter);
+
+        // replace the segment delimiter with '/'
+        String t3 = com.arm.connector.bridge.core.Utils.replaceAllCharOccurances(t2,this.m_google_cloud_topic_segment_delimiter.charAt(0),'/');
+
+        // replace the URI delimiter
+        String result = t3.replace(this.m_google_cloud_topic_slash_delimiter.charAt(0), '/');
+        
+        // DEBUG
+        this.errorLogger().info("convertToConnectorFormat: Google: " + data + " Connector: " + result);
+        
+        // return the result
+        return result;
     }
     
     // convert the format "a/b/c" to "a.b.c" since Google PubSub Cloud Subscriptions can have "/" in them...
-    private String convertSubscriptionStructure(String subscription) {
-        return this.convertStructure(subscription,"subscriptions");
+    private String connectorSubscriptionToGoogleSubscription(String subscription) {
+        // DEBUG
+        this.errorLogger().info("connectorSubscriptionToGoogleSubscription: input subscription: " + subscription);
+        
+        // convert and return
+        return this.convertToPubSubFormat(subscription,"subscriptions",3);
     }
 
     // convert a message-born notification topic to Google-format
     // format:  mbed/notify/<endpoint_type>/<endpoint_name><uri>
-    private String convertMessageTopicStructure(String topic) {
-        return this.convertStructure(com.arm.connector.bridge.core.Utils.replaceCharOccurances(topic, '/', this.m_google_cloud_topic_segment_delimiter.charAt(0),3),"topics");
+    private String connectorTopicToGoogleTopic(String topic) {
+        // DEBUG
+        this.errorLogger().info("connectorTopicToGoogleTopic: input topic: " + topic);
+        
+        // convert and return
+        return this.convertToPubSubFormat(topic,"topics",3);
+    }
+
+    // convert a subscription in google format to a topic in connector-bridge format...
+    @Override
+    public String connectorTopicFromGoogleSubscription(String goo_subscription) {
+        // DEBUG
+        this.errorLogger().info("connectorTopicFromGoogleSubscription: input subscription: " + goo_subscription);
+        
+        // convert and return
+        return this.convertToConnectorFormat(goo_subscription,"subscriptions");
     }
 }

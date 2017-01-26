@@ -102,7 +102,7 @@ public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements Pee
 
                             // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                             this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                            this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                            this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                         }
                         else {
                             // we were not able to recreate the starterkit connection... so just bail... we'll try again... 
@@ -116,7 +116,7 @@ public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements Pee
 
                         // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it... 
                         this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                     }
                 }
 
@@ -129,7 +129,7 @@ public class StarterKitMQTTProcessor extends GenericMQTTProcessor implements Pee
 
                         // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
                         this.subscriptionsList().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsList().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                     }
                 }
             }
