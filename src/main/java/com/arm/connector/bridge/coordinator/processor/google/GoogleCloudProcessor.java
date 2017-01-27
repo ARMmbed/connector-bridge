@@ -424,7 +424,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (Exception ex) {
                 // no pubsub instance
-                this.errorLogger().warning("googleCloudCreateTopic: exception in topic creation: " + ex.getMessage(),ex);
+                this.errorLogger().info("googleCloudCreateTopic: exception in topic creation: " + ex.getMessage(),ex);
             }
         }
         else {
@@ -454,7 +454,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (Exception ex) {
                 // no pubsub instance
-                this.errorLogger().warning("googleCloudCreateSubscription: exception in subscription creation: " + ex.getMessage(),ex);
+                this.errorLogger().info("googleCloudCreateSubscription: exception in subscription creation: " + ex.getMessage(),ex);
             }
         }
         else {
