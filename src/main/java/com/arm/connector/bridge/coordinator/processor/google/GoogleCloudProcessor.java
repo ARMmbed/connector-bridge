@@ -319,7 +319,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 }
                 catch (Exception ex) {
                     // unable to send message... exception raised
-                    this.errorLogger().warning("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
+                    this.errorLogger().info("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
                 }
             }
         }
