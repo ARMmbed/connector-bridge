@@ -412,8 +412,8 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private Topic googleCloudCreateTopic(String topic) {
         if (this.m_pubsub != null) {
             try {
-                // remove any old topic
-                this.googleCloudRemoveTopic(topic);
+                // XXX remove any old topic
+                //this.googleCloudRemoveTopic(topic);
                 
                 // Create the google-compatiable topic
                 String goo_topic = this.connectorTopicToGoogleTopic(topic);
@@ -438,8 +438,8 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private Subscription googleCloudCreateSubscription(String topic,String subscription) {
         if (this.m_pubsub != null) {
             try {
-                // remove any old subscription
-                this.googleCloudRemoveSubscription(subscription);
+                // XXX remove any old subscription
+                //this.googleCloudRemoveSubscription(subscription);
                 
                 // Create the google-compatiable topic
                 String goo_topic = this.connectorTopicToGoogleTopic(topic);

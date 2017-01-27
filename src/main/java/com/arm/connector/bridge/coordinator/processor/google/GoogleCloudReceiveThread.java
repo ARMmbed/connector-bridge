@@ -114,7 +114,7 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                         .setMaxMessages(this.m_max_messages);
 
                 // DEBUG
-                System.out.println("Quering subscription for messages: " + goo_subscription + "...");
+                //System.out.println("Quering subscription for messages: " + goo_subscription + "...");
 
                 PullResponse pullResponse = this.m_pubsub.projects().subscriptions()
                         .pull(goo_subscription, pullRequest)
@@ -124,7 +124,7 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                 List<String> ackIds = new ArrayList<>();
 
                 // DEBUG
-                System.out.println("Number of received messages: " + receivedMessages.size());
+                //System.out.println("Number of received messages: " + receivedMessages.size());
 
                 // Now process the messages we have...
                 for (ReceivedMessage receivedMessage : receivedMessages) {
@@ -150,8 +150,8 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                                 .execute();
             }
             catch (Exception ex) {
-                // error
-                System.out.println("caught exception during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
+                // debug
+                // System.out.println("WARN: GoogleCloudReceiveThread: exception during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
             }
 
             // sleep for a bit...
