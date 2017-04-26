@@ -415,7 +415,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     @Override
     public String formatAsyncResponseAsReply(Map async_response, String verb) {
         // DEBUG
-        this.errorLogger().info("AWSIoT(" + verb + ") AsyncResponse: " + async_response);
+        this.errorLogger().info("AWSIoT(" + verb + ") AsyncResponse: ID: " + async_response.get("id") + " response: " + async_response);
 
         if (verb != null && verb.equalsIgnoreCase("GET") == true) {
             try {

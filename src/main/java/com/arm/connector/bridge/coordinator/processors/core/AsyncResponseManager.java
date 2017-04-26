@@ -64,6 +64,45 @@ public class AsyncResponseManager {
     private boolean haveRecordForAsyncResponse(String id) {
         return (this.m_responses.containsKey(id) == true);
     }
+    
+    // get the async-response for a given ID
+    private Map<String,Object> getRecordForAsyncResponse(String id) {
+        Map<String,Object> record = null;
+        if (this.haveRecordForAsyncResponse(id)) {
+            record = this.m_responses.get(id);
+        }
+        return record;
+    }
+    
+    // extract the URI from the async-id
+    public String getURIFromAsyncID(String id) {
+        String uri = null;
+        Map<String,Object> record = this.getRecordForAsyncResponse(id);
+        if (record != null) {
+            uri = (String)record.get("uri");
+        }
+        
+        // DEBUG
+        this.errorLogger().info("recordAsyncResponse: getURIFromAsyncID: ID: " + id + " URI: " + uri);
+        
+        // return the URI
+        return uri;
+    }
+    
+    // get the CoAP Endpoint Name from the async record
+    public String getEndpointNameFromAsyncID(String id) {
+        String name = null;
+        Map<String,Object> record = this.getRecordForAsyncResponse(id);
+        if (record != null) {
+            name = (String)record.get("ep_name");
+        }
+        
+        // DEBUG
+        this.errorLogger().info("recordAsyncResponse: getEndpointNameFromAsyncID: ID: " + id + " endpoint: " + name);
+        
+        // return the endpoint name
+        return name;
+    }
 
     // record an AsyncResponse
     public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
@@ -89,7 +128,7 @@ public class AsyncResponseManager {
                 if (parsed != null && (String) parsed.get("async-response-id") != null) {
                     // add it to the record too
                     record.put("response_map", parsed);
-
+                    
                     // fill in the record with other good convenient things too... 
                     if (coap_verb != null) {
                         record.put("verb", coap_verb);
@@ -137,7 +176,7 @@ public class AsyncResponseManager {
                 }
             }
             else {
-                // NO Response provided... so ignore
+                // WARNING: NO Response provided... so ignore
                 this.errorLogger().warning("recordAsyncResponse: response is NULL. ignoring...");
             }
         }

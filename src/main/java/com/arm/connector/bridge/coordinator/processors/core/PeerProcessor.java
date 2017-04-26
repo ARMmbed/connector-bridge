@@ -946,18 +946,26 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
 
         // split
         String[] parts = this.splitAsyncID(id);
-
-        // re-assemble the URI
-        uri = "/";
-        for (int i = 3; i < parts.length; ++i) {
-            uri += parts[i];
-            if (i < (parts.length - 1)) {
-                uri += "/";
+        if (parts != null && parts.length > 1) {
+            // re-assemble the URI
+            uri = "/";
+            for (int i = 3;i < parts.length; ++i) {
+                uri += parts[i];
+                if (i < (parts.length - 1)) {
+                    uri += "/";
+                }
             }
-        }
 
-        // DEBUG
-        this.errorLogger().info("getURIFromAsyncID: URI: " + uri);
+            // DEBUG
+            this.errorLogger().info("getURIFromAsyncID: URI: " + uri);
+        }
+        else {
+            // mbed Cloud async-response ID format has changed - so we need to pull this from the async-response record
+            uri = this.asyncResponseManager().getURIFromAsyncID(id);
+            
+            // DEBUG
+            this.errorLogger().info("getURIFromAsyncID: (async-response) URI: " + uri);
+        }
 
         // return the URI
         return uri;
@@ -966,14 +974,27 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // extract the endpoint name from the async-id
     // format: 1408956550#cc69e7c5-c24f-43cf-8365-8d23bb01c707@decd06cc-2a32-4e5e-80d0-7a7c65b90e6e/303/0/5700
     protected String getEndpointNameFromAsyncID(String id) {
+        String name = null;
+                
         // split
         String[] parts = this.splitAsyncID(id);
-
-        // DEBUG
-        this.errorLogger().info("getEndpointNameFromAsyncID: endpoint: " + parts[1]);
+        if (parts != null && parts.length > 1) {
+            // record the name
+            name = parts[1];
+            
+            // DEBUG
+            this.errorLogger().info("getEndpointNameFromAsyncID: endpoint: " + name);
+        }
+        else {
+            // mbed Cloud async-response ID format has changed - so we need to pull this from the async-response record
+            name = this.asyncResponseManager().getEndpointNameFromAsyncID(id);
+            
+            // DEBUG
+            this.errorLogger().info("getEndpointNameFromAsyncID: (async-response) endpoint: " + name);
+        }
 
         // return the endpoint name
-        return parts[1];
+        return name;
     }
     
     // OVERRIDE: process a received new registration for AWSIoT
