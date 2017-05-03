@@ -412,10 +412,20 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     // final customization of a MQTT Topic...
     private String customizeTopic(String topic, String ep_name, String ep_type) {
         String cust_topic = topic.replace("__EPNAME__", ep_name);
+        if (ep_type == null) {
+            ep_type = this.getEndpointTypeFromEndpointName(ep_name);
+        }
         if (ep_type != null) {
             cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
+            this.errorLogger().info("Watson IoT:  Customized Topic: " + cust_topic);
         }
-        this.errorLogger().info("Watson IoT:  Customized Topic: " + cust_topic);
+        else {
+            // replace with "default"
+            cust_topic = cust_topic.replace("__DEVICE_TYPE__", "default");
+            
+            // WARN
+            this.errorLogger().warning("Watson IoT Customized Topic (EPT UNK): " + cust_topic);
+        }
         return cust_topic;
     }
 
@@ -454,6 +464,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             // DEBUG
             this.orchestrator().errorLogger().info("Watson IoT: Subscribing to CoAP command topics for endpoint: " + ep_name);
             try {
+                this.setEndpointTypeFromEndpointName(ep_name, ep_type);
                 HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
                 if (topic_data != null) {
                     // get,put,post,delete enablement

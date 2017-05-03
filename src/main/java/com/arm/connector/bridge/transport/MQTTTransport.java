@@ -30,6 +30,7 @@ import com.arm.connector.bridge.preferences.PreferenceManager;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -225,7 +226,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                 fs.close();
             }
         }
-        catch (Exception ex) {
+        catch (IOException ex) {
             // silent
         }
 
@@ -549,7 +550,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                     }
                 }
             }
-            catch (Exception ex) {
+            catch (URISyntaxException ex) {
                 this.errorLogger().critical("MQTTTransport(connect): Exception occured", ex);
                 this.m_connected = false;
             }
@@ -627,7 +628,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.errorLogger().info("resetConnection: FAILURE num_tries = " + this.m_num_retries);
             }
         }
-        catch (Exception ex) {
+        catch (InterruptedException ex) {
             this.errorLogger().info("resetConnection: Exception: " + ex.getMessage(), ex);
         }
     }

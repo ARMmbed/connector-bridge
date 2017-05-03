@@ -91,6 +91,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private LongPollProcessor m_long_poll_processor = null;
 
     // constructor
+    @SuppressWarnings("empty-statement")
     public MDSProcessor(Orchestrator orchestrator, HttpTransport http) {
         super(orchestrator, null);
         this.m_http = http;
@@ -125,7 +126,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
                 this.errorLogger().info("mDS(v3x) Updated username: " + this.m_mds_username);
             }
         }
-        catch (Exception ex) {
+        catch (NumberFormatException ex) {
             // parsing error... fail silently...
             ;
         }
@@ -393,6 +394,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
 
     // create any authentication header JSON that may be necessary
+    @SuppressWarnings("empty-statement")
     private String createCallbackHeaderAuthJSON() {
         String hash = this.orchestrator().createAuthenticationHash();
 
@@ -403,7 +405,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
                 return null;
             }
         }
-        catch (Exception ex) {
+        catch (NumberFormatException ex) {
             // parsing error of mds_version... just use the default hash (likely "none")
             ;
         }

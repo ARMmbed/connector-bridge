@@ -51,7 +51,7 @@ public class TypeDecoder extends BaseClass {
                 }
             }
         }
-        catch (Exception ex) {
+        catch (NumberFormatException ex) {
             this.errorLogger().info("isDouble: Exception in Double parse: " + ex.getMessage());
         }
         return false;
@@ -68,7 +68,7 @@ public class TypeDecoder extends BaseClass {
                 }
             }
         }
-        catch (Exception ex) {
+        catch (NumberFormatException ex) {
             this.errorLogger().info("isInteger: Exception in Integer parse: " + ex.getMessage());
         }
         return false;

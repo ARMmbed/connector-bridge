@@ -324,13 +324,13 @@ public class Utils {
                     Utils._externalIPAddress = in.readLine();
                     in.close();
                 }
-                catch (Exception ex) {
+                catch (IOException ex) {
                     try {
                         if (in != null) {
                             in.close();
                         }
                     }
-                    catch (Exception ex2) {
+                    catch (IOException ex2) {
                         // silent
                     }
                 }
@@ -473,7 +473,7 @@ public class Utils {
                     try {
                         ks.setKeyEntry("privkey", priv_key, pw.toCharArray(), cert_list);
                     }
-                    catch (Exception ex2) {
+                    catch (KeyStoreException ex2) {
                         logger.warning("createKeystore: Exception during priv addition... not added to keystore", ex2);
                     }
                 }
@@ -565,7 +565,7 @@ public class Utils {
             CertificateFactory cf = CertificateFactory.getInstance(cert_type);
             return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(decoded));
         }
-        catch (Exception ex) {
+        catch (CertificateException ex) {
             // exception caught
             logger.warning("createX509CertificateFromPEM: Exception during private key gen", ex);
         }

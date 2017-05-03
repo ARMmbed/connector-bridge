@@ -91,7 +91,7 @@ public class AWSIoTDeviceManager extends BaseClass {
         boolean status = false;
 
         // get the device details
-        //String device_type = (String)message.get("ept");
+        String device_type = (String)message.get("ept");
         String device = (String) message.get("ep");
 
         // see if we already have a device...
@@ -132,7 +132,8 @@ public class AWSIoTDeviceManager extends BaseClass {
         String result = Utils.awsCLI(this.errorLogger(), args);
 
         // DEBUG
-        this.errorLogger().info("AWSIoT: registerNewDevice: RESULT: " + result);
+        this.errorLogger().info("AWSIoT: registerNewDevice: New EP: " + device + " EPT: " + device_type);
+        this.errorLogger().info("AWSIoT: registerNewDevice: Addition RESULT: " + result);
 
         // return our status
         Boolean status = (result != null && result.length() > 0);
@@ -163,7 +164,9 @@ public class AWSIoTDeviceManager extends BaseClass {
             Utils.awsCLI(this.errorLogger(), args);
         }
         else {
-            this.errorLogger().warning("unlinkCertificateFromThing: Unable to unlink Cert from Thing... no Endpoint Name provided");
+            // until we get a persistent store that can permanently map ep:ARN, we will have leakage on restart of the bridge...
+            this.errorLogger().info("unlinkCertificateFromThing: Unable to unlink Cert from Thing... no Endpoint Name provided");
+            this.errorLogger().info("unlinkCertificateFromThing: Unlink Failure details EP: " + ep_name + " ARN: " + arn);
         }
     }
 

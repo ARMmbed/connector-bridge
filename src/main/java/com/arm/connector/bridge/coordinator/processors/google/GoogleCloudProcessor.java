@@ -20,7 +20,7 @@
  * limitations under the License.
  *
  */
-package com.arm.connector.bridge.coordinator.processor.google;
+package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
@@ -38,6 +38,7 @@ import com.google.api.services.pubsub.model.PublishRequest;
 import com.google.api.services.pubsub.model.PubsubMessage;
 import com.google.common.collect.ImmutableList;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -317,7 +318,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                     this.errorLogger().info("sendMessage(Google Cloud): Sending message to: " + goo_topic + " message: " + message);
                     this.m_pubsub.projects().topics().publish(goo_topic, publishRequest).execute();
                 }
-                catch (Exception ex) {
+                catch (IOException ex) {
                     // unable to send message... exception raised
                     this.errorLogger().info("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
                 }
@@ -362,7 +363,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             // DEBUG
             this.errorLogger().info("googleCloudLogin(): LOGIN SUCCESS.");
         }
-        catch (Exception ex) {
+        catch (IOException ex) {
             // caught exception during login
             this.errorLogger().critical("googleCloudLogin(): Unable to log into Google Cloud: " + ex.getMessage(), ex);
             success = false;
@@ -383,7 +384,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudRemoveSubscription: removing subscription: " + goo_subscription + "...");
                 this.m_pubsub.projects().subscriptions().delete(goo_subscription).execute();
             }
-            catch (Exception ex) {
+            catch (IOException ex) {
                 // DEBUG
                 // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
             }
@@ -401,7 +402,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudRemoveTopic: removing topic: " + goo_topic + "...");
                 this.m_pubsub.projects().topics().delete(goo_topic).execute();
             }
-            catch (Exception ex) {
+            catch (IOException ex) {
                 // DEBUG
                 //this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
             }
@@ -422,7 +423,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
                 return this.m_pubsub.projects().topics().create(goo_topic,new Topic()).execute();
             }
-            catch (Exception ex) {
+            catch (IOException ex) {
                 // no pubsub instance
                 this.errorLogger().info("googleCloudCreateTopic: exception in topic creation: " + ex.getMessage(),ex);
             }
@@ -452,7 +453,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 Subscription s = new Subscription().setTopic(goo_topic);
                 return this.m_pubsub.projects().subscriptions().create(goo_subscription,s).execute();
             }
-            catch (Exception ex) {
+            catch (IOException ex) {
                 // no pubsub instance
                 this.errorLogger().info("googleCloudCreateSubscription: exception in subscription creation: " + ex.getMessage(),ex);
             }

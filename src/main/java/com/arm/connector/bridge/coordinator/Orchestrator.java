@@ -23,16 +23,22 @@
 package com.arm.connector.bridge.coordinator;
 
 import com.arm.connector.bridge.console.ConsoleManager;
-import com.arm.connector.bridge.coordinator.processor.google.GoogleCloudProcessor;
+
+// Interfaces
+import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
+import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+
+// Processors
+import com.arm.connector.bridge.coordinator.processors.arm.MDSProcessor;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
+import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProcessor;
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorFactory;
-import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
-import com.arm.connector.bridge.coordinator.processors.arm.MDSProcessor;
 import com.arm.connector.bridge.coordinator.processors.aws.AWSIoTPeerProcessorFactory;
+import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudProcessor;
+
+// Core
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
-import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
-import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProcessor;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.json.JSONGenerator;
 import com.arm.connector.bridge.json.JSONParser;
@@ -41,7 +47,6 @@ import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.util.ArrayList;
 import java.util.Map;
-
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -53,7 +58,7 @@ import javax.servlet.http.HttpServletResponse;
  */
 public class Orchestrator implements MDSInterface, PeerInterface {
 
-    private HttpServlet m_servlet = null;
+    private final HttpServlet m_servlet = null;
 
     private ErrorLogger m_error_logger = null;
     private PreferenceManager m_preference_manager = null;

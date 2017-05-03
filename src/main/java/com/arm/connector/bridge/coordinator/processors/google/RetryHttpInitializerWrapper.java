@@ -1,4 +1,4 @@
-package com.arm.connector.bridge.coordinator.processor.google;
+package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.http.HttpBackOffIOExceptionHandler;
@@ -12,6 +12,7 @@ import com.google.api.client.util.Sleeper;
 import com.google.common.base.Preconditions;
 
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -70,6 +71,7 @@ public class RetryHttpInitializerWrapper implements HttpRequestInitializer {
 
     /**
      * Initializes the given request.
+     * @param request
      */
     @Override
     public final void initialize(final HttpRequest request) {
@@ -97,8 +99,7 @@ public class RetryHttpInitializerWrapper implements HttpRequestInitializer {
                                 request, response, supportsRetry)) {
                             // Otherwise, we defer to the judgement of
                             // our internal backoff handler.
-                            LOG.info("Retrying "
-                                    + request.getUrl().toString());
+                            LOG.log(Level.INFO, "Retrying {0}", request.getUrl().toString());
                             return true;
                         } else {
                             return false;

@@ -37,8 +37,8 @@ import java.util.Map;
  */
 public class AsyncResponseManager {
 
-    private HashMap<String, HashMap<String, Object>> m_responses;
-    private Orchestrator m_manager;
+    private final HashMap<String, HashMap<String, Object>> m_responses;
+    private final Orchestrator m_manager;
 
     public AsyncResponseManager(Orchestrator manager) {
         this.m_manager = manager;

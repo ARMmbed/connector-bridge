@@ -20,7 +20,7 @@
  * limitations under the License.
  *
  */
-package com.arm.connector.bridge.coordinator.processor.google;
+package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.core.Transport;
 import com.google.api.services.pubsub.Pubsub;
@@ -29,6 +29,7 @@ import com.google.api.services.pubsub.model.PubsubMessage;
 import com.google.api.services.pubsub.model.PullRequest;
 import com.google.api.services.pubsub.model.PullResponse;
 import com.google.api.services.pubsub.model.ReceivedMessage;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -149,7 +150,7 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                                 .acknowledge(goo_subscription, ackRequest)
                                 .execute();
             }
-            catch (Exception ex) {
+            catch (IOException ex) {
                 // debug
                 // System.out.println("WARN: GoogleCloudReceiveThread: exception during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
             }

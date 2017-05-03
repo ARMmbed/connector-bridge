@@ -697,7 +697,7 @@ public class HttpTransport extends BaseClass {
                     this.errorLogger().warning("ERROR in doHTTP(" + verb + "): Connection is NULL");
                 }
             }
-            catch (Exception ex2) {
+            catch (IOException ex2) {
                 this.errorLogger().warning("Exception in doHTTP(" + verb + "): Unable to save last response code: " + ex2.getMessage());
             }
         }

@@ -381,10 +381,6 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         this.asyncResponseManager().recordAsyncResponse(response, coap_verb, sender, proc, response_topic, reply_topic, message, ep_name, uri);
     }
 
-    // get our reply topic (if we specify URI, the build out the full resource response topic)
-    private String getReplyTopic(String ep_name, String ep_type, String uri, String def) {
-        return this.createResourceResponseTopic(ep_type, ep_name, uri);
-    }
     
     // get the endpoint type from the endpoint name
     protected String getEndpointTypeFromEndpointName(String ep_name) {
@@ -635,12 +631,12 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         return this.createBaseTopic("request") + suffix;
     }
     
-    // returns mbed/<domain>/observation/<ep_type>/<endpoint>/<uri>
+    // returns mbed/<domain>/notify/<ep_type>/<endpoint>/<uri>
     protected String createObservationTopic(String ep_type, String ep_name, String uri) {
         return this.createBaseTopic(this.m_observation_key) + "/" + ep_type + "/" + ep_name + uri;
     }
 
-    // returns mbed/<domain>/response/<ep_type>/<endpoint>/<uri>
+    // returns mbed/<domain>/cmd-response/<ep_type>/<endpoint>/<uri>
     protected String createResourceResponseTopic(String ep_type, String ep_name, String uri) {
         return this.createBaseTopic(this.m_cmd_response_key) + "/" + ep_type + "/" + ep_name + uri;
     }

@@ -296,6 +296,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                     // get,put,post,delete enablement
                     this.m_iot_hub_endpoints.remove(iothub_ep_name);
                     this.m_iot_hub_endpoints.put(iothub_ep_name, topic_data);
+                    this.setEndpointTypeFromEndpointName(ep_name, ep_type);
                     this.subscribe_to_topics(iothub_ep_name, (Topic[]) topic_data.get("topic_list"));
                 }
                 else {
@@ -795,10 +796,20 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // final customization of a MQTT Topic...
     private String customizeTopic(String topic, String ep_name, String ep_type) {
         String cust_topic = topic.replace("__EPNAME__", ep_name);
+        if (ep_type == null) {
+            ep_type = this.getEndpointTypeFromEndpointName(ep_name);
+        }
         if (ep_type != null) {
             cust_topic = cust_topic.replace("__DEVICE_TYPE__", ep_type);
+            this.errorLogger().info("IoTHub Customized Topic: " + cust_topic);
         }
-        this.errorLogger().info("IoTHub Customized Topic: " + cust_topic);
+        else {
+            // replace with "default"
+            cust_topic = cust_topic.replace("__DEVICE_TYPE__", "default");
+            
+            // WARN
+            this.errorLogger().warning("IoTHub Customized Topic (EPT UNK): " + cust_topic);
+        }
         return cust_topic;
     }
     
