@@ -37,8 +37,8 @@ public class PreferenceManager extends BaseClass {
 
     private static final int DEFAULT_INT_VALUE = -1;
     private static final float DEFAULT_FLOAT_VALUE = (float) -1.0;
-    private static final String PROPERTY_DEFINE = "config_file";      // passed as -Dconfig_file="../conf/gateway.properties"
-    private static final String DEFAULT_PROPERTIES_FILE = "WEB-INF/classes/gateway.properties";
+    private static final String PROPERTY_DEFINE = "config_file";      // passed as -Dconfig_file="../conf/service.properties"
+    private static final String DEFAULT_PROPERTIES_FILE = "WEB-INF/classes/service.properties";
     private String m_properties_file = null;
 
     private Properties m_config_properties = null;        // DB config properties
