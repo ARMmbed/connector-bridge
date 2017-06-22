@@ -1,6 +1,11 @@
-mbed Device Connector/Device Server integration bridge
+# connector-bridge
+mbed Connector Integration bridge source
 
-Integration bridge (Java-based) between mDC and/or mDS and Third Parties
+Integration bridge between mbed Connector and Third Parties
+
+This is the primary source tree for the prototype mbed Connector bridges.
+
+This is a netbeans-based maven java project.
 
 Copyright 2015. ARM Ltd. All rights reserved.
 
