@@ -22,7 +22,6 @@
  */
 package com.arm.connector.bridge.coordinator.processors.arm;
 
-import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.servlet.Manager;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
@@ -37,13 +36,14 @@ import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
  *
  * @author Doug Anson
  */
-public class MDSProcessor extends Processor implements MDSInterface, AsyncResponseProcessor {
+public class mbedDeviceServerProcessor extends Processor implements mbedDeviceServerInterface, AsyncResponseProcessor {
 
     private HttpTransport m_http = null;
     private String m_mds_host = null;
@@ -92,7 +92,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // constructor
     @SuppressWarnings("empty-statement")
-    public MDSProcessor(Orchestrator orchestrator, HttpTransport http) {
+    public mbedDeviceServerProcessor(Orchestrator orchestrator, HttpTransport http) {
         super(orchestrator, null);
         this.m_http = http;
         this.m_mds_domain = orchestrator.getDomain();
@@ -149,10 +149,10 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.m_webhook_validator_enable = orchestrator.preferences().booleanValueOf("mds_webhook_validator_enable");
 
         // initialize the default type of URI for contacting us (GW) - this will be sent to mDS for the webhook URL
-        this.setupBridgeURI();
+        this.setupConnectorURI();
 
         // initialize the default type of URI for contacting mDS
-        this.setupMDSURI();
+        this.setupDeviceServerURI();
 
         // OVEERRIDE - long polling vs. Webhook
         this.longPollOverrideSetup();
@@ -183,14 +183,14 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
         // configure the callback type based on the version of mDS (only if not using long polling)
         if (this.longPollEnabled() == false) {
-            this.setupCallbackType();
+            this.setupWebhookType();
         }
 
         // sanity check the configured mDS AUTH type
         this.sanityCheckAuthType();
 
         // disable sync usage if with Connector
-        if (this.mdsIsConnector() == true) {
+        if (this.bridgingToConnector() == true) {
             this.errorLogger().info("MDSProcessor: Using mbed Device Connector. Sync=true DISABLED");
             this.m_disable_sync = true;
         }
@@ -199,8 +199,8 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         this.initDeviceMetadataResourceURIs();
     }
 
-    // using SSL or not
-    public boolean usingSSLInDispatch() {
+    // using SSL or not for the webhook management set/get
+    public boolean usingSSLInWebhookEstablishment() {
         return this.m_use_https_dispatch;
     }
 
@@ -269,26 +269,26 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
 
     // mDS requires use of SSL (mDC)
-    private Boolean mdsRequiresSSL() {
+    private Boolean requireSSL() {
         return this.m_mds_use_ssl;
     }
 
     // mDS using callback webhook vs. push-url
-    private boolean mdsUsingCallbacks() {
+    private boolean usingWebhookCallbacks() {
         return (this.m_mds_gw_callback.equalsIgnoreCase("callback"));
     }
 
-    // setup the bridge URI
-    private void setupBridgeURI() {
+    // setup the connector bridge URI
+    private void setupConnectorURI() {
         this.m_default_gw_uri = "http://";
         if (this.m_mds_gw_use_ssl) {
             this.m_default_gw_uri = "https://";
         }
     }
 
-    // setup the mDS default URI
+    // setup the mbed device server default URI
     @SuppressWarnings("empty-statement")
-    private void setupMDSURI() {
+    private void setupDeviceServerURI() {
         this.m_default_mds_uri = "http://";
         try {
             Double ver = Double.valueOf(this.m_mds_version);
@@ -309,7 +309,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // set the callback type we are using
     @SuppressWarnings("empty-statement")
-    private void setupCallbackType() {
+    private void setupWebhookType() {
         try {
             Double ver = Double.valueOf(this.m_mds_version);
             if (ver >= Manager.MDS_NON_DOMAIN_VER_BASE) {
@@ -350,7 +350,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
 
     // is our mDS instance actually mDC?
-    private boolean mdsIsConnector() {
+    private boolean bridgingToConnector() {
         return ((this.m_use_api_token == true && this.m_using_callback_webhooks == true && this.m_use_https_dispatch == true)
                 || (this.m_use_api_token == true && this.m_mds_enable_long_poll == true && this.m_use_https_dispatch == true));
     }
@@ -395,7 +395,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // create any authentication header JSON that may be necessary
     @SuppressWarnings("empty-statement")
-    private String createCallbackHeaderAuthJSON() {
+    private String createWebhookHeaderAuthJSON() {
         String hash = this.orchestrator().createAuthenticationHash();
 
         try {
@@ -414,8 +414,8 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return "{\"Authentication\":\"" + hash + "\"}";
     }
 
-    // create our callback URL
-    private String createCallbackURL() {
+    // create our webhook URL that we will get called back on...
+    private String createWebhookURL() {
         String url = null;
 
         String local_ip = Utils.getExternalIPAddress(this.prefBoolValue("mds_use_gw_address"), this.prefValue("mds_gw_address"));
@@ -429,18 +429,18 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         return this.m_default_gw_uri + local_ip + ":" + local_port + notify_uri;
     }
 
-    // create the dispatch URL for changing the notification URL
-    private String createDispatchURL() {
+    // create the dispatch URL for changing the notification webhook URL
+    private String createWebhookDispatchURL() {
         return this.createBaseURL() + this.getDomain() + "/notification/" + this.m_mds_gw_callback;
     }
 
     // get the currently configured callback URL
-    public String getNotificationCallbackURL() {
+    public String getWebhook() {
         String url = null;
         String headers = null;
 
         // create the dispatch URL
-        String dispatch_url = this.createDispatchURL();
+        String dispatch_url = this.createWebhookDispatchURL();
 
         // Issue GET and look at the response
         String json = null;
@@ -496,32 +496,32 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     }
 
     // determine if our callback URL has already been set
-    private boolean notificationCallbackURLSet(String target_url) {
-        return this.notificationCallbackURLSet(target_url, false);
+    private boolean webhookSet(String target_url) {
+        return this.webhookSet(target_url, false);
     }
 
     // determine if our callback URL has already been set
-    private boolean notificationCallbackURLSet(String target_url, boolean skip_check) {
-        String current_url = this.getNotificationCallbackURL();
-        this.errorLogger().info("notificationCallbackURLSet: current_url: " + current_url + " target_url: " + target_url);
+    private boolean webhookSet(String target_url, boolean skip_check) {
+        String current_url = this.getWebhook();
+        this.errorLogger().info("webhookSet: current_url: " + current_url + " target_url: " + target_url);
         boolean is_set = (target_url != null && current_url != null && target_url.equalsIgnoreCase(current_url));
-        if (is_set == true && this.mdsUsingCallbacks() && skip_check == false) {
+        if (is_set == true && this.usingWebhookCallbacks() && skip_check == false) {
             // for Connector, lets ensure that we always have the expected Auth Header setup. So, while the same, lets delete and re-install...
-            this.errorLogger().info("notificationCallbackURLSet(callback): deleting existing callback URL...");
-            this.removeNotificationCallback();
-            this.errorLogger().info("notificationCallbackURLSet(callback): re-establishing callback URL...");
-            this.setNotificationCallbackURL(target_url, skip_check); // skip_check, go ahead and assume we need to set it...
-            this.errorLogger().info("notificationCallbackURLSet(callback): re-checking that callback URL is properly set...");
-            current_url = this.getNotificationCallbackURL();
+            this.errorLogger().info("webhookSet(callback): deleting existing webhook URL...");
+            this.removeWebhook();
+            this.errorLogger().info("webhookSet(callback): re-establishing webhook URL...");
+            this.setWebhook(target_url, skip_check); // skip_check, go ahead and assume we need to set it...
+            this.errorLogger().info("webhookSet(callback): re-checking that webhook URL is properly set...");
+            current_url = this.getWebhook();
             is_set = (target_url != null && current_url != null && target_url.equalsIgnoreCase(current_url));
         }
         return is_set;
     }
 
-    // remove the mDS Connector Notification Callback
-    private void removeNotificationCallback() {
+    // remove the mDS Connector Notification Callback webhook
+    private void removeWebhook() {
         // create the dispatch URL
-        String dispatch_url = this.createDispatchURL();
+        String dispatch_url = this.createWebhookDispatchURL();
 
         // SSL vs. HTTP
         if (this.m_use_https_dispatch == true) {
@@ -536,47 +536,47 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
 
     // reset the mDS Notification Callback URL
     @Override
-    public void resetNotificationCallbackURL() {
+    public void resetWebhook() {
         if (this.validatableNotifications() == true) {
             // we simply delete the webhook 
-            this.removeNotificationCallback();
+            this.removeWebhook();
         }
         else {
             // we reset to default
             String default_url = this.prefValue("mds_default_notify_url");
-            this.errorLogger().info("resetNotificationCallbackURL: resetting notification URL to: " + default_url);
-            this.setNotificationCallbackURL(default_url);
+            this.errorLogger().info("resetWebhook: resetting notification URL to: " + default_url);
+            this.setWebhook(default_url);
         }
     }
 
     // set our mDS Notification Callback URL
     @Override
-    public void setNotificationCallbackURL() {
+    public void setWebhook() {
         if (this.longPollEnabled() == false) {
-            String target_url = this.createCallbackURL();
-            this.setNotificationCallbackURL(target_url);
+            String target_url = this.createWebhookURL();
+            this.setWebhook(target_url);
         }
     }
 
     // set our mDS Notification Callback URL
-    private void setNotificationCallbackURL(String target_url) {
-        this.setNotificationCallbackURL(target_url, true); // default is to check if the URL is already set... 
+    private void setWebhook(String target_url) {
+        this.setWebhook(target_url, true); // default is to check if the URL is already set... 
     }
 
     // set our mDS Notification Callback URL
-    private void setNotificationCallbackURL(String target_url, boolean check_url_set) {
+    private void setWebhook(String target_url, boolean check_url_set) {
         boolean callback_url_already_set = false; // assume default is that the URL is NOT set... 
 
         // we must check to see if we want to check that the URL is already set...
         if (check_url_set == true) {
             // go see if the URL is already set.. 
-            callback_url_already_set = this.notificationCallbackURLSet(target_url);
+            callback_url_already_set = this.webhookSet(target_url);
         }
 
         // proceed to set the URL if its not already set.. 
         if (!callback_url_already_set) {
-            String dispatch_url = this.createDispatchURL();
-            String auth_header_json = this.createCallbackHeaderAuthJSON();
+            String dispatch_url = this.createWebhookDispatchURL();
+            String auth_header_json = this.createWebhookHeaderAuthJSON();
             String json = null;
 
             // build out the callback JSON
@@ -590,14 +590,14 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
                 }
 
                 // DEBUG
-                this.errorLogger().info("setNotificationCallbackURL(callback): json: " + json + " dispatch: " + dispatch_url);
+                this.errorLogger().info("setWebhook(callback): json: " + json + " dispatch: " + dispatch_url);
             }
             else {
                 // use the Deprecated push-url API... (no JSON)
                 json = target_url;
 
                 // DEBUG
-                this.errorLogger().info("setNotificationCallbackURL(push-url): url: " + json + " dispatch: " + dispatch_url);
+                this.errorLogger().info("setWebhook(push-url): url: " + json + " dispatch: " + dispatch_url);
             }
 
             // SSL vs. HTTP
@@ -611,9 +611,9 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
 
             // check that it succeeded
-            if (!this.notificationCallbackURLSet(target_url, !check_url_set)) {
+            if (!this.webhookSet(target_url, !check_url_set)) {
                 // DEBUG
-                this.errorLogger().warning("setNotificationCallbackURL: ERROR: unable to set callback URL to: " + target_url);
+                this.errorLogger().warning("setWebhook: ERROR: unable to set callback URL to: " + target_url);
 
                 // reset the webhook - its not set anymore
                 if (this.m_webhook_validator != null) {
@@ -622,7 +622,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
             else {
                 // DEBUG
-                this.errorLogger().info("setNotificationCallbackURL: notification URL set to: " + target_url + " (SUCCESS)");
+                this.errorLogger().info("setWebhook: notification URL set to: " + target_url + " (SUCCESS)");
 
                 // record the webhook
                 if (this.m_webhook_validator != null) {
@@ -632,7 +632,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         }
         else {
             // DEBUG
-            this.errorLogger().info("setNotificationCallbackURL: notification URL already set to: " + target_url + " (OK)");
+            this.errorLogger().info("setWebhook: notification URL already set to: " + target_url + " (OK)");
 
             // record the webhook
             if (this.m_webhook_validator != null) {
@@ -647,7 +647,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         for (int i = 0; i < endpoints.length; ++i) {
             // create the endpoint subscription URL...
             String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
-            this.errorLogger().info("unregisterEndpoint: sending endpoint subscription removal request: " + url);
+            this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
             this.httpDelete(url);
 
             // remove from the validator too
@@ -797,27 +797,27 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     
     // process the notification
     @Override
-    public void processMDSMessage(HttpServletRequest request, HttpServletResponse response) {
+    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response) {
         // build the response
         String response_header = "";
         String json = this.read(request);
 
         // process and route the mDS message
-        this.processMDSMessage(json, request);
+        this.processDeviceServerMessage(json, request);
 
         // send the response back as an ACK to mDS
         this.sendResponseToMDS("text/html;charset=UTF-8", request, response, "", "");
     }
 
     // process and route the mDS message to the appropriate peer method (long poll method)
-    public void processMDSMessage(String json) {
-        this.processMDSMessage(json, null);
+    public void processDeviceServerMessage(String json) {
+        this.processDeviceServerMessage(json, null);
     }
 
     // process and route the mDS message to the appropriate peer method
-    private void processMDSMessage(String json, HttpServletRequest request) {
+    private void processDeviceServerMessage(String json, HttpServletRequest request) {
         // DEBUG
-        //this.orchestrator().errorLogger().info("processMDSMessage(mDS): Received message from mDS: " + json);
+        //this.orchestrator().errorLogger().info("processIncomingMessage(mDS): Received message from mDS: " + json);
 
         // tell the orchestrator to call its peer processors with this mDS message
         try {
@@ -827,7 +827,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
                     if (parsed.containsKey("notifications")) {
                         if (this.validateNotification(request)) {
                             // DEBUG
-                            //this.errorLogger().info("processMDSMessage: notification VALIDATED");
+                            //this.errorLogger().info("processIncomingMessage: notification VALIDATED");
 
                             // validated notification... process it...
                             this.orchestrator().processNotification(parsed);
@@ -839,7 +839,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
                     }
 
                     // DEBUG
-                    //this.errorLogger().info("processMDSMessage(STD) Parsed: " + parsed);
+                    //this.errorLogger().info("processIncomingMessage(STD) Parsed: " + parsed);
                     // act on the request...
                     if (parsed.containsKey("registrations")) {
                         this.orchestrator().processNewRegistration(parsed);
@@ -902,12 +902,12 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     private String subscribeToEndpointResource(String url, Boolean init_webhook) {
         if (init_webhook) {
             this.errorLogger().info("subscribeToEndpointResource: (re)setting the event notification URL...");
-            this.setNotificationCallbackURL();
+            this.setWebhook();
         }
 
         String json = null;
         this.errorLogger().info("subscribeToEndpointResource: (re)establishing subscription request: " + url);
-        if (this.mdsRequiresSSL()) {
+        if (this.requireSSL()) {
             json = this.httpsPut(url);
         }
         else {
@@ -928,7 +928,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         boolean subscribed = false;
         String json = null;
         this.errorLogger().info("getEndpointResourceSubscriptionStatus: getting subscription status: " + url);
-        if (this.mdsRequiresSSL()) {
+        if (this.requireSSL()) {
             this.httpsGet(url);
         }
         else {
@@ -963,7 +963,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             // dispatch the mDS REST based on CoAP verb received
             if (verb.equalsIgnoreCase(("get"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking GET: " + url);
-                if (this.mdsRequiresSSL()) {
+                if (this.requireSSL()) {
                     json = this.httpsGet(url);
                 }
                 else {
@@ -972,7 +972,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
             if (verb.equalsIgnoreCase(("put"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking PUT: " + url + " DATA: " + value);
-                if (this.mdsRequiresSSL()) {
+                if (this.requireSSL()) {
                     json = this.httpsPut(url, value);
                 }
                 else {
@@ -981,7 +981,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
             if (verb.equalsIgnoreCase(("post"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking POST: " + url + " DATA: " + value);
-                if (this.mdsRequiresSSL()) {
+                if (this.requireSSL()) {
                     json = this.httpsPost(url, value, "plain/text");  // nail content_type to "plain/text"
                 }
                 else {
@@ -990,7 +990,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
             if (verb.equalsIgnoreCase(("delete"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
-                if (this.mdsRequiresSSL()) {
+                if (this.requireSSL()) {
                     json = this.httpsDelete(url, "plain/text");      // nail content_type to "plain/text"
                 }
                 else {
@@ -999,7 +999,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
             }
             if (verb.equalsIgnoreCase(("del"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
-                if (this.mdsRequiresSSL()) {
+                if (this.requireSSL()) {
                     json = this.httpsDelete(url, "plain/text");      // nail content_type to "plain/text"
                 }
                 else {
@@ -1060,7 +1060,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
         String json = null;
 
         // mDS expects request to come as a http GET
-        if (this.mdsRequiresSSL()) {
+        if (this.requireSSL()) {
             json = this.httpsGet(url);
         }
         else {
@@ -1074,7 +1074,7 @@ public class MDSProcessor extends Processor implements MDSInterface, AsyncRespon
     public String performDeviceResourceDiscovery(String uri) {
         String url = this.createEndpointResourceDiscoveryURL(uri);
         String json = null;
-        if (this.mdsRequiresSSL()) {
+        if (this.requireSSL()) {
             json = this.httpsGet(url);
         }
         else {

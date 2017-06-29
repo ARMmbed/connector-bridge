@@ -32,7 +32,7 @@ import java.util.ArrayList;
  */
 public class WebhookValidator extends Thread {
 
-    private MDSProcessor m_mds = null;
+    private mbedDeviceServerProcessor m_mds = null;
     private int m_poll_interval_ms = 0;
     private String m_webhook_url = null;
     private ArrayList<String> m_subscriptions = null;
@@ -40,7 +40,7 @@ public class WebhookValidator extends Thread {
     private int m_max_retry_count = 0;
 
     // default constructor
-    public WebhookValidator(MDSProcessor mds, int poll_interval_ms) {
+    public WebhookValidator(mbedDeviceServerProcessor mds, int poll_interval_ms) {
         this.m_mds = mds;
         this.m_poll_interval_ms = poll_interval_ms;
         this.m_webhook_url = null;
@@ -218,9 +218,9 @@ public class WebhookValidator extends Thread {
         // reset the webhook
         this.resetWebhook();
 
-        // direct MDSProcessor to re-establish the webhook
-        this.m_mds.resetNotificationCallbackURL();
-        this.m_mds.setNotificationCallbackURL();
+        // direct mbedDeviceServerProcessor to re-establish the webhook
+        this.m_mds.resetWebhook();
+        this.m_mds.setWebhook();
 
         // check the HTTP result code
         int status = this.m_mds.getLastResponseCode();
@@ -317,7 +317,7 @@ public class WebhookValidator extends Thread {
         boolean validated = false;
 
         // get the current webhook
-        String url = this.m_mds.getNotificationCallbackURL();
+        String url = this.m_mds.getWebhook();
         if (url != null && url.length() > 0) {
             if (url.equalsIgnoreCase(this.m_webhook_url) == true) {
                 // DEBUG

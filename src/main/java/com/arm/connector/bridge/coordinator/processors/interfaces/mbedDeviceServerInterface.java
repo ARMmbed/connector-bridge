@@ -1,6 +1,6 @@
 /**
- * @file    MDSInterface.java
- * @brief mDS Peer Interface for the connector bridge
+ * @file    mbedDeviceServerInterface.java
+ * @brief mbed Device Server processor interface
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -27,14 +27,15 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * This interface defines the exposed methods of the mDS processor that can be used by a given peer processor.
+ * This interface defines the exposed methods of the mbed Device Server processor that can 
+ * be used by a given peer processor.
  *
  * @author Doug Anson
  */
-public interface MDSInterface {
+public interface mbedDeviceServerInterface {
 
-    // process observations/notifications
-    public void processMDSMessage(HttpServletRequest request, HttpServletResponse response);
+    // process observations/notifications incoming messages from device server
+    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response);
 
     // process de-registrations
     public void processDeregistrations(String[] deregistrations);
@@ -56,8 +57,8 @@ public interface MDSInterface {
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options);
 
     // Webhook management
-    public void setNotificationCallbackURL();
-    public void resetNotificationCallbackURL();
+    public void setWebhook();
+    public void resetWebhook();
 
     // Device Metadata extraction
     public void pullDeviceMetadata(Map endpoint, AsyncResponseProcessor processor);

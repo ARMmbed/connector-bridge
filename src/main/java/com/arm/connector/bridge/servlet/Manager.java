@@ -137,13 +137,13 @@ public final class Manager {
 
     public void initWebhooks() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            manager.getEndpointsManager().initMDSWebhook();
+            manager.getEndpointsManager().initializeDeviceServerWebhook();
         }
     }
 
     public void resetNotifications() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            manager.getEndpointsManager().resetMDSWebhook();
+            manager.getEndpointsManager().resetDeviceServerWebhook();
         }
     }
 

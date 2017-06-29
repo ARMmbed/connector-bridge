@@ -185,7 +185,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // process an observation
     public void processNotification(Map data) {
         // DEBUG
-        //this.errorLogger().info("processNotification(Peer)...");
+        //this.errorLogger().info("processIncomingDeviceServerMessage(Peer)...");
 
         // get the list of parsed notifications
         List notifications = (List) data.get("notifications");
@@ -197,7 +197,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             String decoded_coap_payload = Utils.decodeCoAPPayload(b64_coap_payload);
 
             // DEBUG
-            //this.errorLogger().info("processNotification(Peer): Decoded Payload: " + decoded_coap_payload);
+            //this.errorLogger().info("processIncomingDeviceServerMessage(Peer): Decoded Payload: " + decoded_coap_payload);
             // Try a JSON parse... if it succeeds, assume the payload is a composite JSON value...
             Map json_parsed = this.tryJSONParse(decoded_coap_payload);
             if (json_parsed != null && json_parsed.isEmpty() == false) {

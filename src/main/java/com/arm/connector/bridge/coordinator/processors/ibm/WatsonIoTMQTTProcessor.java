@@ -253,7 +253,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     @Override
     public void processNotification(Map data) {
         // DEBUG
-        //this.errorLogger().info("processNotification(WatsonIoT)...");
+        //this.errorLogger().info("processIncomingDeviceServerMessage(WatsonIoT)...");
 
         // get the list of parsed notifications
         List notifications = (List) data.get("notifications");

@@ -51,11 +51,11 @@ public class DomainManager {
     }
 
     public void processConsole(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        this.m_endpoint_manager.processConsole(request, response);
+        this.m_endpoint_manager.processConsoleEvent(request, response);
     }
 
     public void processNotification(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        this.m_endpoint_manager.processNotification(request, response);
+        this.m_endpoint_manager.processIncomingDeviceServerMessage(request, response);
     }
 
     // get the endpoints manager

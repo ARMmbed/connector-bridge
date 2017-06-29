@@ -34,11 +34,11 @@ import com.arm.connector.bridge.core.ErrorLogger;
  */
 public class LongPollProcessor extends Thread {
 
-    private MDSProcessor m_mds = null;
+    private mbedDeviceServerProcessor m_mds = null;
     private boolean m_running = false;
 
     // default constructor
-    public LongPollProcessor(MDSProcessor mds) {
+    public LongPollProcessor(mbedDeviceServerProcessor mds) {
         this.m_mds = mds;
         this.m_running = false;
     }
@@ -62,7 +62,7 @@ public class LongPollProcessor extends Thread {
         String response = null;
 
         // persistent GET over https()
-        if (this.m_mds.usingSSLInDispatch() == true) {
+        if (this.m_mds.usingSSLInWebhookEstablishment() == true) {
             // use SSL
             this.m_mds.errorLogger().info("poll: using HTTPS persistent get...");
             response = this.m_mds.persistentHTTPSGet(this.m_mds.longPollURL());
@@ -82,7 +82,7 @@ public class LongPollProcessor extends Thread {
         }
 
         // send whatever we get back as if we have received it via the webhook...
-        this.m_mds.processMDSMessage(response);
+        this.m_mds.processDeviceServerMessage(response);
     }
 
     /**

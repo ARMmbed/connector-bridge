@@ -25,11 +25,10 @@ package com.arm.connector.bridge.coordinator;
 import com.arm.connector.bridge.console.ConsoleManager;
 
 // Interfaces
-import com.arm.connector.bridge.coordinator.processors.interfaces.MDSInterface;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 
 // Processors
-import com.arm.connector.bridge.coordinator.processors.arm.MDSProcessor;
+import com.arm.connector.bridge.coordinator.processors.arm.mbedDeviceServerProcessor;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProcessor;
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
@@ -50,13 +49,14 @@ import java.util.Map;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
 
 /**
  * This the primary orchestrator for the connector bridge
  *
  * @author Doug Anson
  */
-public class Orchestrator implements MDSInterface, PeerInterface {
+public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
     private final HttpServlet m_servlet = null;
 
@@ -64,7 +64,7 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     private PreferenceManager m_preference_manager = null;
 
     // mDS processor
-    private MDSInterface m_mds_rest_processor = null;
+    private mbedDeviceServerInterface m_mbed_device_server_processor = null;
 
     // Peer processor list
     private ArrayList<PeerInterface> m_peer_processor_list = null;
@@ -103,7 +103,7 @@ public class Orchestrator implements MDSInterface, PeerInterface {
         this.m_http = new HttpTransport(this.m_error_logger, this.m_preference_manager);
 
         // REQUIRED: We always create the mDS REST processor
-        this.m_mds_rest_processor = new MDSProcessor(this, this.m_http);
+        this.m_mbed_device_server_processor = new mbedDeviceServerProcessor(this, this.m_http);
 
         // initialize our peer processor list
         this.initPeerProcessorList();
@@ -207,34 +207,34 @@ public class Orchestrator implements MDSInterface, PeerInterface {
         }
     }
 
-    // initialize the mDS webhook
-    public void initMDSWebhook() {
-        if (this.m_mds_rest_processor != null) {
+    // initialize the mbed Device Server webhook
+    public void initializeDeviceServerWebhook() {
+        if (this.m_mbed_device_server_processor != null) {
             // set the webhook
-            this.m_mds_rest_processor.setNotificationCallbackURL();
+            this.m_mbed_device_server_processor.setWebhook();
 
             // begin validation polling
             this.beginValidationPolling();
         }
     }
 
-    // reset mDS webhook
-    public void resetMDSWebhook() {
+    // reset mbed Device Server webhook
+    public void resetDeviceServerWebhook() {
         // REST (mDS)
-        if (this.m_mds_rest_processor != null) {
-            this.m_mds_rest_processor.resetNotificationCallbackURL();
+        if (this.m_mbed_device_server_processor != null) {
+            this.m_mbed_device_server_processor.resetWebhook();
         }
     }
 
-    // process the mDS notification
-    public void processNotification(HttpServletRequest request, HttpServletResponse response) {
+    // process the mbed Device Server inbound message
+    public void processIncomingDeviceServerMessage(HttpServletRequest request, HttpServletResponse response) {
         // process the received REST message
         //this.errorLogger().info("events (REST-" + request.getMethod() + "): " + request.getRequestURI());
-        this.mds_rest_processor().processMDSMessage(request, response);
+        this.device_server_processor().processIncomingMessage(request, response);
     }
 
-    // process the Console request
-    public void processConsole(HttpServletRequest request, HttpServletResponse response) {
+    // process the Console request/event
+    public void processConsoleEvent(HttpServletRequest request, HttpServletResponse response) {
         // process the received REST message
         //this.errorLogger().info("console (REST-" + request.getMethod() + "): " + request.getServletPath());
         this.console_manager().processConsole(request, response);
@@ -261,8 +261,8 @@ public class Orchestrator implements MDSInterface, PeerInterface {
     }
 
     // get the mDS processor
-    public MDSInterface mds_rest_processor() {
-        return this.m_mds_rest_processor;
+    public mbedDeviceServerInterface device_server_processor() {
+        return this.m_mbed_device_server_processor;
     }
 
     // get the console manager
@@ -293,60 +293,60 @@ public class Orchestrator implements MDSInterface, PeerInterface {
         return null;
     }
 
-    // MDSInterface Orchestration
+    // mbedDeviceServerInterface Orchestration
     @Override
-    public void processMDSMessage(HttpServletRequest request, HttpServletResponse response) {
-        this.mds_rest_processor().processMDSMessage(request, response);
+    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response) {
+        this.device_server_processor().processIncomingMessage(request, response);
     }
 
     @Override
     public void processDeregistrations(String[] deregistrations) {
-        this.mds_rest_processor().processDeregistrations(deregistrations);
+        this.device_server_processor().processDeregistrations(deregistrations);
     }
 
     @Override
     public String subscribeToEndpointResource(String uri, Map options, Boolean init_webhook) {
-        return this.mds_rest_processor().subscribeToEndpointResource(uri, options, init_webhook);
+        return this.device_server_processor().subscribeToEndpointResource(uri, options, init_webhook);
     }
 
     @Override
     public String subscribeToEndpointResource(String ep_name, String uri, Boolean init_webhook) {
-        return this.mds_rest_processor().subscribeToEndpointResource(ep_name, uri, init_webhook);
+        return this.device_server_processor().subscribeToEndpointResource(ep_name, uri, init_webhook);
     }
 
     @Override
     public String unsubscribeFromEndpointResource(String uri, Map options) {
-        return this.mds_rest_processor().unsubscribeFromEndpointResource(uri, options);
+        return this.device_server_processor().unsubscribeFromEndpointResource(uri, options);
     }
 
     @Override
     public String performDeviceDiscovery(Map options) {
-        return this.mds_rest_processor().performDeviceDiscovery(options);
+        return this.device_server_processor().performDeviceDiscovery(options);
     }
 
     @Override
     public String performDeviceResourceDiscovery(String uri) {
-        return this.mds_rest_processor().performDeviceResourceDiscovery(uri);
+        return this.device_server_processor().performDeviceResourceDiscovery(uri);
     }
 
     @Override
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options) {
-        return this.mds_rest_processor().processEndpointResourceOperation(verb, ep_name, uri, value, options);
+        return this.device_server_processor().processEndpointResourceOperation(verb, ep_name, uri, value, options);
     }
 
     @Override
-    public void setNotificationCallbackURL() {
-        this.mds_rest_processor().setNotificationCallbackURL();
+    public void setWebhook() {
+        this.device_server_processor().setWebhook();
     }
 
     @Override
-    public void resetNotificationCallbackURL() {
-        this.mds_rest_processor().resetNotificationCallbackURL();
+    public void resetWebhook() {
+        this.device_server_processor().resetWebhook();
     }
 
     @Override
     public void pullDeviceMetadata(Map endpoint, AsyncResponseProcessor processor) {
-        this.mds_rest_processor().pullDeviceMetadata(endpoint, processor);
+        this.device_server_processor().pullDeviceMetadata(endpoint, processor);
     }
 
     // PeerInterface Orchestration
@@ -430,11 +430,11 @@ public class Orchestrator implements MDSInterface, PeerInterface {
 
     @Override
     public void beginValidationPolling() {
-        this.mds_rest_processor().beginValidationPolling();
+        this.device_server_processor().beginValidationPolling();
     }
 
     @Override
     public String createSubscriptionURI(String ep_name, String resource_uri) {
-        return this.mds_rest_processor().createSubscriptionURI(ep_name, resource_uri);
+        return this.device_server_processor().createSubscriptionURI(ep_name, resource_uri);
     }
 }

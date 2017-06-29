@@ -192,7 +192,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     @Override
     public void processNotification(Map data) {
         // DEBUG
-        //this.errorLogger().info("processNotification(IoTHub)...");
+        //this.errorLogger().info("processIncomingDeviceServerMessage(IoTHub)...");
 
         // get the list of parsed notifications
         List notifications = (List) data.get("notifications");

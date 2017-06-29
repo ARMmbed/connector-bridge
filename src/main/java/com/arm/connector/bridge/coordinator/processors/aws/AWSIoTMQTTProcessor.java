@@ -175,7 +175,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     @Override
     public void processNotification(Map data) {
         // DEBUG
-        //this.errorLogger().info("processNotification(AWSIoT)...");
+        //this.errorLogger().info("processIncomingDeviceServerMessage(AWSIoT)...");
 
         // get the list of parsed notifications
         List notifications = (List) data.get("notifications");
