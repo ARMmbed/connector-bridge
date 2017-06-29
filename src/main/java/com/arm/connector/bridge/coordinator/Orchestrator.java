@@ -230,7 +230,7 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     public void processIncomingDeviceServerMessage(HttpServletRequest request, HttpServletResponse response) {
         // process the received REST message
         //this.errorLogger().info("events (REST-" + request.getMethod() + "): " + request.getRequestURI());
-        this.device_server_processor().processIncomingMessage(request, response);
+        this.device_server_processor().processNotificationMessage(request, response);
     }
 
     // process the Console request/event
@@ -295,8 +295,8 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
     // mbedDeviceServerInterface Orchestration
     @Override
-    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response) {
-        this.device_server_processor().processIncomingMessage(request, response);
+    public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {
+        this.device_server_processor().processNotificationMessage(request, response);
     }
 
     @Override

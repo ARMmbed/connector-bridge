@@ -797,7 +797,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     
     // process the notification
     @Override
-    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response) {
+    public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {
         // build the response
         String response_header = "";
         String json = this.read(request);
@@ -817,7 +817,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // process and route the mDS message to the appropriate peer method
     private void processDeviceServerMessage(String json, HttpServletRequest request) {
         // DEBUG
-        //this.orchestrator().errorLogger().info("processIncomingMessage(mDS): Received message from mDS: " + json);
+        //this.orchestrator().errorLogger().info("processNotificationMessage(mDS): Received message from mDS: " + json);
 
         // tell the orchestrator to call its peer processors with this mDS message
         try {
@@ -827,7 +827,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                     if (parsed.containsKey("notifications")) {
                         if (this.validateNotification(request)) {
                             // DEBUG
-                            //this.errorLogger().info("processIncomingMessage: notification VALIDATED");
+                            //this.errorLogger().info("processNotificationMessage: notification VALIDATED");
 
                             // validated notification... process it...
                             this.orchestrator().processNotification(parsed);
@@ -839,7 +839,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                     }
 
                     // DEBUG
-                    //this.errorLogger().info("processIncomingMessage(STD) Parsed: " + parsed);
+                    //this.errorLogger().info("processNotificationMessage(STD) Parsed: " + parsed);
                     // act on the request...
                     if (parsed.containsKey("registrations")) {
                         this.orchestrator().processNewRegistration(parsed);

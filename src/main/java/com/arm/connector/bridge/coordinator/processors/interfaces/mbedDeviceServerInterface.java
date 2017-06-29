@@ -33,11 +33,13 @@ import javax.servlet.http.HttpServletResponse;
  * @author Doug Anson
  */
 public interface mbedDeviceServerInterface {
-
     // process observations/notifications incoming messages from device server
-    public void processIncomingMessage(HttpServletRequest request, HttpServletResponse response);
+    public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response);
 
-    // process de-registrations
+    // perform endpoint get/put/post/delete operations on endpoint resources
+    public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options);
+
+    // process endpoint de-registrations from device server
     public void processDeregistrations(String[] deregistrations);
 
     // process resource subscription request
@@ -52,9 +54,6 @@ public interface mbedDeviceServerInterface {
 
     // perform device resource discovery
     public String performDeviceResourceDiscovery(String uri);
-
-    // perform CoAP operations on endpoint resources
-    public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options);
 
     // Webhook management
     public void setWebhook();
