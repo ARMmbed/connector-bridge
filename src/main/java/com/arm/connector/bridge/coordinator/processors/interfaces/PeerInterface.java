@@ -24,7 +24,8 @@ package com.arm.connector.bridge.coordinator.processors.interfaces;
 import java.util.Map;
 
 /**
- * This interface defines the exposed methods of a peer processor (such as a GenericMQTTProcessor) that are consumed by the mDS processor
+ * This interface defines the exposed methods of a peer processor (such as a GenericMQTTProcessor) 
+ * that are consumed by the mbed device server processor
  *
  * @author Doug Anson
  */
