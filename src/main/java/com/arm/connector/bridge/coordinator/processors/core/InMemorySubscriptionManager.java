@@ -1,6 +1,6 @@
 /**
- * @file    SubscriptionList.java
- * @brief mDS subscription list manager
+ * @file InMemorySubscriptionManager.java
+ * @brief In-memory subscription manager
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -22,6 +22,7 @@
  */
 package com.arm.connector.bridge.coordinator.processors.core;
 
+import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionManager;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
 import com.arm.connector.bridge.core.BaseClass;
 import com.arm.connector.bridge.core.ErrorLogger;
@@ -30,34 +31,39 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
- * mDS subscription list manager
+ * In-memory subscription manager
  *
  * @author Doug Anson
  */
-public class SubscriptionList extends BaseClass {
+public class InMemorySubscriptionManager extends BaseClass implements SubscriptionManager {
 
     private ArrayList<HashMap<String, String>> m_subscriptions = null;
     private String m_non_domain = null;
     private SubscriptionProcessor m_subscription_processor = null;
 
     // constructor
-    public SubscriptionList(ErrorLogger error_logger, PreferenceManager preference_manager) {
+    public InMemorySubscriptionManager(ErrorLogger error_logger, PreferenceManager preference_manager) {
         super(error_logger, preference_manager);
         this.m_subscriptions = new ArrayList<>();
         this.m_non_domain = this.preferences().valueOf("mds_def_domain");
         this.m_subscription_processor = null;
+        
+        // DEBUG
+        this.errorLogger().info("SubscriptionManager: InMemory subscription manager initialized.");
     }
     
-    // add an additional subscription processor
-    public void addSubscriptionHandler(SubscriptionProcessor subscription_processor) {
+    // add a subscription processor to the subscription manager
+    @Override
+    public void addSubscriptionProcessor(SubscriptionProcessor subscription_processor) {
         this.m_subscription_processor = subscription_processor;
     }
 
     // add subscription
+    @Override
     public void addSubscription(String domain, String endpoint, String ep_type, String uri, boolean is_observable) {
         domain = this.checkAndDefaultDomain(domain);
         if (!this.containsSubscription(domain, endpoint, ep_type, uri)) {
-            this.errorLogger().info("Adding Subscription: " + domain + ":" + endpoint + ":" + ep_type + ":" + uri);
+            this.errorLogger().info("SubscriptionManager(InMemory): Adding Subscription: " + domain + ":" + endpoint + ":" + ep_type + ":" + uri);
             this.m_subscriptions.add(this.makeSubscription(domain, endpoint, ep_type, uri));
             if (this.m_subscription_processor != null) {
                 this.m_subscription_processor.subscribe(domain,endpoint,ep_type,uri,is_observable);
@@ -66,6 +72,7 @@ public class SubscriptionList extends BaseClass {
     }
 
     // contains a given subscription?
+    @Override
     public boolean containsSubscription(String domain, String endpoint, String ep_type, String uri) {
         boolean has_subscription = false;
         domain = this.checkAndDefaultDomain(domain);
@@ -77,7 +84,8 @@ public class SubscriptionList extends BaseClass {
         return has_subscription;
     }
     
-    // remove all subscriptions for a given endpoint
+    // remove all subscriptions for a given endpoint (called when a endpoint is deregistered)
+    @Override
     public void removeEndpointSubscriptions(String endpoint) {
         for(int i=0;i<this.m_subscriptions.size() && this.m_subscription_processor != null;++i) {
             HashMap<String,String> subscription = this.m_subscriptions.get(i);
@@ -86,7 +94,7 @@ public class SubscriptionList extends BaseClass {
             String t_ept = subscription.get("ep_type");
             String t_uri = subscription.get("uri");
             if (t_endpoint != null && endpoint != null && t_endpoint.equalsIgnoreCase(endpoint)) {
-                this.errorLogger().info("Removing Subscription: " + t_domain + ":" + t_endpoint + ":" + t_uri);
+                this.errorLogger().info("SubscriptionManager(InMemory): Removing Subscription: " + t_domain + ":" + t_endpoint + ":" + t_uri);
                 this.m_subscription_processor.unsubscribe(t_domain,t_endpoint,t_ept,t_uri);
             }
         }
@@ -100,12 +108,13 @@ public class SubscriptionList extends BaseClass {
     }
 
     // remove a subscription
+    @Override
     public void removeSubscription(String domain, String endpoint, String ep_type, String uri) {
         domain = this.checkAndDefaultDomain(domain);
         HashMap<String, String> subscription = this.makeSubscription(domain, endpoint, ep_type, uri);
         int index = this.containsSubscription(subscription);
         if (index >= 0) {
-            this.errorLogger().info("Removing Subscription: " + domain + ":" + endpoint + ":" + uri);
+            this.errorLogger().info("SubscriptionManager(InMemory): Removing Subscription: " + domain + ":" + endpoint + ":" + uri);
             this.m_subscriptions.remove(index);
             if (this.m_subscription_processor != null) {
                 this.m_subscription_processor.unsubscribe(domain,endpoint,ep_type,uri);
@@ -165,6 +174,7 @@ public class SubscriptionList extends BaseClass {
     }
 
     // get the endpoint type for a given endpoint
+    @Override
     public String endpointTypeFromEndpointName(String endpoint) {
         String ep_type = null;
 
@@ -176,7 +186,7 @@ public class SubscriptionList extends BaseClass {
         }
 
         // DEBUG
-        this.errorLogger().info("endpointTypeFromEndpointName: endpoint: " + endpoint + " type: " + ep_type);
+        this.errorLogger().info("SubscriptionManager(InMemory): endpoint: " + endpoint + " type: " + ep_type);
 
         // return the endpoint type
         return ep_type;

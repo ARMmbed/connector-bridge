@@ -88,7 +88,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         this.m_max_messages = this.orchestrator().preferences().intValueOf("google_cloud_max_messages",this.m_suffix);
         
         // we need extended subscription handling
-        this.addSubscriptionHandler(this);
+        this.addSubscriptionProcessor(this);
         
         // initialize the receivers list
         this.m_receivers = new ArrayList<>();

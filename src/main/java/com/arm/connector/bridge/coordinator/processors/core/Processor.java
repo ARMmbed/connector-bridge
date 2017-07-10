@@ -43,6 +43,9 @@ public class Processor extends BaseClass {
     private JSONGenerator m_json_generator = null;
     private JSONParser m_json_parser = null;
     
+    // EXPERIMENTAL: bulk subscriptions
+    protected boolean m_enable_bulk_subscriptions = false;
+    
     // constructor
     public Processor(Orchestrator orchestrator, String suffix) {
         super(orchestrator.errorLogger(), orchestrator.preferences());
@@ -56,6 +59,12 @@ public class Processor extends BaseClass {
         this.m_empty_string = orchestrator.preferences().valueOf("mds_bridge_empty_string", suffix);
         if (this.m_empty_string == null || this.m_empty_string.length() == 0) {
             this.m_empty_string = Processor.DEFAULT_EMPTY_STRING;
+        }
+        
+        // EXPERIMENTAL: bulk subscriptions
+        this.m_enable_bulk_subscriptions = this.prefBoolValue("mds_enable_bulk_subscriptions");
+        if (this.m_enable_bulk_subscriptions == true) {
+            this.errorLogger().info("Bulk subscriptions ENABLED (EXPERIMENTAL)");
         }
     }
     

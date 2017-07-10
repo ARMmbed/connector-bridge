@@ -113,7 +113,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         if (this.m_use_api_token == true) {
             this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         }
-
+        
         // adjust mds_username
         try {
             Double ver = Double.valueOf(this.m_mds_version);
@@ -123,7 +123,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 this.m_mds_username = domain + "/" + this.m_mds_username;
 
                 // DEBUG
-                this.errorLogger().info("mDS(v3x) Updated username: " + this.m_mds_username);
+                this.errorLogger().info("mbedDeviceServerProcessor Updated username: " + this.m_mds_username);
             }
         }
         catch (NumberFormatException ex) {
@@ -140,7 +140,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         // validation check override
         this.m_skip_validation = orchestrator.preferences().booleanValueOf("mds_skip_validation_override");
         if (this.m_skip_validation == true) {
-            orchestrator.errorLogger().info("MDSProcessor: Validation Skip Override ENABLED");
+            orchestrator.errorLogger().info("mbedDeviceServerProcessor: Validation Skip Override ENABLED");
         }
 
         // initialize our webhook validator
@@ -164,21 +164,21 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
             this.m_webhook_validator = new WebhookValidator(this, this.m_webhook_validator_poll_ms);
 
             // DEBUG
-            orchestrator.errorLogger().warning("MDSProcessor: mds/mDC webhook/subscription validator ENABLED (interval: " + this.m_webhook_validator_poll_ms + "ms)");
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: webhook/subscription validator ENABLED (interval: " + this.m_webhook_validator_poll_ms + "ms)");
         }
         else {
             // disabling webhook/subscription validation
-            orchestrator.errorLogger().warning("MDSProcessor: mds/mDC webhook/subscription validator DISABLED");
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: webhook/subscription validator DISABLED");
         }
 
         // Announce version supported
         if (this.m_use_rest_versions == true) {
             // we are versioning our REST calls
-            orchestrator.errorLogger().warning("MDSProcessor: Versioning of mds/mDC REST calls ENABLED (" + "v" + this.m_rest_version + ")");
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: Versioning of REST calls ENABLED (" + "v" + this.m_rest_version + ")");
         }
         else {
             // we are not versioning our REST calls
-            orchestrator.errorLogger().warning("MDSProcessor: Versioning of mds/mDC REST calls DISABLED");
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: Versioning of REST calls DISABLED");
         }
 
         // configure the callback type based on the version of mDS (only if not using long polling)
@@ -191,7 +191,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
         // disable sync usage if with Connector
         if (this.bridgingToConnector() == true) {
-            this.errorLogger().info("MDSProcessor: Using mbed Device Connector. Sync=true DISABLED");
+            this.errorLogger().info("mbedDeviceServerProcessor: Using mbed Device Connector. Sync=true DISABLED");
             this.m_disable_sync = true;
         }
 
@@ -218,7 +218,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private void longPollOverrideSetup() {
         if (this.longPollEnabled()) {
             // DEBUG
-            this.errorLogger().warning("MDSProcessor: Long Poll Override ENABLED. Using Long Polling (webhook DISABLED)");
+            this.errorLogger().warning("mbedDeviceServerProcessor: Long Poll Override ENABLED. Using Long Polling (webhook DISABLED)");
 
             // disable webhook validation
             this.m_webhook_validator_enable = false;
@@ -555,7 +555,34 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         if (this.longPollEnabled() == false) {
             String target_url = this.createWebhookURL();
             this.setWebhook(target_url);
+            
+            // EXPERIMENTAL - test for bulk subscriptions setting
+            if (this.m_enable_bulk_subscriptions == true) {
+                this.setupBulkSubscriptions();
+            }
         }
+    }
+    
+    // EXPERIMENTAL: establish bulk subscription (disabled by default)
+    private void setupBulkSubscriptions() {
+        // DEBUG
+        this.errorLogger().info("setupBulkSubscriptions: setting bulk subscriptions (EXPERIMENTAL)...");
+        
+        // JSON for the bulk subscription
+        String json = "[{\"endpoint-name\":\"*\"}]";
+        
+        // Create the URI for the bulk subscription PUT
+        String url = this.createBaseURL() + "/subscriptions";
+        
+        // DEBUG
+        this.errorLogger().info("setupBulkSubscriptions: URL: " + url + " JSON: " + json);
+        
+        // send PUT to establish the bulk subscriptions
+        String result = this.httpsPut(url, json, "application/json");
+        int error_code = this.getLastResponseCode();
+        
+        // DEBUG
+        this.errorLogger().info("setupBulkSubscriptions: Response Code: " + error_code + " RESULT: " + result);
     }
 
     // set our mDS Notification Callback URL
@@ -859,32 +886,44 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 }
                 else {
                     // parseJson() failed...
-                    this.errorLogger().warning("processMDSMessage(mDS): unable to parse JSON: " + json);
+                    this.errorLogger().warning("processDeviceServerMessage: unable to parse JSON: " + json);
                 }
             }
             else {
                 // empty JSON... so not parsed
-                this.errorLogger().info("processMDSMessage(mDS): empty JSON not parsed (OK).");
+                this.errorLogger().info("processDeviceServerMessage: empty JSON not parsed (OK).");
             }
         }
         catch (Exception ex) {
             // exception during JSON parsing
-            this.errorLogger().warning("processMDSMessage(mDS) Exception during notification body JSON parsing: " + json, ex);
+            this.errorLogger().warning("processDeviceServerMessage: Exception during notification body JSON parsing: " + json, ex);
         }
     }
 
     // process an endpoint resource subscription request
     @Override
     public String subscribeToEndpointResource(String uri, Map options, Boolean init_webhook) {
-        String url = this.createEndpointResourceSubscriptionURL(uri, options);
-        return this.subscribeToEndpointResource(url, init_webhook);
+        if (this.m_enable_bulk_subscriptions == false) {
+            String url = this.createEndpointResourceSubscriptionURL(uri, options);
+            return this.subscribeToEndpointResource(url, init_webhook);
+        }
+        else {
+            this.errorLogger().info("subscribeToEndpointResource: Using bulk subscriptions: URI: " + uri + " Map: " + options + " webhook: " + init_webhook);
+            return "";
+        }
     }
 
     // process an endpoint resource subscription request
     @Override
     public String subscribeToEndpointResource(String ep_name, String uri, Boolean init_webhook) {
-        String url = this.createEndpointResourceSubscriptionURL(ep_name, uri);
-        return this.subscribeToEndpointResource(url, init_webhook);
+        if (this.m_enable_bulk_subscriptions == false) {
+            String url = this.createEndpointResourceSubscriptionURL(ep_name, uri);
+            return this.subscribeToEndpointResource(url, init_webhook);
+        }
+        else {
+            this.errorLogger().info("subscribeToEndpointResource: Using bulk subscriptions: URI: " + uri + " EP: " + ep_name + " webhook: " + init_webhook);
+            return "";
+        }
     }
 
     // subscribe to endpoint resources

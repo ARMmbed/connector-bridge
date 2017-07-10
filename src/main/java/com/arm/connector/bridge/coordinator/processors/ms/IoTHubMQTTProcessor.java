@@ -119,13 +119,13 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 String ep_name = (String) endpoint.get("ep");
 
                 // re-subscribe
-                if (this.subscriptionsList().containsSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"))) {
+                if (this.subscriptionsManager().containsSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"))) {
                     // re-subscribe to this resource
                     this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
+                    this.subscriptionsManager().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsManager().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
 
                 // auto-subscribe
@@ -134,8 +134,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                     this.orchestrator().subscribeToEndpointResource(ep_name, (String) resource.get("path"), false);
 
                     // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.subscriptionsList().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsList().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
+                    this.subscriptionsManager().removeSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.subscriptionsManager().addSubscription(this.m_mds_domain, ep_name, (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
             }
 
