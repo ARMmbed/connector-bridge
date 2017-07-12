@@ -26,10 +26,12 @@ import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.servlet.Console;
 import com.arm.connector.bridge.servlet.EventsProcessor;
+import java.util.concurrent.TimeUnit;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.util.thread.ExecutorThreadPool;
 
 /**
  * Primary entry point for the connector-bridge Jetty application
@@ -37,7 +39,11 @@ import org.eclipse.jetty.servlet.ServletHolder;
  * @author Doug Anson
  */
 public class Main {
-
+    // defaults
+    private static int DEF_CORE_POOL_SIZE = 1000;
+    private static int DEF_MAX_POOL_SIZE = 1000000;
+    private static int DEF_KEEP_ALIVE = 60;
+    
     public static void main(String[] args) throws Exception {
         ErrorLogger logger = new ErrorLogger();
         PreferenceManager preferences = new PreferenceManager(logger);
@@ -45,8 +51,22 @@ public class Main {
         // configure the error logger logging level
         logger.configureLoggingLevel(preferences);
 
-        // initialize the server,,,
+        // initialize the server
         Server server = new Server(preferences.intValueOf("mds_gw_port"));
+        
+        // get the thread pooling configuration
+        int core_pool_size = preferences.intValueOf("threads_core_pool_size");
+        if (core_pool_size <= 0) {
+            core_pool_size = DEF_CORE_POOL_SIZE;
+        }
+        int max_pool_size = preferences.intValueOf("threads_max_pool_size");
+        if (max_pool_size <= 0) {
+            max_pool_size = DEF_MAX_POOL_SIZE;
+        }
+        int keep_alive_time = preferences.intValueOf("threads_keep_alive_time");
+        if (keep_alive_time <= 0) {
+            keep_alive_time = DEF_KEEP_ALIVE;
+        }
 
         ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
         context.setContextPath(preferences.valueOf("mds_gw_context_path"));
@@ -87,6 +107,12 @@ public class Main {
         // notification events: wildcard for domain inclusion
         context.addServlet(new ServletHolder(eventsProcessor), preferences.valueOf("mds_gw_events_path") + "/*");
 
+        // DEBUG
+        System.out.println("Thread Executor Pool: corePool: " + core_pool_size + " maxPool: " + max_pool_size + " keepalive (sec): " + keep_alive_time);
+        
+        // set the max threads in our thread pool
+        server.setThreadPool(new ExecutorThreadPool(core_pool_size, max_pool_size, keep_alive_time, TimeUnit.SECONDS));
+                
         // start
         server.start();
 
