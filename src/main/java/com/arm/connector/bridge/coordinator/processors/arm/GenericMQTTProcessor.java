@@ -29,6 +29,7 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
+import java.io.Serializable;
 import java.util.HashMap;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
@@ -51,7 +52,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     private String m_default_tr_key = null;
     
     private HashMap<String, MQTTTransport> m_mqtt = null;
-    protected HashMap<String, Object> m_endpoints = null;
+    protected HashMap<String, Serializable> m_endpoints = null;
     protected HashMap<String, TransportReceiveThread> m_mqtt_thread_list = null;
 
     // Factory method for initializing the Sample 3rd Party peer
