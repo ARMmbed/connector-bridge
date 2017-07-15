@@ -37,10 +37,11 @@ import java.util.HashMap;
  */
 public class InMemorySubscriptionManager extends BaseClass implements SubscriptionManager {
 
-    private ArrayList<HashMap<String, String>> m_subscriptions = null;
     private String m_non_domain = null;
     private SubscriptionProcessor m_subscription_processor = null;
 
+    private ArrayList<HashMap<String, String>> m_subscriptions = null;
+    
     // constructor
     public InMemorySubscriptionManager(ErrorLogger error_logger, PreferenceManager preference_manager) {
         super(error_logger, preference_manager);
