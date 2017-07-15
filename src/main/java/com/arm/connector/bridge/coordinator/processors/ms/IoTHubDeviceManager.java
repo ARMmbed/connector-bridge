@@ -23,7 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.ms;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
-import com.arm.connector.bridge.core.BaseClass;
+import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
@@ -36,12 +36,7 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class IoTHubDeviceManager extends BaseClass {
-
-    private HttpTransport m_http = null;
-    private Orchestrator m_orchestrator = null;
-    private String m_suffix = null;
-    private HashMap<String, HashMap<String, String>> m_endpoint_details = null;
+public class IoTHubDeviceManager extends DeviceManager {
     private String m_device_id_url_template = null;
     private String m_api_version = null;
     private String m_iot_event_hub_name = null;
@@ -60,15 +55,7 @@ public class IoTHubDeviceManager extends BaseClass {
 
     // constructor
     public IoTHubDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http, Orchestrator orchestrator) {
-        super(logger, preferences);
-
-        // HTTP and suffix support
-        this.m_http = http;
-        this.m_suffix = suffix;
-        this.m_orchestrator = orchestrator;
-
-        // initialize the endpoint keys map
-        this.m_endpoint_details = new HashMap<>();
+        super(logger, preferences,suffix,http,orchestrator);
 
         // IoTHub Name
         this.m_iot_event_hub_name = this.preferences().valueOf("iot_event_hub_name", this.m_suffix);

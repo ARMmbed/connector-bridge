@@ -50,9 +50,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String m_aws_iot_coap_cmd_topic_post = null;
     private String m_aws_iot_coap_cmd_topic_delete = null;
 
-    private HashMap<String, Object> m_aws_iot_gw_endpoints = null;
-    private HashMap<String, TransportReceiveThread> m_mqtt_thread_list = null;
-
     // AWSIoT Device Manager
     private AWSIoTDeviceManager m_aws_iot_gw_device_manager = null;
 
@@ -67,12 +64,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // AWSIoT Processor Announce
         this.errorLogger().info("AWS IoT Processor ENABLED.");
-
-        // initialize the endpoint map
-        this.m_aws_iot_gw_endpoints = new HashMap<>();
-
-        // initialize the listener thread map
-        this.m_mqtt_thread_list = new HashMap<>();
 
         // Observation notification topic
         this.m_aws_iot_observe_notification_topic = this.orchestrator().preferences().valueOf("aws_iot_observe_notification_topic",this.m_suffix);
@@ -528,8 +519,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // does this endpoint already have registered subscriptions?
     private boolean hasSubscriptions(String ep_name) {
         try {
-            if (this.m_aws_iot_gw_endpoints.get(ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
+            if (this.m_endpoints.get(ep_name) != null) {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
                 if (topic_data != null && topic_data.size() > 0) {
                     return true;
                 }
@@ -550,8 +541,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
                 if (topic_data != null) {
                     // get,put,post,delete enablement
-                    this.m_aws_iot_gw_endpoints.remove(ep_name);
-                    this.m_aws_iot_gw_endpoints.put(ep_name, topic_data);
+                    this.m_endpoints.remove(ep_name);
+                    this.m_endpoints.put(ep_name, topic_data);
                     this.setEndpointTypeFromEndpointName(ep_name, ep_type);
                     this.subscribe_to_topics(ep_name, (Topic[]) topic_data.get("topic_list"));
                 }
@@ -575,7 +566,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             // DEBUG
             this.orchestrator().errorLogger().info("AWSIoT: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
             try {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
                 if (topic_data != null) {
                     // unsubscribe...
                     this.mqtt(ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
@@ -601,7 +592,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // clean up
         if (ep_name != null) {
-            this.m_aws_iot_gw_endpoints.remove(ep_name);
+            this.m_endpoints.remove(ep_name);
         }
 
         // return the unsubscribe status
@@ -786,7 +777,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String getTypeFromEndpointName(String ep_name) {
         String ep_type = null;
 
-        HashMap<String, Object> entry = (HashMap<String, Object>) this.m_aws_iot_gw_endpoints.get(ep_name);
+        HashMap<String, Object> entry = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
         if (entry != null) {
             ep_type = (String) entry.get("ep_type");
         }

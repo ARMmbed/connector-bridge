@@ -49,8 +49,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private String m_iot_hub_coap_cmd_topic_base = null;
     private String m_iot_hub_name = null;
     private String m_iot_hub_password_template = null;
-    private HashMap<String, Object> m_iot_hub_endpoints = null;
-    private HashMap<String, TransportReceiveThread> m_mqtt_thread_list = null;
     private IoTHubDeviceManager m_iot_hub_device_manager = null;
     private boolean m_iot_event_hub_enable_device_id_prefix = false;
     private String m_iot_event_hub_device_id_prefix = null;
@@ -66,12 +64,6 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // IoTHub Processor Announce
         this.errorLogger().info("MS IoTHub Processor ENABLED.");
-
-        // initialize the endpoint map
-        this.m_iot_hub_endpoints = new HashMap<>();
-
-        // initialize the listener thread map
-        this.m_mqtt_thread_list = new HashMap<>();
 
         // get our defaults
         this.m_iot_hub_name = this.orchestrator().preferences().valueOf("iot_event_hub_name", this.m_suffix);
@@ -269,8 +261,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         try {
             // IOTHUB DeviceID Prefix
             String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
-            if (this.m_iot_hub_endpoints.get(iothub_ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_iot_hub_endpoints.get(iothub_ep_name);
+            if (this.m_endpoints.get(iothub_ep_name) != null) {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(iothub_ep_name);
                 if (topic_data != null && topic_data.size() > 0) {
                     return true;
                 }
@@ -294,8 +286,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 HashMap<String, Object> topic_data = this.createEndpointTopicData(iothub_ep_name, ep_type);
                 if (topic_data != null) {
                     // get,put,post,delete enablement
-                    this.m_iot_hub_endpoints.remove(iothub_ep_name);
-                    this.m_iot_hub_endpoints.put(iothub_ep_name, topic_data);
+                    this.m_endpoints.remove(iothub_ep_name);
+                    this.m_endpoints.put(iothub_ep_name, topic_data);
                     this.setEndpointTypeFromEndpointName(ep_name, ep_type);
                     this.subscribe_to_topics(iothub_ep_name, (Topic[]) topic_data.get("topic_list"));
                 }
@@ -323,7 +315,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
             // DEBUG
             this.orchestrator().errorLogger().info("IoTHub: Un-Subscribing to CoAP command topics for endpoint: " + iothub_ep_name);
             try {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_iot_hub_endpoints.get(iothub_ep_name);
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(iothub_ep_name);
                 if (topic_data != null) {
                     // unsubscribe...
                     this.mqtt(iothub_ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
@@ -349,7 +341,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // clean up
         if (iothub_ep_name != null) {
-            this.m_iot_hub_endpoints.remove(iothub_ep_name);
+            this.m_endpoints.remove(iothub_ep_name);
         }
 
         // return the unsubscribe status

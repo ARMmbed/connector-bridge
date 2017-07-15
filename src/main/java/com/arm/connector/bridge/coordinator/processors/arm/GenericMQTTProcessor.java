@@ -39,14 +39,20 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class GenericMQTTProcessor extends PeerProcessor implements Transport.ReceiveListener, PeerInterface {
-    protected TransportReceiveThread m_mqtt_thread = null;
+    // default generic MQTT thread key
+    private static String DEFAULT_GENERIC_RT_KEY = "__generic__";
+    
     protected String m_mqtt_host = null;
     protected int m_mqtt_port = 0;
     protected String m_client_id = null;
-    private HashMap<String, MQTTTransport> m_mqtt = null;
     private HttpTransport m_http = null;
     protected boolean m_use_clean_session = false;
     private String m_device_data_key = null;
+    private String m_default_tr_key = null;
+    
+    private HashMap<String, MQTTTransport> m_mqtt = null;
+    protected HashMap<String, Object> m_endpoints = null;
+    protected HashMap<String, TransportReceiveThread> m_mqtt_thread_list = null;
 
     // Factory method for initializing the Sample 3rd Party peer
     public static GenericMQTTProcessor createPeerProcessor(Orchestrator manager, HttpTransport http) {
@@ -67,6 +73,18 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
         // MQTT transport list
         this.m_mqtt = new HashMap<>();
+        
+        // initialize the endpoint map
+        this.m_endpoints = new HashMap<>();
+        
+        // initialize the listener thread map
+        this.m_mqtt_thread_list = new HashMap<>();
+        
+        // get the default generic name 
+        this.m_default_tr_key = orchestrator.preferences().valueOf("mqtt_default_rt_key",this.m_suffix);
+        if (this.m_default_tr_key == null || this.m_default_tr_key.length() == 0) {
+            this.m_default_tr_key = DEFAULT_GENERIC_RT_KEY;
+        }
         
         // initialize the topic root (MQTT)
         this.initTopicRoot("mqtt_mds_topic_root");
@@ -96,8 +114,9 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         // setup our MQTT listener if we have one...
         if (mqtt != null) {
             // MQTT PeerProcessor listener thread setup
-            this.m_mqtt_thread = new TransportReceiveThread(this.mqtt());
-            this.m_mqtt_thread.setOnReceiveListener(this);
+            TransportReceiveThread rt = new TransportReceiveThread(this.mqtt());
+            rt.setOnReceiveListener(this);
+            this.m_mqtt_thread_list.put(this.m_default_tr_key, rt);
         }
     }
 
@@ -113,8 +132,9 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         // connect and begin listening for requests (wildcard based on request TAG and domain)
         if (this.connectMQTT()) {
             this.subscribeToMQTTTopics();
-            if (this.m_mqtt_thread != null) {
-                this.m_mqtt_thread.start();
+            TransportReceiveThread rt = this.m_mqtt_thread_list.get(this.m_default_tr_key);
+            if (rt != null) {
+                rt.start();
             }
         }
     }

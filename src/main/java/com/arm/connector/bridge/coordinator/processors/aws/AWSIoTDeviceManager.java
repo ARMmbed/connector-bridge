@@ -23,7 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.aws;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
-import com.arm.connector.bridge.core.BaseClass;
+import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
@@ -38,13 +38,7 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class AWSIoTDeviceManager extends BaseClass {
-
-    private HttpTransport m_http = null;
-    private Orchestrator m_orchestrator = null;
-    private String m_suffix = null;
-    private HashMap<String, HashMap<String, String>> m_endpoint_details = null;
-
+public class AWSIoTDeviceManager extends DeviceManager {
     private ArrayList<String> m_keys_cert_ids = null;
 
     // XXX make configurable
@@ -58,15 +52,7 @@ public class AWSIoTDeviceManager extends BaseClass {
 
     // constructor
     public AWSIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http, Orchestrator orchestrator) {
-        super(logger, preferences);
-
-        // HTTP and suffix support
-        this.m_http = http;
-        this.m_suffix = suffix;
-        this.m_orchestrator = orchestrator;
-
-        // initialize the endpoint keys map
-        this.m_endpoint_details = new HashMap<>();
+        super(logger, preferences,suffix,http,orchestrator);
 
         // initialize the keys/cert id cache
         this.m_keys_cert_ids = new ArrayList<>();

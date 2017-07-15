@@ -35,9 +35,10 @@ public class WebhookValidator extends Thread {
     private mbedDeviceServerProcessor m_mds = null;
     private int m_poll_interval_ms = 0;
     private String m_webhook_url = null;
-    private ArrayList<String> m_subscriptions = null;
     private boolean m_running = false;
     private int m_max_retry_count = 0;
+    
+    private ArrayList<String> m_subscriptions = null;
 
     // default constructor
     public WebhookValidator(mbedDeviceServerProcessor mds, int poll_interval_ms) {

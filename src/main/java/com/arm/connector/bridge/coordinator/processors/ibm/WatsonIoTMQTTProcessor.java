@@ -49,7 +49,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     private String m_watson_iot_coap_cmd_topic_put = null;
     private String m_watson_iot_coap_cmd_topic_post = null;
     private String m_watson_iot_coap_cmd_topic_delete = null;
-    private HashMap<String, Object> m_watson_iot_endpoints = null;
     private String m_watson_iot_org_id = null;
     private String m_watson_iot_org_key = null;
     private String m_client_id_template = null;
@@ -76,9 +75,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
         // WatsonIoT Processor Announce
         this.errorLogger().info("IBM Watson IoT Processor ENABLED.");
-
-        // initialize the endpoint map
-        this.m_watson_iot_endpoints = new HashMap<>();
 
         // get our defaults
         this.m_watson_iot_org_id = this.orchestrator().preferences().valueOf("iotf_org_id", this.m_suffix);
@@ -140,7 +136,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         this.m_client_id = this.createWatsonIoTClientID(this.m_mds_domain);
 
         // Watson IoT Device Manager - will initialize and update our WatsonIoT bindings/metadata
-        this.m_watson_iot_device_manager = new WatsonIoTDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http);
+        this.m_watson_iot_device_manager = new WatsonIoTDeviceManager(this.orchestrator().errorLogger(),this.orchestrator().preferences(),this.m_suffix,http,this.orchestrator());
         this.m_watson_iot_device_manager.updateWatsonIoTBindings(this.m_watson_iot_org_id, this.m_watson_iot_org_key);
         this.m_watson_iot_api_key = this.m_watson_iot_device_manager.updateUsernameBinding(this.m_watson_iot_api_key);
         this.m_watson_iot_auth_token = this.m_watson_iot_device_manager.updatePasswordBinding(this.m_watson_iot_auth_token);
@@ -445,8 +441,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     // does this endpoint already have registered subscriptions?
     private boolean hasSubscriptions(String ep_name) {
         try {
-            if (this.m_watson_iot_endpoints.get(ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_watson_iot_endpoints.get(ep_name);
+            if (this.m_endpoints.get(ep_name) != null) {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
                 if (topic_data != null && topic_data.size() > 0) {
                     return true;
                 }
@@ -468,7 +464,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                 HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
                 if (topic_data != null) {
                     // get,put,post,delete enablement
-                    this.m_watson_iot_endpoints.put(ep_name, topic_data);
+                    this.m_endpoints.put(ep_name, topic_data);
                     this.subscribe_to_topics((Topic[]) topic_data.get("topic_list"));
                 }
                 else {
@@ -491,7 +487,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             // DEBUG
             this.orchestrator().errorLogger().info("Watson IoT: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
             try {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_watson_iot_endpoints.get(ep_name);
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
                 if (topic_data != null) {
                     // unsubscribe...
                     this.mqtt().unsubscribe((String[]) topic_data.get("topic_string_list"));
@@ -512,7 +508,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
         // clean up
         if (ep_name != null) {
-            this.m_watson_iot_endpoints.remove(ep_name);
+            this.m_endpoints.remove(ep_name);
         }
 
         // return the unsubscribe status

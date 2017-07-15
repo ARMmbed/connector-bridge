@@ -22,7 +22,8 @@
  */
 package com.arm.connector.bridge.coordinator.processors.ibm;
 
-import com.arm.connector.bridge.core.BaseClass;
+import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
@@ -36,10 +37,7 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class WatsonIoTDeviceManager extends BaseClass {
-
-    private HttpTransport m_http = null;
-
+public class WatsonIoTDeviceManager extends DeviceManager {
     private String m_watson_iot_rest_uri_template = null;
     private String m_watson_iot_add_device_template = null;
     private String m_watson_iot_add_gw_type_template = null;
@@ -63,25 +61,14 @@ public class WatsonIoTDeviceManager extends BaseClass {
 
     private String m_watson_iot_def_type = null;
 
-    private String m_suffix = null;
-
-    private HashMap<String, String> m_device_types = null;
-
     // constructor
-    public WatsonIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http) {
-        this(logger, preferences, null, http);
+    public WatsonIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http, Orchestrator orchestrator) {
+        this(logger, preferences,null,http,orchestrator);
     }
 
     // constructor
-    public WatsonIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http) {
-        super(logger, preferences);
-
-        // HTTP and suffix support
-        this.m_http = http;
-        this.m_suffix = suffix;
-
-        // create the device type map
-        this.m_device_types = new HashMap<>();
+    public WatsonIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http, Orchestrator orchestrator) {
+        super(logger, preferences,suffix,http,orchestrator);
 
         // pull the needed configuration/preferences
         this.m_watson_iot_gw_id = this.preferences().valueOf("iotf_gw_id", this.m_suffix) + Utils.getExternalIPAddress(this.prefBoolValue("mds_use_gw_address"), this.prefValue("mds_gw_address")).replace(".", "");

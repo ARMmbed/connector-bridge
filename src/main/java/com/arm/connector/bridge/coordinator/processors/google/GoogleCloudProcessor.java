@@ -58,6 +58,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private String m_google_cloud_topic_segment_delimiter = null;
     private int m_sleep_time = 0;
     private int m_max_messages = 0;
+    
     private ArrayList<HashMap<String,Object>> m_receivers = null;
 
     // (OPTIONAL) Factory method for initializing the Sample 3rd Party peer

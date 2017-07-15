@@ -48,12 +48,13 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     private boolean m_unified_format_enabled = false;
     protected boolean m_auto_subscribe_to_obs_resources = false;
     private String m_mds_request_tag = null;
-    private HashMap<String, String> m_endpoint_type_list = null;
     
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
     protected String m_cmd_response_key = "cmd-response";           // common for both legacy and unified 
-
+    
+    private HashMap<String, String> m_endpoint_type_list = null;
+    
     // default constructor
     public PeerProcessor(Orchestrator orchestrator, String suffix) {
         super(orchestrator, suffix);
