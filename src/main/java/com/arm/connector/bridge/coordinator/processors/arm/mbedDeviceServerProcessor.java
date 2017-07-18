@@ -44,7 +44,6 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServ
  * @author Doug Anson
  */
 public class mbedDeviceServerProcessor extends Processor implements mbedDeviceServerInterface, AsyncResponseProcessor {
-
     private HttpTransport m_http = null;
     private String m_mds_host = null;
     private int m_mds_port = 0;

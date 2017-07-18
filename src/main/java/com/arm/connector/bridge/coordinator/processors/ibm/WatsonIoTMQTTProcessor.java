@@ -135,7 +135,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         this.m_client_id_template = this.orchestrator().preferences().valueOf("iotf_client_id_template", this.m_suffix).replace("__ORG_ID__", this.m_watson_iot_org_id);
         this.m_client_id = this.createWatsonIoTClientID(this.m_mds_domain);
 
-        // Watson IoT Device Manager - will initialize and update our WatsonIoT bindings/metadata
+        // Watson IoT Device Manager - will initialize and upsert our WatsonIoT bindings/metadata
         this.m_watson_iot_device_manager = new WatsonIoTDeviceManager(this.orchestrator().errorLogger(),this.orchestrator().preferences(),this.m_suffix,http,this.orchestrator());
         this.m_watson_iot_device_manager.updateWatsonIoTBindings(this.m_watson_iot_org_id, this.m_watson_iot_org_key);
         this.m_watson_iot_api_key = this.m_watson_iot_device_manager.updateUsernameBinding(this.m_watson_iot_api_key);
@@ -203,7 +203,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
                 }
             }
 
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            // invoke a GET to get the resource information for this endpoint... we will upsert the Metadata when it arrives
             this.retrieveEndpointAttributes(endpoint);
         }
     }

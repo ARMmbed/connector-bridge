@@ -31,6 +31,7 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
         this.m_aws_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic", this.m_suffix).replace("__TOPIC_ROOT__", this.getTopicRoot()).replace("__COMMAND_TYPE__", "post");
         this.m_aws_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic", this.m_suffix).replace("__TOPIC_ROOT__", this.getTopicRoot()).replace("__COMMAND_TYPE__", "delete");
 
-        // AWSIoT Device Manager - will initialize and update our AWSIoT bindings/metadata
+        // AWSIoT Device Manager - will initialize and upsert our AWSIoT bindings/metadata
         this.m_aws_iot_gw_device_manager = new AWSIoTDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
 
         // initialize our MQTT transport list
@@ -120,7 +121,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 }
             }
 
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            // invoke a GET to get the resource information for this endpoint... we will upsert the Metadata when it arrives
             this.retrieveEndpointAttributes(endpoint);
         }
     }
@@ -659,16 +660,16 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
             // we may already have a connection established for this endpoint... if so, we just ignore...
             if (this.mqtt(ep_name) == null) {
                 // no connection exists already... so... go get our endpoint details
-                HashMap<String, String> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
+                HashMap<String, Serializable> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
                 if (ep != null) {
                     // create a new MQTT Transport instance for our endpoint
                     MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
                     if (mqtt != null) {
                         // AWSIoT only works with PKI
-                        mqtt.enablePKI(ep.get("PrivateKey"), ep.get("PublicKey"), ep.get("certificatePem"), ep.get("thingName"));
+                        mqtt.enablePKI((String)ep.get("PrivateKey"),(String)ep.get("PublicKey"),(String)ep.get("certificatePem"),(String)ep.get("thingName"));
 
                         // set the AWSIoT endpoint address
-                        this.m_mqtt_host = ep.get("endpointAddress");
+                        this.m_mqtt_host = (String)ep.get("endpointAddress");
 
                         // ClientID is the endpoint name
                         String client_id = ep_name;

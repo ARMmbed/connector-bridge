@@ -30,6 +30,7 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionPr
 import com.arm.connector.bridge.coordinator.processors.interfaces.TopicParseInterface;
 import com.arm.connector.bridge.core.TypeDecoder;
 import com.arm.connector.bridge.core.Utils;
+import com.arm.connector.bridge.data.SerializableHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
     protected String m_cmd_response_key = "cmd-response";           // common for both legacy and unified 
     
-    private HashMap<String, String> m_endpoint_type_list = null;
+    private SerializableHashMap m_endpoint_type_list = null;
     
     // default constructor
     public PeerProcessor(Orchestrator orchestrator, String suffix) {
@@ -65,11 +66,11 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         // initialize subscriptions
         if (this.m_enable_bulk_subscriptions == true) {
             // Use the bulk subscription manager
-            this.m_subscriptions_manager = (SubscriptionManager)new BulkSubscriptionManager(orchestrator.errorLogger(), orchestrator.preferences());
+            this.m_subscriptions_manager = (SubscriptionManager)new BulkSubscriptionManager(orchestrator);
         }
         else {
             // Use the in-memory/database subscription manager
-            this.m_subscriptions_manager = (SubscriptionManager)new InMemorySubscriptionManager(orchestrator.errorLogger(), orchestrator.preferences());
+            this.m_subscriptions_manager = (SubscriptionManager)new InMemorySubscriptionManager(orchestrator);
         }
         
         // set our domain
@@ -79,7 +80,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         this.m_mds_topic_root = "";
         
         // create endpoint name/endpoint type map
-        this.m_endpoint_type_list = new HashMap<>();
+        this.m_endpoint_type_list = new SerializableHashMap(orchestrator,"ENDPOINT_TYPES");
         
         // initialize the auto subscription to OBS resources
         this.initAutoSubscribe(null);
@@ -395,12 +396,12 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     protected String getEndpointTypeFromEndpointName(String ep_name) {
         String t = this.subscriptionsManager().endpointTypeFromEndpointName(ep_name);
         if (t != null) return t;
-        return this.m_endpoint_type_list.get(ep_name);
+        return (String)this.m_endpoint_type_list.get(ep_name);
     }
 
     // set the endpoint type from the endpoint name
     protected void setEndpointTypeFromEndpointName(String ep_name, String ep_type) {
-        this.m_endpoint_type_list.put(ep_name, ep_type);
+        this.m_endpoint_type_list.put(ep_name,ep_type);
     }
     
     // initialize the mDS request tag

@@ -23,7 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.core.ErrorLogger;
-import java.util.ArrayList;
+import com.arm.connector.bridge.data.SerializableArrayList;
 
 /**
  * This class periodically polls mDS/mDC and validates the webhook and subscription settings
@@ -38,14 +38,14 @@ public class WebhookValidator extends Thread {
     private boolean m_running = false;
     private int m_max_retry_count = 0;
     
-    private ArrayList<String> m_subscriptions = null;
+    private SerializableArrayList m_subscriptions = null;
 
     // default constructor
     public WebhookValidator(mbedDeviceServerProcessor mds, int poll_interval_ms) {
         this.m_mds = mds;
         this.m_poll_interval_ms = poll_interval_ms;
         this.m_webhook_url = null;
-        this.m_subscriptions = new ArrayList<>();
+        this.m_subscriptions = new SerializableArrayList(mds.orchestrator(),"SUBSCRIPTION_NAMES");
         this.m_running = false;
         this.m_max_retry_count = mds.preferences().intValueOf("mds_webhook_retry_max_tries");
     }
@@ -143,7 +143,8 @@ public class WebhookValidator extends Thread {
         if (endpoint != null && endpoint.length() > 0) {
             String key = "/" + endpoint + "/";
             for (int i = 0; i < this.m_subscriptions.size(); ++i) {
-                if (this.m_subscriptions.get(i).contains(key) == true) {
+                String s = (String)this.m_subscriptions.get(i);
+                if (s.contains(key) == true) {
                     // delete this resource
                     this.m_subscriptions.remove(i);
                 }
@@ -173,7 +174,8 @@ public class WebhookValidator extends Thread {
 
         //  is the subscription already in the list?
         for (int i = 0; i < this.m_subscriptions.size() && index < 0; ++i) {
-            if (this.m_subscriptions.get(i).equalsIgnoreCase(url)) {
+            String s = (String)this.m_subscriptions.get(i);
+            if (s.equalsIgnoreCase(url)) {
                 index = i;
             }
         }
@@ -251,11 +253,11 @@ public class WebhookValidator extends Thread {
         try {
             for (int i = 0; i < this.m_subscriptions.size(); ++i) {
                 // remove any previous subscription
-                this.m_mds.unsubscribeFromEndpointResource(this.m_subscriptions.get(i));
+                this.m_mds.unsubscribeFromEndpointResource((String)this.m_subscriptions.get(i));
 
                 // re-subscribe
-                String url = this.m_subscriptions.get(i);
-                this.m_mds.subscribeToEndpointResource(this.m_subscriptions.get(i));
+                String url = (String)this.m_subscriptions.get(i);
+                this.m_mds.subscribeToEndpointResource((String)this.m_subscriptions.get(i));
 
                 // check the HTTP result code
                 int status = this.m_mds.getLastResponseCode();
@@ -348,7 +350,7 @@ public class WebhookValidator extends Thread {
         // loop through - either all the subscriptions are valid or we reset...
         for (int i = 0; i < this.m_subscriptions.size() && validated; ++i) {
             // check the ith subscription
-            validated = this.m_mds.getEndpointResourceSubscriptionStatus(this.m_subscriptions.get(i));
+            validated = this.m_mds.getEndpointResourceSubscriptionStatus((String)this.m_subscriptions.get(i));
         }
 
         // return the status;

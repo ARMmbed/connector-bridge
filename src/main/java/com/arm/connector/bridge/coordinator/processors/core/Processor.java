@@ -122,7 +122,7 @@ public class Processor extends BaseClass {
     }
 
     // get the orchestrator
-    protected Orchestrator orchestrator() {
+    public Orchestrator orchestrator() {
         return this.m_orchestrator;
     }
 

@@ -75,7 +75,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // Send CoAP commands back through mDS into the endpoint via these Topics... 
         this.m_iot_hub_coap_cmd_topic_base = this.orchestrator().preferences().valueOf("iot_event_hub_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "#");
 
-        // IoTHub Device Manager - will initialize and update our IoTHub bindings/metadata
+        // IoTHub Device Manager - will initialize and upsert our IoTHub bindings/metadata
         this.m_iot_hub_device_manager = new IoTHubDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
 
         // set the MQTT password template
@@ -131,7 +131,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 }
             }
 
-            // invoke a GET to get the resource information for this endpoint... we will update the Metadata when it arrives
+            // invoke a GET to get the resource information for this endpoint... we will upsert the Metadata when it arrives
             this.retrieveEndpointAttributes(endpoint);
         }
     }

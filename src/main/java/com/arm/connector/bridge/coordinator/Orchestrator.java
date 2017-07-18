@@ -50,6 +50,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
+import com.arm.connector.bridge.data.DatabaseConnector;
 
 /**
  * This the primary orchestrator for the connector bridge
@@ -57,6 +58,7 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServ
  * @author Doug Anson
  */
 public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
+    private static String DEF_TABLENAME_DELIMITER = "_";
 
     private final HttpServlet m_servlet = null;
 
@@ -79,6 +81,9 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     private boolean m_listeners_initialized = false;
 
     private String m_mds_domain = null;
+    
+    private DatabaseConnector m_db = null;
+    private String m_tablename_delimiter = null;
 
     public Orchestrator(ErrorLogger error_logger, PreferenceManager preference_manager, String domain) {
         // save the error handler
@@ -110,6 +115,30 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
         // create the console manager
         this.m_console_manager = new ConsoleManager(this);
+        
+        // initialize the database connector
+        boolean enable_distributed_db_cache = this.preferences().booleanValueOf("enable_distributed_db_cache");
+        if (enable_distributed_db_cache == true) {
+            this.m_tablename_delimiter = this.preferences().valueOf("distributed_db_tablename_delimiter");
+            if (this.m_tablename_delimiter == null || this.m_tablename_delimiter.length() == 0) {
+                this.m_tablename_delimiter = DEF_TABLENAME_DELIMITER;
+            }
+            String db_ip_address = this.preferences().valueOf("distributed_db_ip_address");
+            int db_port = this.preferences().intValueOf("distributed_db_port");
+            String db_username = this.preferences().valueOf("distributed_db_username");
+            String db_pw = this.preferences().valueOf("distributed_db_password");
+            this.m_db = new DatabaseConnector(this,db_ip_address,db_port,db_username,db_pw);
+        }
+    }
+    
+    // get the tablename delimiter
+    public String getTablenameDelimiter() {
+        return this.m_tablename_delimiter;
+    }
+    
+    // get the database connector
+    public DatabaseConnector getDatabaseConnector() {
+        return this.m_db;
     }
 
     // initialize our peer processor

@@ -94,7 +94,7 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         this.m_watson_iot_def_type = this.preferences().valueOf("iotf_device_type", this.m_suffix);
     }
 
-    // update the OrgID and APIKey
+    // upsert the OrgID and APIKey
     public void updateWatsonIoTBindings(String org_id, String api_key) {
         this.m_watson_iot_org_id = org_id;
         this.m_watson_iot_org_key = api_key;
@@ -115,23 +115,23 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         this.m_watson_iot_gw_client_id = "g:" + this.m_watson_iot_org_id + ":" + this.m_watson_iot_gw_type_id + ":" + this.m_watson_iot_gw_id;
     }
 
-    // update the WatsonIoT Username bindings to use
+    // upsert the WatsonIoT Username bindings to use
     public String updateUsernameBinding(String def) {
         // using Token Auth
         return "use-token-auth";
     }
 
-    // update the WatsonIoT Password bindings to use
+    // upsert the WatsonIoT Password bindings to use
     public String updatePasswordBinding(String def) {
         return this.m_watson_iot_gw_auth_token;
     }
 
-    // update the WatsonIoT MQTT ClientID bindings to use
+    // upsert the WatsonIoT MQTT ClientID bindings to use
     public String updateClientIDBinding(String def) {
         return this.m_watson_iot_gw_client_id;
     }
 
-    // update the WatsonIoT MQTT Hostname bindings to use
+    // upsert the WatsonIoT MQTT Hostname bindings to use
     public String updateHostnameBinding(String def) {
         return this.preferences().valueOf("iotf_rest_hostname_template", this.m_suffix).replace("__ORG_ID__", this.m_watson_iot_org_id + ".messaging");
     }
@@ -165,7 +165,7 @@ public class WatsonIoTDeviceManager extends DeviceManager {
 
     // get the associated device type from the device name
     public String getDeviceType(String device) {
-        String type = this.m_device_types.get(device);
+        String type = (String)this.m_device_types.get(device);
         if (type == null || type.length() == 0) {
             // DEBUG
             this.errorLogger().info("Watson IoT: WARNING Defaulting Device Type to: " + this.m_watson_iot_def_type + " for Device: " + device);
@@ -521,7 +521,7 @@ public class WatsonIoTDeviceManager extends DeviceManager {
 
     // process device de-registration
     public Boolean deregisterDevice(String device) {
-        String device_type = this.m_device_types.get(device);
+        String device_type = (String)this.m_device_types.get(device);
 
         // create the URL
         String url = this.createDevicesURL(device_type);

@@ -28,6 +28,7 @@ import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -114,8 +115,9 @@ public class IoTHubDeviceManager extends DeviceManager {
         // DEBUG
         //this.errorLogger().info("removeDeviceIDPrefix: iothub_ep_name: " + iothub_ep_name + " --> ep_name: " + ep_name);
         return ep_name;
-    }
-     */
+    } 
+    */
+    
     // get the orchestrator
     private Orchestrator orchestrator() {
         return this.m_orchestrator;
@@ -133,7 +135,7 @@ public class IoTHubDeviceManager extends DeviceManager {
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
         // see if we already have a device...
-        HashMap<String, String> ep = this.getDeviceDetails(iothub_ep_name);
+        HashMap<String, Serializable> ep = this.getDeviceDetails(iothub_ep_name);
         if (ep != null) {
             // save off this device 
             this.saveDeviceDetails(iothub_ep_name, ep);
@@ -238,8 +240,8 @@ public class IoTHubDeviceManager extends DeviceManager {
     }
 
     // get a given device's details...
-    private HashMap<String, String> getDeviceDetails(String ep_name) {
-        HashMap<String, String> ep = null;
+    private HashMap<String, Serializable> getDeviceDetails(String ep_name) {
+        HashMap<String, Serializable> ep = null;
         Boolean status = false;
 
         // IOTHUB DeviceID Prefix
@@ -303,9 +305,9 @@ public class IoTHubDeviceManager extends DeviceManager {
 
     // Get the ETag value for the device
     private String getETagForDevice(String ep_name) {
-        HashMap<String, String> ep = this.getEndpointDetails(ep_name);
+        HashMap<String, Serializable> ep = this.getEndpointDetails(ep_name);
         if (ep != null) {
-            return ep.get("etag");
+            return (String)ep.get("etag");
         }
         return null;
     }
@@ -316,15 +318,15 @@ public class IoTHubDeviceManager extends DeviceManager {
     }
 
     private String getEndpointKey(String ep_name, String id) {
-        HashMap<String, String> ep = this.getEndpointDetails(ep_name);
+        HashMap<String, Serializable> ep = this.getEndpointDetails(ep_name);
         if (ep != null) {
-            return ep.get(id);
+            return (String)ep.get(id);
         }
         return null;
     }
 
     // get the endpoint details
-    public HashMap<String, String> getEndpointDetails(String ep_name) {
+    public HashMap<String,Serializable> getEndpointDetails(String ep_name) {
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
@@ -340,12 +342,12 @@ public class IoTHubDeviceManager extends DeviceManager {
     }
 
     // parse our device details
-    private HashMap<String, String> parseDeviceDetails(String ep_name, String json) {
+    private HashMap<String, Serializable> parseDeviceDetails(String ep_name, String json) {
         return this.parseDeviceDetails(ep_name, "", json);
     }
 
-    private HashMap<String, String> parseDeviceDetails(String ep_name, String device_type, String json) {
-        HashMap<String, String> ep = null;
+    private HashMap<String, Serializable> parseDeviceDetails(String ep_name, String device_type, String json) {
+        HashMap<String, Serializable> ep = null;
 
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
@@ -416,7 +418,7 @@ public class IoTHubDeviceManager extends DeviceManager {
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
         // parse our device details into structure
-        HashMap<String, String> ep = this.parseDeviceDetails(iothub_ep_name, device_type, json);
+        HashMap<String, Serializable> ep = this.parseDeviceDetails(iothub_ep_name, device_type, json);
         if (ep != null) {
             // save off the details
             this.saveDeviceDetails(iothub_ep_name, ep);
@@ -428,7 +430,7 @@ public class IoTHubDeviceManager extends DeviceManager {
     }
 
     // save device details
-    public void saveDeviceDetails(String ep_name, HashMap<String, String> entry) {
+    public void saveDeviceDetails(String ep_name, HashMap<String, Serializable> entry) {
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 

@@ -22,12 +22,10 @@
  */
 package com.arm.connector.bridge.coordinator.processors.core;
 
+import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionManager;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
 import com.arm.connector.bridge.core.BaseClass;
-import com.arm.connector.bridge.core.ErrorLogger;
-import com.arm.connector.bridge.preferences.PreferenceManager;
-
 
 /**
  * Bulk Subscription manager (null-manager)
@@ -35,10 +33,12 @@ import com.arm.connector.bridge.preferences.PreferenceManager;
  */
 public class BulkSubscriptionManager extends BaseClass implements SubscriptionManager {
     private SubscriptionProcessor m_subscription_processor = null;
+    private Orchestrator m_orchestrator = null;
     
     // constructor
-    public BulkSubscriptionManager(ErrorLogger error_logger, PreferenceManager preference_manager) {
-        super(error_logger, preference_manager);
+    public BulkSubscriptionManager(Orchestrator orchestrator) {
+        super(orchestrator.errorLogger(), orchestrator.preferences());
+        this.m_orchestrator = orchestrator;
         this.m_subscription_processor = null;
         
         // DEBUG

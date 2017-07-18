@@ -22,12 +22,13 @@
  */
 package com.arm.connector.bridge.coordinator.processors.core;
 
+import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionManager;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
 import com.arm.connector.bridge.core.BaseClass;
-import com.arm.connector.bridge.core.ErrorLogger;
-import com.arm.connector.bridge.preferences.PreferenceManager;
-import java.util.ArrayList;
+import com.arm.connector.bridge.data.SerializableArrayListOfHashMaps;
+import com.arm.connector.bridge.data.SerializableHashMap;
+import java.io.Serializable;
 import java.util.HashMap;
 
 /**
@@ -36,16 +37,17 @@ import java.util.HashMap;
  * @author Doug Anson
  */
 public class InMemorySubscriptionManager extends BaseClass implements SubscriptionManager {
-
+    private Orchestrator m_orchestrator = null;
     private String m_non_domain = null;
     private SubscriptionProcessor m_subscription_processor = null;
 
-    private ArrayList<HashMap<String, String>> m_subscriptions = null;
+    private SerializableArrayListOfHashMaps m_subscriptions = null;
     
     // constructor
-    public InMemorySubscriptionManager(ErrorLogger error_logger, PreferenceManager preference_manager) {
-        super(error_logger, preference_manager);
-        this.m_subscriptions = new ArrayList<>();
+    public InMemorySubscriptionManager(Orchestrator orchestrator) {
+        super(orchestrator.errorLogger(), orchestrator.preferences());
+        this.m_orchestrator = orchestrator;
+        this.m_subscriptions = new SerializableArrayListOfHashMaps(orchestrator,"SUBSCRIPTION_DETAILS");
         this.m_non_domain = this.preferences().valueOf("mds_def_domain");
         this.m_subscription_processor = null;
         
@@ -77,7 +79,7 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     public boolean containsSubscription(String domain, String endpoint, String ep_type, String uri) {
         boolean has_subscription = false;
         domain = this.checkAndDefaultDomain(domain);
-        HashMap<String, String> subscription = this.makeSubscription(domain, endpoint, ep_type, uri);
+        HashMap<String, Serializable> subscription = this.makeSubscription(domain, endpoint, ep_type, uri);
         if (this.containsSubscription(subscription) >= 0) {
             has_subscription = true;
         }
@@ -89,19 +91,19 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     @Override
     public void removeEndpointSubscriptions(String endpoint) {
         for(int i=0;i<this.m_subscriptions.size() && this.m_subscription_processor != null;++i) {
-            HashMap<String,String> subscription = this.m_subscriptions.get(i);
-            String t_domain = subscription.get("domain");
-            String t_endpoint = subscription.get("endpoint");
-            String t_ept = subscription.get("ep_type");
-            String t_uri = subscription.get("uri");
+            HashMap<String,Serializable> subscription = (HashMap<String,Serializable>)this.m_subscriptions.get(i);
+            String t_domain = (String)subscription.get("domain");
+            String t_endpoint = (String)subscription.get("endpoint");
+            String t_ept = (String)subscription.get("ep_type");
+            String t_uri = (String)subscription.get("uri");
             if (t_endpoint != null && endpoint != null && t_endpoint.equalsIgnoreCase(endpoint)) {
                 this.errorLogger().info("SubscriptionManager(InMemory): Removing Subscription: " + t_domain + ":" + t_endpoint + ":" + t_uri);
                 this.m_subscription_processor.unsubscribe(t_domain,t_endpoint,t_ept,t_uri);
             }
         }
         for(int i=0;i<this.m_subscriptions.size();++i) {
-            HashMap<String,String> subscription = this.m_subscriptions.get(i);
-            String t_endpoint = subscription.get("endpoint");
+            HashMap<String,Serializable> subscription = this.m_subscriptions.get(i);
+            String t_endpoint = (String)subscription.get("endpoint");
             if (t_endpoint != null && endpoint != null && t_endpoint.equalsIgnoreCase(endpoint)) {
                 this.m_subscriptions.remove(i);
             }
@@ -112,7 +114,7 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     @Override
     public void removeSubscription(String domain, String endpoint, String ep_type, String uri) {
         domain = this.checkAndDefaultDomain(domain);
-        HashMap<String, String> subscription = this.makeSubscription(domain, endpoint, ep_type, uri);
+        HashMap<String,Serializable> subscription = this.makeSubscription(domain, endpoint, ep_type, uri);
         int index = this.containsSubscription(subscription);
         if (index >= 0) {
             this.errorLogger().info("SubscriptionManager(InMemory): Removing Subscription: " + domain + ":" + endpoint + ":" + uri);
@@ -124,11 +126,11 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     }
 
     // contains a given subscription?
-    private int containsSubscription(HashMap<String, String> subscription) {
+    private int containsSubscription(HashMap<String,Serializable> subscription) {
         int index = -1;
 
         for (int i = 0; i < this.m_subscriptions.size() && index < 0; ++i) {
-            if (this.sameSubscription(subscription, this.m_subscriptions.get(i))) {
+            if (this.sameSubscription(subscription,this.m_subscriptions.get(i))) {
                 index = i;
             }
         }
@@ -137,14 +139,14 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     }
 
     // compare subscriptions
-    private boolean sameSubscription(HashMap<String, String> s1, HashMap<String, String> s2) {
+    private boolean sameSubscription(HashMap<String,Serializable> s1, HashMap<String,Serializable> s2) {
         boolean same_subscription = false;
 
         // compare contents...
-        if (s1.get("domain") != null && s2.get("domain") != null && s1.get("domain").equalsIgnoreCase(s2.get("domain"))) {
-            if (s1.get("endpoint") != null && s2.get("endpoint") != null && s1.get("endpoint").equalsIgnoreCase(s2.get("endpoint"))) {
-                if (s1.get("ep_type") != null && s2.get("ep_type") != null && s1.get("ep_type").equalsIgnoreCase(s2.get("ep_type"))) {
-                    if (s1.get("uri") != null && s2.get("uri") != null && s1.get("uri").equalsIgnoreCase(s2.get("uri"))) {
+        if (s1.get("domain") != null && s2.get("domain") != null && ((String)s1.get("domain")).equalsIgnoreCase((String)s2.get("domain"))) {
+            if (s1.get("endpoint") != null && s2.get("endpoint") != null && ((String)s1.get("endpoint")).equalsIgnoreCase((String)s2.get("endpoint"))) {
+                if (s1.get("ep_type") != null && s2.get("ep_type") != null && ((String)s1.get("ep_type")).equalsIgnoreCase((String)s2.get("ep_type"))) {
+                    if (s1.get("uri") != null && s2.get("uri") != null && ((String)s1.get("uri")).equalsIgnoreCase((String)s2.get("uri"))) {
                         // they are the same
                         same_subscription = true;
                     }
@@ -156,14 +158,15 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     }
 
     // make subscription entry 
-    private HashMap<String, String> makeSubscription(String domain, String endpoint, String ep_type, String uri) {
+    private HashMap<String,Serializable> makeSubscription(String domain, String endpoint, String ep_type, String uri) {
         domain = this.checkAndDefaultDomain(domain);
-        HashMap<String, String> subscription = new HashMap<>();
+        String d = this.m_orchestrator.getTablenameDelimiter();
+        SerializableHashMap subscription = new SerializableHashMap(this.m_orchestrator,"SUB" + d + domain + d + endpoint + d + ep_type + d + uri);
         subscription.put("domain", domain);
         subscription.put("endpoint", endpoint);
         subscription.put("ep_type", ep_type);
         subscription.put("uri", uri);
-        return subscription;
+        return (HashMap<String,Serializable>)subscription.map();
     }
 
     // default domain
@@ -180,9 +183,9 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
         String ep_type = null;
 
         for (int i = 0; i < this.m_subscriptions.size() && ep_type == null; ++i) {
-            HashMap<String, String> subscription = this.m_subscriptions.get(i);
-            if (endpoint != null && endpoint.equalsIgnoreCase(subscription.get("endpoint")) == true) {
-                ep_type = subscription.get("ep_type");
+            HashMap<String, Serializable> subscription = this.m_subscriptions.get(i);
+            if (endpoint != null && endpoint.equalsIgnoreCase((String)subscription.get("endpoint")) == true) {
+                ep_type = (String)subscription.get("ep_type");
             }
         }
 

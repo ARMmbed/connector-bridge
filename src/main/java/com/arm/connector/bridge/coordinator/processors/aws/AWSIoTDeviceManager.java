@@ -26,8 +26,10 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
+import com.arm.connector.bridge.data.SerializableHashMap;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -68,7 +70,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // get our endpoint details
-    public HashMap<String, String> getEndpointDetails(String ep_name) {
+    public HashMap<String, Serializable> getEndpointDetails(String ep_name) {
         return this.m_endpoint_details.get(ep_name);
     }
 
@@ -81,7 +83,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
         String device = (String) message.get("ep");
 
         // see if we already have a device...
-        HashMap<String, String> ep = this.getDeviceDetails(device);
+        HashMap<String, Serializable> ep = this.getDeviceDetails(device);
         if (ep != null) {
             // DEBUG
             this.errorLogger().info("AWSIoT: registerNewDevice: device details: " + ep);
@@ -138,7 +140,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // unlink the certificate from the Thing Record
-    private void unlinkCertificateFromThing(HashMap<String, String> ep) {
+    private void unlinkCertificateFromThing(HashMap<String, Serializable> ep) {
         this.unlinkCertificateFromThing((String) ep.get("thingName"), (String) ep.get("certificateArn"));
     }
 
@@ -157,7 +159,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // unlink the certificate from the Policy
-    private void unlinkCertificateFromPolicy(HashMap<String, String> ep) {
+    private void unlinkCertificateFromPolicy(HashMap<String, Serializable> ep) {
         this.unlinkCertificateFromPolicy((String) ep.get("certificateArn"));
     }
 
@@ -168,7 +170,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // inactivate the Certificate
-    private void inactivateCertificate(HashMap<String, String> ep) {
+    private void inactivateCertificate(HashMap<String, Serializable> ep) {
         this.inactivateCertificate((String) ep.get("certificateId"));
     }
 
@@ -179,7 +181,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // delete the Certificate
-    private void deleteCertificate(HashMap<String, String> ep) {
+    private void deleteCertificate(HashMap<String, Serializable> ep) {
         this.deleteCertificate((String) ep.get("certificateId"));
     }
 
@@ -205,7 +207,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     // unlink a certificate from the policy and thing record, then deactivate it
     private void removeCertificate(String device) {
         // Get our record 
-        HashMap<String, String> ep = this.getEndpointDetails(device);
+        HashMap<String, Serializable> ep = this.getEndpointDetails(device);
         if (ep != null) {
             // unlink the certificate from the thing record
             this.unlinkCertificateFromThing(ep);
@@ -248,7 +250,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // complete the device details
-    private void completeDeviceDetails(HashMap<String, String> ep) {
+    private void completeDeviceDetails(HashMap<String, Serializable> ep) {
         // add the endpoint address details
         if (ep.get("endpointAddress") == null) {
             this.captureEndpointAddress(ep);
@@ -267,8 +269,8 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // get a given device's details...
-    private HashMap<String, String> getDeviceDetails(String device) {
-        HashMap<String, String> ep = this.getEndpointDetails(device);
+    private HashMap<String, Serializable> getDeviceDetails(String device) {
+        HashMap<String, Serializable> ep = this.getEndpointDetails(device);
 
         // if we dont already have it, go get it... 
         if (ep == null) {
@@ -297,12 +299,12 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // parse our device details
-    private HashMap<String, String> parseDeviceDetails(String device, String json) {
+    private HashMap<String, Serializable> parseDeviceDetails(String device, String json) {
         return this.parseDeviceDetails(device, "", json);
     }
 
-    private HashMap<String, String> parseDeviceDetails(String device, String device_type, String json) {
-        HashMap<String, String> ep = null;
+    private HashMap<String, Serializable> parseDeviceDetails(String device, String device_type, String json) {
+        SerializableHashMap ep = null;
 
         // check the input json
         if (json != null) {
@@ -315,7 +317,8 @@ public class AWSIoTDeviceManager extends DeviceManager {
                     Map parsed = this.orchestrator().getJSONParser().parseJson(json);
 
                     // Device Details
-                    ep = new HashMap<>();
+                    String d = this.orchestrator().getTablenameDelimiter();
+                    ep = new SerializableHashMap(this.orchestrator(),"AWS_DEVICE" + d + device + d + device_type);
 
                     // Device Name
                     ep.put("thingName", (String) parsed.get("thingName"));
@@ -354,11 +357,11 @@ public class AWSIoTDeviceManager extends DeviceManager {
         }
 
         // return our endpoint details
-        return ep;
+        return ep.map();
     }
 
     // generate keys and certs
-    private void createKeysAndCerts(HashMap<String, String> ep) {
+    private void createKeysAndCerts(HashMap<String, Serializable> ep) {
         // AWS IOT CLI to create the keys and certificates
         String args = "iot create-keys-and-certificate --set-as-active";
         String result = Utils.awsCLI(this.errorLogger(), args);
@@ -398,7 +401,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // save off the default policy
-    private void saveDefaultPolicy(HashMap<String, String> ep, String json) {
+    private void saveDefaultPolicy(HashMap<String, Serializable> ep, String json) {
         Map parsed = this.m_orchestrator.getJSONParser().parseJson(json);
         ep.put("policyName", (String) parsed.get("policyName"));
         ep.put("policyArn", (String) parsed.get("policyArn"));
@@ -407,7 +410,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // create and save the defaulted policy
-    private void checkAndCreateDefaultPolicy(HashMap<String, String> ep) {
+    private void checkAndCreateDefaultPolicy(HashMap<String, Serializable> ep) {
         // Our default policy
         String policy_json = this.getDefaultPolicy();
 
@@ -424,7 +427,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // link the certificate to the thing record and the default policy
-    private void linkCertificateToThingAndPolicy(HashMap<String, String> ep) {
+    private void linkCertificateToThingAndPolicy(HashMap<String, Serializable> ep) {
         // AWS CLI invocation - link policy to certficate ARN
         String args = "iot attach-principal-policy --policy-name=" + this.m_policy_name + " --principal=" + (String) ep.get("certificateArn");
         Utils.awsCLI(this.errorLogger(), args);
@@ -435,7 +438,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // capture the endpoint address
-    private void captureEndpointAddress(HashMap<String, String> ep) {
+    private void captureEndpointAddress(HashMap<String, Serializable> ep) {
         // AWS CLI invocation - link policy to certficate ARN
         String args = "iot describe-endpoint";
         String json = Utils.awsCLI(this.errorLogger(), args);
@@ -445,19 +448,8 @@ public class AWSIoTDeviceManager extends DeviceManager {
         }
     }
 
-    /* capture the certificate details
-    private void captureCertificateDetails(HashMap<String,String> ep) {
-        // AWS CLI invocation - link policy to certficate ARN
-        String args = "iot describe-endpoint";
-        String json = Utils.awsCLI(this.errorLogger(), args);
-        if (json != null && json.length() > 0) {
-            Map parsed = this.m_orchestrator.getJSONParser().parseJson(json);
-            ep.put("endpointAddress",(String)parsed.get("endpointAddress"));
-        }
-    }
-     */
     // capture the policy details
-    private void capturePolicyDetails(HashMap<String, String> ep) {
+    private void capturePolicyDetails(HashMap<String, Serializable> ep) {
         String json = this.getDefaultPolicy();
         if (json != null && json.length() > 0) {
             this.saveDefaultPolicy(ep, json);
@@ -465,7 +457,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // create keys and certs and link to the device 
-    void createKeysAndCertsAndLinkToPolicyAndThing(HashMap<String, String> ep) {
+    void createKeysAndCertsAndLinkToPolicyAndThing(HashMap<String, Serializable> ep) {
         // add the certificates and keys
         this.createKeysAndCerts(ep);
 
@@ -476,7 +468,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     // Parse the AddDevice result and capture key elements 
     private void saveAddDeviceDetails(String device, String device_type, String json) {
         // parse our device details into structure
-        HashMap<String, String> ep = this.parseDeviceDetails(device, device_type, json);
+        HashMap<String, Serializable> ep = this.parseDeviceDetails(device, device_type, json);
         if (ep != null) {
             // create the default policy
             this.checkAndCreateDefaultPolicy(ep);
@@ -497,7 +489,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // save device details
-    public void saveDeviceDetails(String device, HashMap<String, String> entry) {
+    public void saveDeviceDetails(String device, HashMap<String, Serializable> entry) {
         // don't overwrite an existing entry..
         if (this.getEndpointDetails(device) == null) {
             // save off the endpoint details
@@ -517,8 +509,8 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // get our list of certificates
-    private ArrayList<HashMap<String, String>> getRegisteredCertificates() {
-        ArrayList<HashMap<String, String>> list = new ArrayList<>();
+    private ArrayList<HashMap<String, Serializable>> getRegisteredCertificates() {
+        ArrayList<HashMap<String, Serializable>> list = new ArrayList<>();
 
         // AWS IoT CLI
         String args = "iot list-certificates";
@@ -530,7 +522,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
             List cert_list = (List) parsed.get("certificates");
             for (int i = 0; cert_list != null && i < cert_list.size(); ++i) {
                 Map entry = (Map) cert_list.get(i);
-                HashMap<String, String> cert = new HashMap<>();
+                HashMap<String, Serializable> cert = new HashMap<>();
                 cert.put("certificateId", (String) entry.get("certificateId"));
                 cert.put("certificateArn", (String) entry.get("certificateArn"));
                 list.add(cert);
@@ -546,12 +538,12 @@ public class AWSIoTDeviceManager extends DeviceManager {
 
     // clear out any stale Keys and Certs
     public void clearOrhpanedKeysAndCerts() {
-        ArrayList<HashMap<String, String>> cert_list = this.getRegisteredCertificates();
+        ArrayList<HashMap<String, Serializable>> cert_list = this.getRegisteredCertificates();
         for (int i = 0; i < cert_list.size(); ++i) {
             // get the certificate ID
-            HashMap<String, String> cert = cert_list.get(i);
-            String cert_id = cert.get("certificateId");
-            String cert_arn = cert.get("certificateArn");
+            HashMap<String, Serializable> cert = cert_list.get(i);
+            String cert_id = (String)cert.get("certificateId");
+            String cert_arn = (String)cert.get("certificateArn");
 
             // get the device
             // if NOT present in any of the device entries... kill it
