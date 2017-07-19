@@ -41,9 +41,9 @@ import javax.servlet.http.HttpServletResponse;
  * @author Doug Anson
  */
 public final class Manager {
-
-    public static final Double MANAGER_VERSION = 1.0;                // our version (need to tie to build...)
-    public static final Double MDS_NON_DOMAIN_VER_BASE = 2.5;        // first version of mDS without domain usage...
+    public static final String LOG_TAG = "Connector Bridge";            // Log Tag
+    public static final String BRIDGE_VERSION_STR = "1.0.0";            // our version (need to tie to build...)
+    public static final Double MDS_NON_DOMAIN_VER_BASE = 2.5;           // first version of mDS without domain usage...
     private HttpServlet m_servlet = null;
     private static volatile Manager m_manager = null;
     private ErrorLogger m_error_logger = null;
@@ -57,9 +57,9 @@ public final class Manager {
     private String m_mds_gw_events_path = null;
 
     // instance factory
-    public static Manager getInstance(HttpServlet servlet) {
+    public static Manager getInstance(HttpServlet servlet,ErrorLogger error_logger,PreferenceManager preferences) {
         if (Manager.m_manager == null) {
-            Manager.m_manager = new Manager(new ErrorLogger());
+            Manager.m_manager = new Manager(error_logger,preferences);
         }
         Manager.m_manager.setServlet(servlet);
         return Manager.m_manager;
@@ -67,14 +67,16 @@ public final class Manager {
 
     // default constructor
     @SuppressWarnings("empty-statement")
-    public Manager(ErrorLogger error_logger) {
+    public Manager(ErrorLogger error_logger,PreferenceManager preferences) {
         // save the error handler
         this.m_error_logger = error_logger;
-        this.m_preference_manager = new PreferenceManager(this.m_error_logger);
+        this.m_preference_manager = preferences;
+        
+        // create the domain manager list
         this.m_domain_managers = new HashMap<>();
 
         // announce our self
-        this.errorLogger().info("Connector Bridge: Date: " + Utils.dateToString(Utils.now()));
+        this.errorLogger().info(LOG_TAG + ": Date: " + Utils.dateToString(Utils.now()) + ". Bridge version: v" + BRIDGE_VERSION_STR);
 
         // configure the error logger logging level
         this.m_error_logger.configureLoggingLevel(this.m_preference_manager);
@@ -121,29 +123,29 @@ public final class Manager {
 
     public void initListeners() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            if (manager.getEndpointsManager().peerListenerActive() == false) {
-                manager.getEndpointsManager().initPeerListener();
+            if (manager.getOrchestrator().peerListenerActive() == false) {
+                manager.getOrchestrator().initPeerListener();
             }
         }
     }
 
     public void stopListeners() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            if (manager.getEndpointsManager().peerListenerActive() == true) {
-                manager.getEndpointsManager().stopPeerListener();
+            if (manager.getOrchestrator().peerListenerActive() == true) {
+                manager.getOrchestrator().stopPeerListener();
             }
         }
     }
 
     public void initWebhooks() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            manager.getEndpointsManager().initializeDeviceServerWebhook();
+            manager.getOrchestrator().initializeDeviceServerWebhook();
         }
     }
 
     public void resetNotifications() {
         for (DomainManager manager : this.m_domain_managers.values()) {
-            manager.getEndpointsManager().resetDeviceServerWebhook();
+            manager.getOrchestrator().resetDeviceServerWebhook();
         }
     }
 
@@ -220,7 +222,7 @@ public final class Manager {
             DomainManager domain_manager = this.getDomainManager(domains.get(i));
             if (domain_manager == null) {
                 // add the new domain manager
-                this.errorLogger().info("Adding Domain Manager for domain: " + domains.get(i));
+                this.errorLogger().info(LOG_TAG + ": Adding Domain Manager for domain: " + domains.get(i));
                 this.addDomainManager(new DomainManager(this.m_error_logger, this.m_preference_manager, domains.get(i)));
             }
         }

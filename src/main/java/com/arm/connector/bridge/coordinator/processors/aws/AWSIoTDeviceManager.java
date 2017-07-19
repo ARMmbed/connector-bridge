@@ -40,12 +40,18 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class AWSIoTDeviceManager extends DeviceManager {
+public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
+    // Defaults
+    private static int DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS = 120000;      // default: cleanup every 120 seconds
+    
     private ArrayList<String> m_keys_cert_ids = null;
 
     // XXX make configurable
     private String m_policy_name = null;
     private String m_policy_document = null;
+    
+    // cleanup thread sleep time
+    private int m_cleanup_thread_sleeptime_ms = DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS;   
 
     // constructor
     public AWSIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http, Orchestrator orchestrator) {
@@ -62,6 +68,15 @@ public class AWSIoTDeviceManager extends DeviceManager {
         // get configuration params
         this.m_policy_name = this.orchestrator().preferences().valueOf("aws_iot_policy_name", this.m_suffix);
         this.m_policy_document = this.orchestrator().preferences().valueOf("aws_iot_policy_document", this.m_suffix);
+        
+        // cleanup thread sleep time
+        this.m_cleanup_thread_sleeptime_ms = this.orchestrator().preferences().intValueOf("aws_cleanup_thread_sleeptime_ms");
+        if (this.m_cleanup_thread_sleeptime_ms <= 0) {
+            this.m_cleanup_thread_sleeptime_ms = DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS;
+        }
+        
+        // DEBUG - announce sleep time
+        this.errorLogger().info("AWSIoTDeviceManager: Orphaned Key/Cert cleanup thread sleep time: " + this.m_cleanup_thread_sleeptime_ms + "ms");
     }
 
     // get the orchestrator
@@ -567,6 +582,23 @@ public class AWSIoTDeviceManager extends DeviceManager {
                 catch (Exception ex) {
                     // fail silently...
                 }
+            }
+        }
+    }
+
+    // background thread to clear orphaned AWSIoT keys and certs
+    @Override
+    public void run() {
+        while (true) {
+            try {
+                // sleep for N seconds
+                Thread.sleep(this.m_cleanup_thread_sleeptime_ms);
+
+                // clear orphaned keys and certs
+                this.clearOrhpanedKeysAndCerts();
+            }
+            catch (InterruptedException ex) {
+                // silent
             }
         }
     }

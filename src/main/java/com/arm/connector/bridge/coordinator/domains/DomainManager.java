@@ -38,7 +38,7 @@ import javax.servlet.http.HttpServletResponse;
 public class DomainManager {
 
     private String m_domain = null;
-    private Orchestrator m_endpoint_manager = null;
+    private Orchestrator m_orchestrator = null;
     private ErrorLogger m_error_logger = null;
     private PreferenceManager m_preference_manager = null;
 
@@ -47,20 +47,20 @@ public class DomainManager {
         this.m_domain = domain;
         this.m_error_logger = error_logger;
         this.m_preference_manager = preference_manager;
-        this.m_endpoint_manager = new Orchestrator(error_logger, preference_manager, domain);
+        this.m_orchestrator = new Orchestrator(error_logger, preference_manager, domain);
     }
 
     public void processConsole(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        this.m_endpoint_manager.processConsoleEvent(request, response);
+        this.m_orchestrator.processConsoleEvent(request, response);
     }
 
     public void processNotification(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        this.m_endpoint_manager.processIncomingDeviceServerMessage(request, response);
+        this.m_orchestrator.processIncomingDeviceServerMessage(request, response);
     }
 
-    // get the endpoints manager
-    public Orchestrator getEndpointsManager() {
-        return this.m_endpoint_manager;
+    // get the orchestrator
+    public Orchestrator getOrchestrator() {
+        return this.m_orchestrator;
     }
 
     // get the domain name...

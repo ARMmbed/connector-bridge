@@ -1,6 +1,6 @@
 /**
- * @file    SerializableDoubleHashMap.java
- * @brief Serializable Double HashMap decider
+ * @file SerializableHashMapOfHashMaps.java
+ * @brief Serializable HashMap of HashMaps decider
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -30,10 +30,10 @@ import java.io.Serializable;
 import java.util.HashMap;
 
 /**
- * SerializableDoubleHashMap
+ * SerializableHashMapOfHashMaps
  * @author Doug Anson
  */
-public class SerializableDoubleHashMap implements Distributable {
+public class SerializableHashMapOfHashMaps implements Distributable {
     private Orchestrator m_orchestrator = null;
     private InMemoryTemplatedHashMap<InMemoryTemplatedHashMap<Serializable>> m_im_hashmap = null;
     private DatabaseTemplatedHashMap<DatabaseTemplatedHashMap<Serializable>> m_db_hashmap = null;
@@ -42,7 +42,7 @@ public class SerializableDoubleHashMap implements Distributable {
     private SerializableHashMap m_outer_map = null;
     
     // constructor
-    public SerializableDoubleHashMap(Orchestrator orchestrator,String tablename) {
+    public SerializableHashMapOfHashMaps(Orchestrator orchestrator,String tablename) {
         this.m_orchestrator = orchestrator;
         this.m_tablename = tablename;
         this.m_db = orchestrator.getDatabaseConnector();

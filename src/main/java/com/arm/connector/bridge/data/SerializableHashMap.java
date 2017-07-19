@@ -34,16 +34,22 @@ import java.util.HashMap;
  * @author Doug Anson
  */
 public class SerializableHashMap implements Distributable {
-    private Orchestrator m_orchestrator = null;
     private InMemoryTemplatedHashMap<Serializable> m_im_hashmap = null;
     private DatabaseTemplatedHashMap<Serializable> m_db_hashmap = null;
+    private ErrorLogger m_error_logger = null;
+    private PreferenceManager m_preferences = null;
     private String m_tablename = null;
     
-    // constructor
+    // constructor (Orchestrator)
     public SerializableHashMap(Orchestrator orchestrator,String tablename) {
-        this.m_orchestrator = orchestrator;
+        this(orchestrator.getDatabaseConnector(),orchestrator.errorLogger(),orchestrator.preferences(),tablename);
+    }
+    
+    // constructor (pre-Orchestrator)
+    public SerializableHashMap(DatabaseConnector db,ErrorLogger error_logger,PreferenceManager preferences,String tablename) {
         this.m_tablename = tablename;
-        DatabaseConnector db = orchestrator.getDatabaseConnector();
+        this.m_error_logger = error_logger;
+        this.m_preferences = preferences;
         if (db != null) {
             this.m_db_hashmap = new DatabaseTemplatedHashMap(this,db,this.m_tablename);
         }
@@ -118,12 +124,12 @@ public class SerializableHashMap implements Distributable {
     
     // ErrorLogger
     private ErrorLogger errorLogger() {
-        return this.m_orchestrator.errorLogger();
+        return this.m_error_logger;
     }
     
     // Preferences
     private PreferenceManager preferences() {
-        return this.m_orchestrator.preferences();
+        return this.m_preferences;
     }
 
     // not used

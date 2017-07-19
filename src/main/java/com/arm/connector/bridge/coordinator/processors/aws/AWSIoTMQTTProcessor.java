@@ -53,6 +53,9 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
     // AWSIoT Device Manager
     private AWSIoTDeviceManager m_aws_iot_gw_device_manager = null;
+    
+    // AWSIoT Cleanup Thread
+    private Thread m_aws_cleanup_thread = null;
 
     // constructor (singleton)
     public AWSIoTMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
@@ -88,6 +91,10 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
         // initialize our MQTT transport list
         this.initMQTTTransportList();
+        
+        // lastly, we setup our cleanup thread to fire off in the background
+        this.m_aws_cleanup_thread = new Thread(this.m_aws_iot_gw_device_manager);
+        this.m_aws_cleanup_thread.start();
     }
     
     // OVERRIDE: process a new registration in AWSIoT
@@ -367,9 +374,6 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Transpo
                 }
             }
         }
-
-        //house cleaning
-        this.m_aws_iot_gw_device_manager.clearOrhpanedKeysAndCerts();
     }
 
     // create an observation JSON as a response to a GET request...

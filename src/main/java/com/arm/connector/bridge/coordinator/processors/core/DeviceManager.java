@@ -25,7 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.core;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.core.BaseClass;
 import com.arm.connector.bridge.core.ErrorLogger;
-import com.arm.connector.bridge.data.SerializableDoubleHashMap;
+import com.arm.connector.bridge.data.SerializableHashMapOfHashMaps;
 import com.arm.connector.bridge.data.SerializableHashMap;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -39,7 +39,7 @@ public class DeviceManager extends BaseClass {
     protected Orchestrator m_orchestrator = null;
     protected String m_suffix = null;
     
-    protected SerializableDoubleHashMap m_endpoint_details = null;
+    protected SerializableHashMapOfHashMaps m_endpoint_details = null;
     protected SerializableHashMap m_device_types = null;
     
     // default constructor
@@ -52,7 +52,7 @@ public class DeviceManager extends BaseClass {
         this.m_orchestrator = orchestrator;
         
         // initialize the endpoint keys map
-        this.m_endpoint_details = new SerializableDoubleHashMap(orchestrator,"ENDPOINT_DETAILS");
+        this.m_endpoint_details = new SerializableHashMapOfHashMaps(orchestrator,"ENDPOINT_DETAILS");
         
         
         // create the device type map

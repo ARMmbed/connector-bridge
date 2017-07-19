@@ -24,8 +24,11 @@ package com.arm.connector.bridge.preferences;
 
 import com.arm.connector.bridge.core.BaseClass;
 import com.arm.connector.bridge.core.ErrorLogger;
+import com.arm.connector.bridge.data.DatabaseConnector;
+import com.arm.connector.bridge.data.SerializableHashMap;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.Properties;
 
 /**
@@ -34,19 +37,49 @@ import java.util.Properties;
  * @author Doug Anson
  */
 public class PreferenceManager extends BaseClass {
-
+    // DEBUG tag
+    private static final String DEFAULT_LOG_TAG = "PreferenceManager";
+    
+    // Config Tags
+    private static final String SERVICE_PROPERTIES_FILE_TAG = "config_file";      // passed as -Dconfig_file="../conf/service.properties"
+    private static final String IS_MASTER_NODE_TAG = "is_master_node";            // passed as -Dis_master_node=true
+    
+    // Defaults
+    private static final boolean DEFAULT_IS_MASTER_NODE = true;
     private static final int DEFAULT_INT_VALUE = -1;
     private static final float DEFAULT_FLOAT_VALUE = (float) -1.0;
-    private static final String PROPERTY_DEFINE = "config_file";      // passed as -Dconfig_file="../conf/service.properties"
     private static final String DEFAULT_PROPERTIES_FILE = "WEB-INF/classes/service.properties";
+    
     private String m_properties_file = null;
-
-    private Properties m_config_properties = null;        // DB config properties
-
-    public PreferenceManager(ErrorLogger error_logger) {
+    private boolean m_is_master_node = DEFAULT_IS_MASTER_NODE;          // default is a master node
+    private Properties m_config_properties = null;                      // DB config properties
+    private String m_log_tag = DEFAULT_LOG_TAG;
+    
+    // default that the node is a master node... hence no caching/sync of Properties       
+    private SerializableHashMap m_cache = null;
+    
+    // constructor
+    public PreferenceManager(ErrorLogger error_logger,String log_tag) {
         super(error_logger, null);
         this.m_properties_file = DEFAULT_PROPERTIES_FILE;
+        this.m_is_master_node = DEFAULT_IS_MASTER_NODE;
+        this.m_log_tag = log_tag;
         this.readPreferencesFile();
+    }
+    
+    // initialize caching (defaulted node master)
+    public void initializeCache(DatabaseConnector db) {
+        this.initializeCache(db,true);
+    }
+    
+    // initialize caching (full)
+    public void initializeCache(DatabaseConnector db,boolean is_master_node) {
+        this.m_cache = new SerializableHashMap(db,this.errorLogger(),this,"PROPERTIES");
+        this.m_is_master_node = is_master_node;
+        if (this.m_is_master_node == true) {
+            // Properties --> Cache (db save)
+            this.cachePreferences();
+        }
     }
 
     public boolean booleanValueOf(String key) {
@@ -103,10 +136,25 @@ public class PreferenceManager extends BaseClass {
     }
 
     public String valueOf(String key, String suffix) {
-        String value = this.m_config_properties.getProperty(this.createKey(key, suffix));
-
+        String value = null;
+        if (this.m_cache != null && this.m_is_master_node == false) {
+            // query the cache... if it has the value, go with it...
+            value = (String)this.m_cache.get(key);
+            
+            // if we dont have a value, then we query the Properties object as a backing store...
+            if (value == null || value.length() == 0) {
+                // get the property from the properties object
+                value = this.m_config_properties.getProperty(this.createKey(key, suffix));
+            }
+        }
+        else {
+            // just get the property from the properties object
+            value = this.m_config_properties.getProperty(this.createKey(key, suffix));
+        }
+        
         // DEBUG
         //this.errorLogger().info("Preference: [" + this.createKey(key,suffix) + "] = [" + value + "]");
+        
         // return the value
         return value;
     }
@@ -140,10 +188,22 @@ public class PreferenceManager extends BaseClass {
             //this.errorLogger().info("getAbsolutePath: dir: " + dir + " file: " + file + " FQ file: " + fq_file);
         }
         catch (Exception ex) {
-            this.errorLogger().warning("getAbsolutePath: unable to calculate absolute path for: " + file);
+            this.errorLogger().warning(this.m_log_tag + ": unable to calculate absolute path for: " + file);
             fq_file = file;
         }
         return fq_file;
+    }
+    
+    // convert a String boolean value to a actual boolean value
+    private boolean stringToBoolean(String bool_str) {
+        boolean result = false;
+        
+        if (bool_str != null && bool_str.equalsIgnoreCase("true")) {
+            result = true;
+        }
+        
+        // return the result
+        return result;
     }
 
     // read the preferences file
@@ -151,10 +211,25 @@ public class PreferenceManager extends BaseClass {
         boolean success = false;
 
         try {
-            this.m_properties_file = System.getProperty(PreferenceManager.PROPERTY_DEFINE, PreferenceManager.DEFAULT_PROPERTIES_FILE);
+            this.m_properties_file = System.getProperty(PreferenceManager.SERVICE_PROPERTIES_FILE_TAG, PreferenceManager.DEFAULT_PROPERTIES_FILE);
+            this.m_is_master_node = this.stringToBoolean(System.getProperty(PreferenceManager.IS_MASTER_NODE_TAG,"true"));
+                    
+            // master node configuraton 
+            if (this.m_is_master_node == true) {
+                // we are a master instance
+                this.errorLogger().warning(this.m_log_tag + ": Node Configuration state is MASTER (default)");
+            }
+            else {
+                // we are a worker instance
+                this.errorLogger().warning(this.m_log_tag + ": Node Configuration state is WORKER");
+            }
+            
+            // read the preference file in...
             success = this.readPreferencesFile(this.getAbsolutePath(this.m_properties_file), false);
             if (!success) {
-                this.errorLogger().warning("Unable to read config file: " + this.getAbsolutePath(this.m_properties_file) + " trying: " + PreferenceManager.DEFAULT_PROPERTIES_FILE);
+                this.errorLogger().warning(this.m_log_tag + ": WARNING - Unable to read specified config file: " + this.getAbsolutePath(this.m_properties_file) + " trying default: " + PreferenceManager.DEFAULT_PROPERTIES_FILE);
+                
+                // read the default preferences file...
                 return this.readPreferencesFile(PreferenceManager.DEFAULT_PROPERTIES_FILE);
             }
         }
@@ -162,6 +237,18 @@ public class PreferenceManager extends BaseClass {
             success = this.readPreferencesFile(PreferenceManager.DEFAULT_PROPERTIES_FILE);
         }
         return success;
+    }
+    
+    // cache our preferences to InMemory
+    private void cachePreferences() {
+        if (this.m_cache != null) {
+            Enumeration e = this.m_config_properties.propertyNames();
+            while (e.hasMoreElements()) {
+              String key = (String) e.nextElement();
+              String value = (String)this.m_config_properties.getProperty(key);
+              this.m_cache.put(key, value);
+            }
+        }
     }
 
     // read the DB configuration properties file
@@ -186,19 +273,22 @@ public class PreferenceManager extends BaseClass {
                         fis.close();
                     }
                 }
-                this.errorLogger().info("Read configuration file: " + file + " successfully");
+                this.errorLogger().info(this.m_log_tag + ": Read configuration file: " + file + " successfully");
                 success = true;
             }
             catch (IOException ex) {
-                this.errorLogger().critical("Unable to read properties file: " + file);
+                this.errorLogger().critical(this.m_log_tag + ": Unable to read properties file: " + file);
                 this.m_config_properties = null;
             }
         }
         return success;
     }
 
+    // reload the configuration
     public void reload() {
+        this.errorLogger().warning(this.m_log_tag +": Reloading service properties/configuration...");
         this.m_config_properties = null;
         this.readPreferencesFile();
+        this.cachePreferences();
     }
 }

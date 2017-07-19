@@ -22,6 +22,8 @@
  */
 package com.arm.connector.bridge.servlet;
 
+import com.arm.connector.bridge.core.ErrorLogger;
+import com.arm.connector.bridge.preferences.PreferenceManager;
 import java.io.IOException;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -38,12 +40,16 @@ import javax.servlet.http.HttpServletResponse;
 public class Console extends HttpServlet {
 
     private Manager m_manager = null;
+    private ErrorLogger m_error_logger = null;
+    private PreferenceManager m_preferences = null;
 
     // constructor
-    public Console() {
+    public Console(ErrorLogger error_logger,PreferenceManager preferences) {
         super();
+        this.m_error_logger = error_logger;
+        this.m_preferences = preferences;
         if (this.m_manager == null) {
-            this.m_manager = Manager.getInstance(this);
+            this.m_manager = Manager.getInstance(this,error_logger,preferences);
         }
     }
 
@@ -63,13 +69,14 @@ public class Console extends HttpServlet {
      * @throws IOException if an I/O error occurs
      */
     protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        // allocate the event processor if its not allocated already
-        if (this.m_manager == null) {
-            this.m_manager = Manager.getInstance(this);
+        if (this.m_manager != null) {
+            // process our request
+            this.m_manager.processConsole(request, response);
         }
-
-        // show our console
-        this.m_manager.processConsole(request, response);
+        else {
+            // error - no Manager instance
+            this.m_error_logger.warning("Console: ERROR: Manager instance is NULL. Ignoring the console processing request...");
+        }
     }
 
     // <editor-fold defaultstate="collapsed" desc="HttpServlet methods. Click on the + sign on the left to edit the code.">

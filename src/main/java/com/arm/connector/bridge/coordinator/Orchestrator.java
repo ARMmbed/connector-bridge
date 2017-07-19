@@ -84,6 +84,7 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     
     private DatabaseConnector m_db = null;
     private String m_tablename_delimiter = null;
+    private boolean m_is_master_node = true;        // default is to be a master node
 
     public Orchestrator(ErrorLogger error_logger, PreferenceManager preference_manager, String domain) {
         // save the error handler
@@ -94,7 +95,27 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         if (domain != null && domain.equalsIgnoreCase(this.preferences().valueOf("mds_def_domain")) == false) {
             this.m_mds_domain = domain;
         }
+        
+        // get our master node designation
+        this.m_is_master_node = this.m_preference_manager.booleanValueOf("is_master_node");
 
+        // initialize the database connector
+        boolean enable_distributed_db_cache = this.preferences().booleanValueOf("enable_distributed_db_cache");
+        if (enable_distributed_db_cache == true) {
+            this.m_tablename_delimiter = this.preferences().valueOf("distributed_db_tablename_delimiter");
+            if (this.m_tablename_delimiter == null || this.m_tablename_delimiter.length() == 0) {
+                this.m_tablename_delimiter = DEF_TABLENAME_DELIMITER;
+            }
+            String db_ip_address = this.preferences().valueOf("distributed_db_ip_address");
+            int db_port = this.preferences().intValueOf("distributed_db_port");
+            String db_username = this.preferences().valueOf("distributed_db_username");
+            String db_pw = this.preferences().valueOf("distributed_db_password");
+            this.m_db = new DatabaseConnector(this,db_ip_address,db_port,db_username,db_pw);
+        }
+        
+        // finalize the preferences manager
+        this.m_preference_manager.initializeCache(this.m_db,this.m_is_master_node);
+        
         // JSON Factory
         this.m_json_factory = JSONGeneratorFactory.getInstance();
 
@@ -115,20 +136,6 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
         // create the console manager
         this.m_console_manager = new ConsoleManager(this);
-        
-        // initialize the database connector
-        boolean enable_distributed_db_cache = this.preferences().booleanValueOf("enable_distributed_db_cache");
-        if (enable_distributed_db_cache == true) {
-            this.m_tablename_delimiter = this.preferences().valueOf("distributed_db_tablename_delimiter");
-            if (this.m_tablename_delimiter == null || this.m_tablename_delimiter.length() == 0) {
-                this.m_tablename_delimiter = DEF_TABLENAME_DELIMITER;
-            }
-            String db_ip_address = this.preferences().valueOf("distributed_db_ip_address");
-            int db_port = this.preferences().intValueOf("distributed_db_port");
-            String db_username = this.preferences().valueOf("distributed_db_username");
-            String db_pw = this.preferences().valueOf("distributed_db_password");
-            this.m_db = new DatabaseConnector(this,db_ip_address,db_port,db_username,db_pw);
-        }
     }
     
     // get the tablename delimiter
