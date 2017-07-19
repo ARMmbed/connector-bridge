@@ -522,6 +522,18 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         }
         return found;
     }
+    
+    // look and see if certificates are present
+    private boolean certificatesFound(String json) {
+        boolean found = false;
+        
+        // crappy JSON parser cannot deal with []... so we have to look for it specifically...
+        if (json != null && json.length() > 0 && json.contains("\"certificates\": []") == false) {
+            found = true;
+        }
+        
+        return found;
+    }
 
     // get our list of certificates
     private ArrayList<HashMap<String, Serializable>> getRegisteredCertificates() {
@@ -532,7 +544,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         String json = Utils.awsCLI(this.errorLogger(), args);
 
         // parse and process the result
-        if (json != null && json.length() > 0) {
+        if (this.certificatesFound(json) == true) {
             Map parsed = this.m_orchestrator.getJSONParser().parseJson(json);
             List cert_list = (List) parsed.get("certificates");
             for (int i = 0; cert_list != null && i < cert_list.size(); ++i) {
@@ -542,11 +554,15 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
                 cert.put("certificateArn", (String) entry.get("certificateArn"));
                 list.add(cert);
             }
+
+            // DEBUG
+            this.errorLogger().info("AWSIoT: getRegisteredCertificates(" + list.size() + "): " + list);
         }
-
-        // DEBUG
-        this.errorLogger().info("AWSIoT: getRegisteredCertificates(" + list.size() + "): " + list);
-
+        else {
+            // no certificates found
+            this.errorLogger().info("AWSIoT: getRegisteredCertificates: no certificates found (OK)");
+        }
+        
         // return the list
         return list;
     }
