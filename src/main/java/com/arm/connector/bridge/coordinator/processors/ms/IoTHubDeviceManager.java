@@ -26,6 +26,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
+import com.arm.connector.bridge.data.SerializableHashMap;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
 import java.io.Serializable;
@@ -346,11 +347,11 @@ public class IoTHubDeviceManager extends DeviceManager {
         return this.parseDeviceDetails(ep_name, "", json);
     }
 
-    private HashMap<String, Serializable> parseDeviceDetails(String ep_name, String device_type, String json) {
-        HashMap<String, Serializable> ep = null;
+    private HashMap<String, Serializable> parseDeviceDetails(String device, String device_type, String json) {
+        SerializableHashMap ep = null;
 
         // IOTHUB DeviceID Prefix
-        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        String iothub_ep_name = this.addDeviceIDPrefix(device);
 
         // check the input json
         if (json != null) {
@@ -363,7 +364,8 @@ public class IoTHubDeviceManager extends DeviceManager {
                     Map parsed = this.orchestrator().getJSONParser().parseJson(json);
 
                     // Device Details
-                    ep = new HashMap<>();
+                    String d = this.orchestrator().getTablenameDelimiter();
+                    ep = new SerializableHashMap(this.orchestrator(),"AWS_DEVICE" + d + device + d + device_type);
 
                     // Device Keys
                     Map authentication = (Map) parsed.get("authentication");
@@ -409,7 +411,7 @@ public class IoTHubDeviceManager extends DeviceManager {
         }
 
         // return our endpoint details
-        return ep;
+        return ep.map();
     }
 
     // Parse the AddDevice result and capture key elements 

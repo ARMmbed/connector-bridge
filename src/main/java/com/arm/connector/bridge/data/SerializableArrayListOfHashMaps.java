@@ -82,22 +82,43 @@ public class SerializableArrayListOfHashMaps implements Distributable {
     // paddut() method
     public void add(HashMap<String,Serializable> value) {
         if (this.m_im_arraylist != null) {
-            InMemoryTemplatedHashMap<Serializable> v = (InMemoryTemplatedHashMap<Serializable>)value;
-            this.m_im_arraylist.add(v);
+            try {
+                // upcast into InMemory hashmap
+                InMemoryTemplatedHashMap<Serializable> v = (InMemoryTemplatedHashMap<Serializable>)value;
+                this.m_im_arraylist.add(v);
+            }
+            catch (Exception ex) {
+                if (value != null) {
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage());
+                }
+                else {
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed: NULL parameter. exception: " + ex.getMessage());
+                }
+            }
         }
         if (this.m_db_arraylist != null) {
-            // upcast the Inner HashMap to our specific decorated HashMap
-            DatabaseTemplatedHashMap<Serializable> v = (DatabaseTemplatedHashMap<Serializable>)value;
-            
-            // create the Inner tablename for the Inner HashMap
-            String inner_tablename = this.m_tablename + this.m_orchestrator.getTablenameDelimiter() + this.createInnerID(v);
-            v.setTablename(inner_tablename);
-            
-            // Add the HashMap to our HashMap
-            this.m_db_arraylist.add(v);
-            
-            // update/insert the inner tablename into our table
-            this.upsert(inner_tablename);
+            try {
+                // upcast the Inner HashMap to our specific decorated HashMap
+                DatabaseTemplatedHashMap<Serializable> v = (DatabaseTemplatedHashMap<Serializable>)value;
+
+                // create the Inner tablename for the Inner HashMap
+                String inner_tablename = this.m_tablename + this.m_orchestrator.getTablenameDelimiter() + this.createInnerID(v);
+                v.setTablename(inner_tablename);
+
+                // Add the HashMap to our HashMap
+                this.m_db_arraylist.add(v);
+
+                // update/insert the inner tablename into our table
+                this.upsert(inner_tablename);
+            }
+            catch (Exception ex) {
+                if (value != null) {
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage());
+                }
+                else {
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed: NULL parameter. exception: " + ex.getMessage());
+                }
+            }
         }
     }
     
