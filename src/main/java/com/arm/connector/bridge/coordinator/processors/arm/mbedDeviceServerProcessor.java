@@ -832,7 +832,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         this.processDeviceServerMessage(json, request);
 
         // send the response back as an ACK to mDS
-        this.sendResponseToMDS("text/html;charset=UTF-8", request, response, "", "");
+        this.sendResponseToDeviceServer("text/html;charset=UTF-8", request, response, "", "");
     }
 
     // process and route the mDS message to the appropriate peer method (long poll method)
@@ -843,7 +843,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // process and route the mDS message to the appropriate peer method
     private void processDeviceServerMessage(String json, HttpServletRequest request) {
         // DEBUG
-        //this.orchestrator().errorLogger().info("processNotificationMessage(mDS): Received message from mDS: " + json);
+        this.orchestrator().errorLogger().info("processDeviceServerMessage(mDS): Received message from mDS: " + json);
 
         // tell the orchestrator to call its peer processors with this mDS message
         try {
@@ -853,19 +853,20 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                     if (parsed.containsKey("notifications")) {
                         if (this.validateNotification(request)) {
                             // DEBUG
-                            //this.errorLogger().info("processNotificationMessage: notification VALIDATED");
+                            this.errorLogger().info("processDeviceServerMessage(mDS): notification VALIDATED");
 
                             // validated notification... process it...
                             this.orchestrator().processNotification(parsed);
                         }
                         else {
                             // validation FAILED. Note but do not process...
-                            this.errorLogger().warning("processMDSMessage(mDS): notification validation FAILED. Not processed (OK)");
+                            this.errorLogger().warning("processDeviceServerMessage(mDS): notification validation FAILED. Not processed (OK)");
                         }
                     }
 
                     // DEBUG
-                    //this.errorLogger().info("processNotificationMessage(STD) Parsed: " + parsed);
+                    this.errorLogger().info("processDeviceServerMessage(mDS) Parsed: " + parsed);
+                    
                     // act on the request...
                     if (parsed.containsKey("registrations")) {
                         this.orchestrator().processNewRegistration(parsed);
@@ -885,17 +886,17 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 }
                 else {
                     // parseJson() failed...
-                    this.errorLogger().warning("processDeviceServerMessage: unable to parse JSON: " + json);
+                    this.errorLogger().warning("processDeviceServerMessage(mDS): unable to parse JSON: " + json);
                 }
             }
             else {
                 // empty JSON... so not parsed
-                this.errorLogger().info("processDeviceServerMessage: empty JSON not parsed (OK).");
+                this.errorLogger().info("processDeviceServerMessage(mDS): empty JSON not parsed (OK).");
             }
         }
         catch (Exception ex) {
             // exception during JSON parsing
-            this.errorLogger().warning("processDeviceServerMessage: Exception during notification body JSON parsing: " + json, ex);
+            this.errorLogger().warning("processDeviceServerMessage(mDS): Exception during notification body JSON parsing: " + json, ex);
         }
     }
 
@@ -1205,10 +1206,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // parse the device attributes
     private Map parseDeviceAttributes(Map response, Map endpoint) {
         try {
-            // DEBUG
-            //this.errorLogger().info("parseDeviceAttributes: Response: " + response);
-            //this.errorLogger().info("parseDeviceAttributes: Endpoint: " + endpoint);
-
             // Parse the payload into a TLV
             String b64_payload = (String) response.get("payload");
             byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
@@ -1227,7 +1224,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
         catch (Exception ex) {
             // exception during TLV parse... 
-            this.errorLogger().warning("Error parsing TLV device attributes... using defaults...");
+            this.errorLogger().info("parseDeviceAttributes: Error parsing TLV device attributes... using defaults...OK");
         }
 
         // return the updated endpoint
@@ -1307,7 +1304,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     }
 
     // send the REST response back to mDS
-    private void sendResponseToMDS(String content_type, HttpServletRequest request, HttpServletResponse response, String header, String body) {
+    private void sendResponseToDeviceServer(String content_type, HttpServletRequest request, HttpServletResponse response, String header, String body) {
         try {
             response.setContentType(content_type);
             response.setHeader("Pragma", "no-cache");

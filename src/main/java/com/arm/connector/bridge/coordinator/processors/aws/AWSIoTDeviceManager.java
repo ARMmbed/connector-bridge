@@ -350,7 +350,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
                 }
                 else {
                     // device is not found
-                    this.errorLogger().warning("AWSIoT: parseDeviceDetails: device " + device + " is not a registered device (OK)");
+                    this.errorLogger().info("AWSIoT: parseDeviceDetails: device " + device + " is not a registered device (OK)");
                     ep = null;
                 }
             }

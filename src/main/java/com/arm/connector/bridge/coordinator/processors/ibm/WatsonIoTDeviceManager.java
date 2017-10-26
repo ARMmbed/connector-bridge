@@ -476,7 +476,7 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         String device_type = (String) message.get("ept");
         String device = (String) message.get("ep");
         this.createGatewayDeviceType(device_type);
-
+        
         // create the URL
         String url = this.createDevicesURL(device_type);
 
@@ -486,6 +486,13 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         // build out the POST payload
         String payload = this.createAddDeviceJSON(message);
 
+        // aggressively save the endpoint type - this keeps from creating devices of type "mbed-generic" in Watson
+        if (this.m_device_types.get(device) == null) {
+            // save off our device if never seen before
+            this.errorLogger().info("Watson IoT: registerNewDevice: Adding device type: " + device_type + " for endpoint: " + device);
+            this.m_device_types.put(device, device_type);
+        }
+            
         // DEBUG
         this.errorLogger().info("Watson IoT: registerNewDevice: URL: " + url + " DATA: " + payload + " USER: " + this.m_watson_iot_gw_key + " PW: " + this.m_watson_iot_gw_auth_token);
 
@@ -498,17 +505,11 @@ public class WatsonIoTDeviceManager extends DeviceManager {
             // DEBUG
             this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS. RESULT: " + result);
             status = true;
-
-            // save off our device if successful
-            this.m_device_types.put(device, device_type);
         }
         else if (http_code == 409) {
             // DEBUG
             this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS (already registered)");
             status = true;
-
-            // save off our device if successful
-            this.m_device_types.put(device, device_type);
         }
         else {
             // DEBUG

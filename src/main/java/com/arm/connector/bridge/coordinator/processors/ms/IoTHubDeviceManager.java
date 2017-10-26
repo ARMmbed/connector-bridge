@@ -389,7 +389,7 @@ public class IoTHubDeviceManager extends DeviceManager {
                 }
                 else {
                     // device is not found
-                    this.errorLogger().warning("IoTHub: parseDeviceDetails: device " + iothub_ep_name + " is not a registered device (OK)");
+                    this.errorLogger().info("IoTHub: parseDeviceDetails: device " + iothub_ep_name + " is not a registered device (OK)");
                     ep = null;
                 }
             }
