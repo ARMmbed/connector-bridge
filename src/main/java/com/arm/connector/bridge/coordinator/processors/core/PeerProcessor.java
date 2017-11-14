@@ -167,7 +167,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             List resources = (List) endpoint.get("resources");
             for (int j = 0; resources != null && j < resources.size(); ++j) {
                 Map resource = (Map) resources.get(j);
-                if (this.isObservableResource(resource)) {
+                if (this.isObservableResource(resource) && this.subscriptionsManager().isNotASpecialityResource((String)resource.get("path"))) {
                     this.errorLogger().info("processReRegistration(Peer) : CoAP re-registration: " + endpoint + " Resource: " + resource);
                     if (this.subscriptionsManager().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
                         this.errorLogger().info("processReRegistration(Peer) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
