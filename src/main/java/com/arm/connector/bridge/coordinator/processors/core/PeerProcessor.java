@@ -362,13 +362,19 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                 this.subscriptionsManager().removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
             }
             else if (parsed != null && verb.equalsIgnoreCase("subscribe") == true) {
-                // Subscribe
-                this.errorLogger().info("onMessageReceive(Peer): sending subscription request (add subscription)");
-                json = this.orchestrator().subscribeToEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed, true);
+                if (this.subscriptionsManager().isNotASpecialityResource(uri)) {
+                    // Subscribe
+                    this.errorLogger().info("onMessageReceive(Peer): sending subscription request (add subscription)");
+                    json = this.orchestrator().subscribeToEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed, true);
 
-                // add to the subscription list
-                this.errorLogger().info("onMessageReceive(Peer): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
-                this.subscriptionsManager().addSubscription(this.m_mds_domain, ep_name, ep_type, uri, true); // assume resource is observable...
+                    // add to the subscription list
+                    this.errorLogger().info("onMessageReceive(Peer): adding subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                    this.subscriptionsManager().addSubscription(this.m_mds_domain, ep_name, ep_type, uri, true); // assume resource is observable...
+                }
+                else {
+                    // not subscribing to speciality resource
+                    this.errorLogger().info("onMessageReceive(Peer): NOT adding ObjectID(3)/ObjectID(5)/ObjectID(10255) subscription TOPIC: " + topic + " endpoint: " + ep_name + " type: " + ep_type + " uri: " + uri);
+                }
             }
             else if (parsed != null) {
                 // verb not recognized
