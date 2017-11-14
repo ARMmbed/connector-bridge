@@ -29,6 +29,7 @@ import com.arm.connector.bridge.core.BaseClass;
 import com.arm.connector.bridge.data.SerializableArrayListOfHashMaps;
 import com.arm.connector.bridge.data.SerializableHashMap;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.HashMap;
 
 /**
@@ -236,7 +237,7 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
             String str_id = "" + id;
             String[] tmp = uri.split("/");
             // DEBUG
-            this.errorLogger().info("SubscriptionManager(InMemory): isObjectID() URI: " + uri + " ID: " + str_id + " ARR: " + tmp);
+            this.errorLogger().info("SubscriptionManager(InMemory): isObjectID() URI: " + uri + " ID: " + str_id + " ARR: " + Arrays.toString(tmp));
             if (tmp != null && tmp.length > 0) {
                 String tmp_id = tmp[0];
                 if (tmp_id != null && tmp_id.equalsIgnoreCase(str_id)) {
