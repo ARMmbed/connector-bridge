@@ -238,8 +238,8 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
             String[] tmp = uri.split("/");
             // DEBUG
             this.errorLogger().info("SubscriptionManager(InMemory): isObjectID() URI: " + uri + " ID: " + str_id + " ARR: " + Arrays.toString(tmp));
-            if (tmp != null && tmp.length > 0) {
-                String tmp_id = tmp[0];
+            if (tmp != null && tmp.length > 1) {
+                String tmp_id = tmp[1];
                 if (tmp_id != null && tmp_id.equalsIgnoreCase(str_id)) {
                     is_objectid = true;
                 }
