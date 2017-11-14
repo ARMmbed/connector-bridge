@@ -146,7 +146,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                     this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
                     this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true) {
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true && this.subscriptionsManager().isNotASpecialityResource((String) resource.get("path"))) {
                     // auto-subscribe to observable resources... if enabled.
                     this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 

@@ -43,4 +43,7 @@ public interface SubscriptionManager {
     
     // get an endpoint type from the endpoint name (cached)
     public String endpointTypeFromEndpointName(String endpoint);
+    
+    // ObjectID(3)/ObjectID(5)/ObjectID(10255) subscription avoidance...
+    public boolean isNotASpecialityResource(String uri);
 }

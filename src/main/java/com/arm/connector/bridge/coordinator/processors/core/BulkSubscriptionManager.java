@@ -86,4 +86,11 @@ public class BulkSubscriptionManager extends BaseClass implements SubscriptionMa
         // not cached - so defer... 
         return null;
     }
+    
+    // ObjectID(3)/ObjectID(5)/ObjectID(10255) resource observation enablement
+    @Override
+    public boolean isNotASpecialityResource(String uri) {
+        // always true
+        return true;
+    }
 }

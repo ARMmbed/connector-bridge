@@ -75,6 +75,17 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     public void addSubscriptionProcessor(SubscriptionProcessor subscription_processor) {
         this.m_subscription_processor = subscription_processor;
     }
+    
+    // ObjectID(3)/ObjectID(5)/ObjectID(10255) resource observation enablement
+    @Override
+    public boolean isNotASpecialityResource(String uri) {
+        if (this.m_enable_3_5_10255_objectid_subscriptions == false) {
+            if (this.isObjectID(uri,3) == true || this.isObjectID(uri,5) == true && this.isObjectID(uri,10255) == true) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     // add subscription
     @Override
