@@ -896,7 +896,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
         catch (Exception ex) {
             // exception during JSON parsing
-            this.errorLogger().warning("processDeviceServerMessage(mDS): Exception during notification body JSON parsing: " + json, ex);
+            this.errorLogger().info("processDeviceServerMessage(mDS): Exception during notification body JSON parsing: " + json + "... ignoring.", ex);
         }
     }
 

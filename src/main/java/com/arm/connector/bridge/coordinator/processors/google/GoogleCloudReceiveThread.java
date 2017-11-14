@@ -127,30 +127,36 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                 // DEBUG
                 //System.out.println("Number of received messages: " + receivedMessages.size());
 
-                // Now process the messages we have...
-                for (ReceivedMessage receivedMessage : receivedMessages) {
-                    // save the ACK ID
-                    ackIds.add(receivedMessage.getAckId());
+                if (receivedMessages != null) {
+                    // Now process the messages we have...
+                    for (ReceivedMessage receivedMessage : receivedMessages) {
+                        // save the ACK ID
+                        ackIds.add(receivedMessage.getAckId());
 
-                    // parse the payload
-                    PubsubMessage pubsubMessage = receivedMessage.getMessage();
-                    String message = new String(pubsubMessage.decodeData(),"UTF-8");
-                    
-                    // create a compatible topic with forward slashes...
-                    String topic = this.m_receiver.connectorTopicFromGoogleSubscription(goo_subscription);
+                        // parse the payload
+                        PubsubMessage pubsubMessage = receivedMessage.getMessage();
+                        String message = new String(pubsubMessage.decodeData(),"UTF-8");
 
-                    // call on receive
-                    this.onMessageReceive(topic, message);  
+                        // create a compatible topic with forward slashes...
+                        String topic = this.m_receiver.connectorTopicFromGoogleSubscription(goo_subscription);
+
+                        // call on receive
+                        this.onMessageReceive(topic, message);  
+                    }
+
+                    // ack the messages
+                    AcknowledgeRequest ackRequest = new AcknowledgeRequest();
+                            ackRequest.setAckIds(ackIds);
+                            this.m_pubsub.projects().subscriptions()
+                                    .acknowledge(goo_subscription, ackRequest)
+                                    .execute();
                 }
-
-                // ack the messages
-                AcknowledgeRequest ackRequest = new AcknowledgeRequest();
-                        ackRequest.setAckIds(ackIds);
-                        this.m_pubsub.projects().subscriptions()
-                                .acknowledge(goo_subscription, ackRequest)
-                                .execute();
+                else {
+                    // debug
+                    //System.out.println("WARN: GoogleCloudReceiveThread: no messages received (OK).");
+                }
             }
-            catch (IOException ex) {
+            catch (IOException | NullPointerException ex) {
                 // debug
                 // System.out.println("WARN: GoogleCloudReceiveThread: exception during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
             }

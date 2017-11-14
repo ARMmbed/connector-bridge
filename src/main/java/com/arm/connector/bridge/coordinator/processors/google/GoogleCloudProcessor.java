@@ -42,6 +42,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import javax.net.ssl.SSLHandshakeException;
 
 /**
  * Google Cloud PubSub peer processor
@@ -166,10 +167,14 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         
         if (subscription != null && subscription.length() > 0) {
             for(int i=0;i<this.m_receivers.size() && index < 0;++i) {
-                HashMap<String,Object> entry = this.m_receivers.get(i);
-                String t_subscription = (String)entry.get("subscription");
-                if (t_subscription.equalsIgnoreCase(subscription) == true) {
-                    index = i;
+                if (this.m_receivers != null) {
+                    HashMap<String,Object> entry = this.m_receivers.get(i);
+                    if (entry != null) {
+                        String t_subscription = (String)entry.get("subscription");
+                        if (t_subscription.equalsIgnoreCase(subscription) == true) {
+                            index = i;
+                        }
+                    }
                 }
             }
         }
@@ -385,6 +390,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudRemoveSubscription: removing subscription: " + goo_subscription + "...");
                 this.m_pubsub.projects().subscriptions().delete(goo_subscription).execute();
             }
+            catch (SSLHandshakeException ex) {
+                // DEBUG
+                // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
+            }
             catch (IOException ex) {
                 // DEBUG
                 // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
@@ -402,6 +411,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 // remove the topic
                 this.errorLogger().info("googleCloudRemoveTopic: removing topic: " + goo_topic + "...");
                 this.m_pubsub.projects().topics().delete(goo_topic).execute();
+            }
+            catch (SSLHandshakeException ex) {
+                // DEBUG
+                // this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
             }
             catch (IOException ex) {
                 // DEBUG
@@ -423,6 +436,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 // Create the Topic
                 this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
                 return this.m_pubsub.projects().topics().create(goo_topic,new Topic()).execute();
+            }
+            catch (SSLHandshakeException ex) {
+                // no pubsub instance
+                this.errorLogger().info("googleCloudCreateTopic: SSL ERROR in topic creation: " + ex.getMessage());
             }
             catch (IOException ex) {
                 // no pubsub instance
@@ -453,6 +470,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudCreateSubscription: Creating Subscription: " + goo_subscription);
                 Subscription s = new Subscription().setTopic(goo_topic);
                 return this.m_pubsub.projects().subscriptions().create(goo_subscription,s).execute();
+            }
+            catch (SSLHandshakeException ex) {
+                // handshake error
+                this.errorLogger().info("googleCloudCreateSubscription: SSL ERROR in subscription creation: " + ex.getMessage());
             }
             catch (IOException ex) {
                 // no pubsub instance
