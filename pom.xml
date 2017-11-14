@@ -144,7 +144,7 @@
                                 ${project.build.directory}/${project.artifactId}-${project.version}
                             </outputDirectory>
                         </configuration>
-                    </execution>
+                    </execution>                  
                 </executions>
             </plugin>
             <plugin>
