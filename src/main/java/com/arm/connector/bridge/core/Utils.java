@@ -730,4 +730,10 @@ public class Utils {
         }
         return data;
     }
+    
+    // where am I?
+    public static void whereAmI(ErrorLogger logger) {
+        Exception ex = new Exception();
+        logger.info("whereAmI: StackTrace",ex);
+    }
 }

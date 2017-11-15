@@ -146,7 +146,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                     this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
                     this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
-                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true && this.subscriptionsManager().isNotASpecialityResource((String) resource.get("path"))) {
+                else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true && this.subscriptionsManager().isFullyQualifiedResource((String)resource.get("path")) && this.subscriptionsManager().isNotASpecialityResource((String) resource.get("path"))) {
                     // auto-subscribe to observable resources... if enabled.
                     this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 
@@ -167,7 +167,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             List resources = (List) endpoint.get("resources");
             for (int j = 0; resources != null && j < resources.size(); ++j) {
                 Map resource = (Map) resources.get(j);
-                if (this.isObservableResource(resource) && this.subscriptionsManager().isNotASpecialityResource((String)resource.get("path"))) {
+                if (this.isObservableResource(resource) && this.subscriptionsManager().isFullyQualifiedResource((String)resource.get("path")) && this.subscriptionsManager().isNotASpecialityResource((String)resource.get("path"))) {
                     this.errorLogger().info("processReRegistration(Peer) : CoAP re-registration: " + endpoint + " Resource: " + resource);
                     if (this.subscriptionsManager().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path")) == false) {
                         this.errorLogger().info("processReRegistration(Peer) : CoAP re-registering OBS resources for: " + endpoint + " Resource: " + resource);
@@ -362,7 +362,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                 this.subscriptionsManager().removeSubscription(this.m_mds_domain, ep_name, ep_type, uri);
             }
             else if (parsed != null && verb.equalsIgnoreCase("subscribe") == true) {
-                if (this.subscriptionsManager().isNotASpecialityResource(uri)) {
+                if (this.subscriptionsManager().isFullyQualifiedResource(uri) && this.subscriptionsManager().isNotASpecialityResource(uri)) {
                     // Subscribe
                     this.errorLogger().info("onMessageReceive(Peer): sending subscription request (add subscription)");
                     json = this.orchestrator().subscribeToEndpointResource(this.orchestrator().createSubscriptionURI(ep_name, uri), parsed, true);

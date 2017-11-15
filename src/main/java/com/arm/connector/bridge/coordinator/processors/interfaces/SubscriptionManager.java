@@ -46,4 +46,7 @@ public interface SubscriptionManager {
     
     // ObjectID(3)/ObjectID(5)/ObjectID(10255) subscription avoidance...
     public boolean isNotASpecialityResource(String uri);
+    
+    // resource URI is fully qualified
+    public boolean isFullyQualifiedResource(String uri);
 }

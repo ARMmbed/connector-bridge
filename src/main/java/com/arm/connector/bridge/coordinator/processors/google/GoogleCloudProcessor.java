@@ -203,9 +203,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         int index = this.getSubscription(subscription);
         if (index >= 0) {
             HashMap<String,Object> entry = this.m_receivers.get(index);
-            GoogleCloudReceiveThread receiver = (GoogleCloudReceiveThread)entry.get("receiver");
-            receiver.stop_listening();
-            this.m_receivers.remove(entry);
+            if (entry != null) {
+                GoogleCloudReceiveThread receiver = (GoogleCloudReceiveThread)entry.get("receiver");
+                if (receiver != null) {
+                    receiver.stop_listening();
+                    if (this.m_receivers != null) {
+                        this.m_receivers.remove(entry);
+                    }
+                }
+            }
         }
     }
     
@@ -239,15 +245,21 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private void subscribe(String domain, String ep, String ept, String path, String cmd,boolean enable_listener) {
         // Topic created
         String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.googleCloudCreateTopic(topic);
-        
-        // Subscription created
-        String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.googleCloudCreateSubscription(topic,subscription);
-        
-        // add a listener (if requested)
-        if (enable_listener == true) {
-            this.addSubscription(subscription);
+            Topic t = this.googleCloudCreateTopic(topic);
+            if (t != null) {
+
+            // Subscription created
+            String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
+            this.googleCloudCreateSubscription(topic,subscription);
+
+            // add a listener (if requested)
+            if (enable_listener == true) {
+                this.addSubscription(subscription);
+            }
+        }
+        else {
+            // unable to create topic...
+            this.errorLogger().info("subscribe(Google): Unable to create Topic: " + topic);
         }
     }
     

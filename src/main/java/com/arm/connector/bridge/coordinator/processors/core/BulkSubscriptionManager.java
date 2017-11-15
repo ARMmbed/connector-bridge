@@ -93,4 +93,16 @@ public class BulkSubscriptionManager extends BaseClass implements SubscriptionMa
         // always true
         return true;
     }
+    
+    // resource URI is fully qualified
+    @Override
+    public boolean isFullyQualifiedResource(String uri) {
+        if (uri != null && uri.length() > 0) {
+            String[] tmp = uri.split("/");
+            if (tmp != null && tmp.length == 4) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

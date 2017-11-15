@@ -80,11 +80,23 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     @Override
     public boolean isNotASpecialityResource(String uri) {
         if (this.m_enable_3_5_10255_objectid_subscriptions == false) {
-            if (this.isObjectID(uri,3) == true || this.isObjectID(uri,5) == true && this.isObjectID(uri,10255) == true) {
+            if (this.isObjectID(uri,3) == true || this.isObjectID(uri,5) == true || this.isObjectID(uri,10255) == true) {
                 return false;
             }
         }
         return true;
+    }
+    
+    // resource URI is fully qualified
+    @Override
+    public boolean isFullyQualifiedResource(String uri) {
+        if (uri != null && uri.length() > 0) {
+            String[] tmp = uri.split("/");
+            if (tmp != null && tmp.length == 4) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // add subscription

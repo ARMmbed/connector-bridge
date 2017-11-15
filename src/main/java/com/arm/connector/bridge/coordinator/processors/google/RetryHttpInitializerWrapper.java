@@ -12,7 +12,6 @@ import com.google.api.client.util.Sleeper;
 import com.google.common.base.Preconditions;
 
 import java.io.IOException;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -25,8 +24,7 @@ public class RetryHttpInitializerWrapper implements HttpRequestInitializer {
     /**
      * A private logger.
      */
-    private static final Logger LOG =
-            Logger.getLogger(RetryHttpInitializerWrapper.class.getName());
+    private static final Logger LOG = Logger.getLogger(RetryHttpInitializerWrapper.class.getName());
 
     /**
      * One minutes in miliseconds.
@@ -63,8 +61,7 @@ public class RetryHttpInitializerWrapper implements HttpRequestInitializer {
      * used for providing auth header.
      * @param sleeper Sleeper for easy testing.
      */
-    RetryHttpInitializerWrapper(
-            final Credential wrappedCredential, final Sleeper sleeper) {
+    RetryHttpInitializerWrapper(final Credential wrappedCredential, final Sleeper sleeper) {
         this.wrappedCredential = Preconditions.checkNotNull(wrappedCredential);
         this.sleeper = sleeper;
     }
