@@ -50,6 +50,9 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     protected boolean m_auto_subscribe_to_obs_resources = false;
     private String m_mds_request_tag = null;
     
+    // enable this if you want to have re-subscription even if the subscription already exists (i.e. wipe/reset)
+    protected boolean m_re_subscribe = false;
+    
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
     protected String m_cmd_response_key = "cmd-response";           // common for both legacy and unified 
@@ -139,20 +142,26 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             for (int j = 0; resources != null && j < resources.size(); ++j) {
                 Map resource = (Map) resources.get(j);
                 if (this.subscriptionsManager().containsSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"))) {
-                    // re-subscribe to this resource
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+                    if (this.m_re_subscribe == true) {
+                        // re-subscribe to this resource
+                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
+                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                        this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
+                    }
+                    else {
+                        // no re-processing of subscriptions
+                        this.errorLogger().info("processRegistration: not re-initializing subscription (OK)");
+                    }
                 }
                 else if (this.isObservableResource(resource) && this.m_auto_subscribe_to_obs_resources == true && this.subscriptionsManager().isFullyQualifiedResource((String)resource.get("path")) && this.subscriptionsManager().isNotASpecialityResource((String) resource.get("path"))) {
-                    // auto-subscribe to observable resources... if enabled.
-                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+                        // auto-subscribe to observable resources... if enabled.
+                        this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
 
-                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                    this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                    this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
+                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                        this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                        this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
             }
         }

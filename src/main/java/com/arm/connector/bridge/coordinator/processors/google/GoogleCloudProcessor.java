@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
+import com.arm.connector.bridge.data.SerializableArrayListOfHashMaps;
 import com.google.api.services.pubsub.model.Topic;
 import com.google.api.services.pubsub.model.Subscription;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
@@ -39,7 +40,7 @@ import com.google.api.services.pubsub.model.PubsubMessage;
 import com.google.common.collect.ImmutableList;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import javax.net.ssl.SSLHandshakeException;
@@ -60,7 +61,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     private int m_sleep_time = 0;
     private int m_max_messages = 0;
     
-    private ArrayList<HashMap<String,Object>> m_receivers = null;
+    private SerializableArrayListOfHashMaps m_receivers = null;
 
     // (OPTIONAL) Factory method for initializing the Sample 3rd Party peer
     public static GoogleCloudProcessor createPeerProcessor(Orchestrator manager) {
@@ -93,7 +94,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         this.addSubscriptionProcessor(this);
         
         // initialize the receivers list
-        this.m_receivers = new ArrayList<>();
+        this.m_receivers = new SerializableArrayListOfHashMaps(manager,"GOOGLE_RECEIVERS");
         
         // initialize the topic root
         this.initTopicRoot("google_cloud_topic_root");
@@ -166,14 +167,12 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         int index = -1;
         
         if (subscription != null && subscription.length() > 0) {
-            for(int i=0;i<this.m_receivers.size() && index < 0;++i) {
-                if (this.m_receivers != null) {
-                    HashMap<String,Object> entry = this.m_receivers.get(i);
-                    if (entry != null) {
-                        String t_subscription = (String)entry.get("subscription");
-                        if (t_subscription.equalsIgnoreCase(subscription) == true) {
-                            index = i;
-                        }
+            for(int i=0;this.m_receivers != null && i<this.m_receivers.size() && index < 0;++i) {
+                HashMap<String,Serializable> entry = this.m_receivers.get(i);
+                if (entry != null) {
+                    String t_subscription = (String)entry.get("subscription");
+                    if (t_subscription.equalsIgnoreCase(subscription) == true) {
+                        index = i;
                     }
                 }
             }
@@ -189,26 +188,38 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     // add subscription
     private void addSubscription(String subscription) {
         if (this.subscribed(subscription) == false) {
-            HashMap<String,Object> entry = new HashMap<>();
+            HashMap<String,Serializable> entry = new HashMap<>();
             entry.put("subscription", subscription);
             GoogleCloudReceiveThread receiver = new GoogleCloudReceiveThread(this,this.m_pubsub,this.m_sleep_time,this.m_max_messages,this.connectorSubscriptionToGoogleSubscription(subscription));
             receiver.start_listening();
-            entry.put("receiver",receiver);
+            entry.put("receiver",(Serializable)receiver);
             this.m_receivers.add(entry);
         }
     }
     
     // remove subscription
+    @SuppressWarnings("empty-statement")
     public void removeSubscription(String subscription) {
         int index = this.getSubscription(subscription);
-        if (index >= 0) {
-            HashMap<String,Object> entry = this.m_receivers.get(index);
+        if (index >= 0 && this.m_receivers != null && index < this.m_receivers.size()) {
+            HashMap<String,Serializable> entry = this.m_receivers.get(index);
             if (entry != null) {
                 GoogleCloudReceiveThread receiver = (GoogleCloudReceiveThread)entry.get("receiver");
                 if (receiver != null) {
-                    receiver.stop_listening();
-                    if (this.m_receivers != null) {
-                        this.m_receivers.remove(entry);
+                    try {
+                        // orphan the thread handle... 
+                        this.m_receivers.remove(index);
+
+                        // stop the event loop
+                        receiver.stop_listening();
+
+                        // destroy the thread
+                        receiver.interrupt();
+                        receiver.join();
+                    }
+                    catch (InterruptedException ex) {
+                        // fail silently
+                        ;
                     }
                 }
             }
@@ -243,11 +254,13 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     
     // subscribe (cmd), optional listener
     private void subscribe(String domain, String ep, String ept, String path, String cmd,boolean enable_listener) {
+        // DEBUG
+        com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+        
         // Topic created
         String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-            Topic t = this.googleCloudCreateTopic(topic);
-            if (t != null) {
-
+        Topic t = this.googleCloudCreateTopic(topic);
+        if (t != null) {
             // Subscription created
             String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
             this.googleCloudCreateSubscription(topic,subscription);
@@ -265,6 +278,9 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     
     // unsubscribe (cmd)
     void unsubscribe(String domain, String ep, String ept, String path, String cmd) {
+        // DEBUG
+        com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+        
         // Subscription removed
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         this.googleCloudRemoveSubscription(subscription);
@@ -285,28 +301,52 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
     @Override
     public void subscribe(String domain, String ep, String ept, String path, boolean is_observable) {
-        // subscribe to notifications (no listener)
-        this.subscribe(domain, ep, ept, path, this.m_observation_key,false);
+        try {
+            // subscribe to notifications (no listener)
+            this.subscribe(domain, ep, ept, path, this.m_observation_key,false);
+        }
+        catch (Exception ex) {
+        }
         
-        // also subscribe to CoAP request for: get, put, post, delete processing (listen on these...)
-        this.subscribe(domain, ep, ept, path, this.createRequestToken(),true);
+        try {
+            // also subscribe to CoAP request for: get, put, post, delete processing (listen on these...)
+            this.subscribe(domain, ep, ept, path, this.createRequestToken(),true);
+        }
+        catch (Exception ex) {
+        }
         
-        // also setup the CoAP command response topic (no listener)
-        this.subscribe(domain, ep, ept, path, "cmd-response", false);
+        try {
+            // also setup the CoAP command response topic (no listener)
+            this.subscribe(domain, ep, ept, path, "cmd-response", false);
+        }
+        catch (Exception ex) { 
+        }
     }
     
     // unsubscribe handling
     // format: <topic_root>/request/endpoints/<ep_type>/<endpoint name>/<URI> POSITION SENSITIVE
     @Override
     public void unsubscribe(String domain, String ep, String ept, String path) {
-        // unsubscribe to notifications
-        this.unsubscribe(domain, ep, ept, path, this.m_observation_key);
+        try {
+            // unsubscribe to notifications
+            this.unsubscribe(domain, ep, ept, path, this.m_observation_key);
+        }
+        catch (Exception ex) {
+        }
         
-        // also unsubscribe from CoAP request for get, put, post, delete processing
-        this.unsubscribe(domain, ep, ept, path, this.createRequestToken());
+        try {
+            // also unsubscribe from CoAP request for get, put, post, delete processing
+            this.unsubscribe(domain, ep, ept, path, this.createRequestToken());
+        }
+        catch (Exception ex) {
+        }
         
-        // also remove the CoAP command response topic
-        this.unsubscribe(domain, ep, ept, path, "cmd-response");
+        try {
+            // also remove the CoAP command response topic
+            this.unsubscribe(domain, ep, ept, path, "cmd-response");
+        }
+        catch (Exception ex) {
+        }
     }
     
     // GenericSender Implementation: send a message
