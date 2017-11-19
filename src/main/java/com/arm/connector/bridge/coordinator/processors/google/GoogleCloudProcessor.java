@@ -255,7 +255,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     // subscribe (cmd), optional listener
     private void subscribe(String domain, String ep, String ept, String path, String cmd,boolean enable_listener) {
         // DEBUG
-        com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+        //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
         
         // Topic created
         String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
@@ -279,7 +279,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     // unsubscribe (cmd)
     void unsubscribe(String domain, String ep, String ept, String path, String cmd) {
         // DEBUG
-        com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+        //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
         
         // Subscription removed
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
