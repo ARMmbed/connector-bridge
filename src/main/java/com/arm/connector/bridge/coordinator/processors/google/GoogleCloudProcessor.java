@@ -28,6 +28,7 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionProcessor;
 import com.arm.connector.bridge.data.SerializableArrayListOfHashMaps;
+import com.arm.connector.bridge.data.SerializableHashMap;
 import com.google.api.services.pubsub.model.Topic;
 import com.google.api.services.pubsub.model.Subscription;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
@@ -188,12 +189,12 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     // add subscription
     private void addSubscription(String subscription) {
         if (this.subscribed(subscription) == false) {
-            HashMap<String,Serializable> entry = new HashMap<>();
+            SerializableHashMap entry = new SerializableHashMap(this.orchestrator(),"GOOGLE_SUBSCRIPTIONS");
             entry.put("subscription", subscription);
             GoogleCloudReceiveThread receiver = new GoogleCloudReceiveThread(this,this.m_pubsub,this.m_sleep_time,this.m_max_messages,this.connectorSubscriptionToGoogleSubscription(subscription));
             receiver.start_listening();
             entry.put("receiver",(Serializable)receiver);
-            this.m_receivers.add(entry);
+            this.m_receivers.add(entry.map());
         }
     }
     
@@ -272,7 +273,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         }
         else {
             // unable to create topic...
-            this.errorLogger().info("subscribe(Google): Unable to create Topic: " + topic);
+            this.errorLogger().warning("subscribe(Google): Unable to create Topic: " + topic);
         }
     }
     
@@ -302,24 +303,41 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     @Override
     public void subscribe(String domain, String ep, String ept, String path, boolean is_observable) {
         try {
+            // DEBUG
+            this.errorLogger().info("subscribe(Google-notify): ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable);
+        
             // subscribe to notifications (no listener)
             this.subscribe(domain, ep, ept, path, this.m_observation_key,false);
         }
         catch (Exception ex) {
+            // exception (notification)
+            this.errorLogger().warning("subscribe(Google-notify): Exception: ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable + " msg: " + ex.getMessage(),ex);
         }
         
         try {
+            // DEBUG
+            this.errorLogger().info("subscribe(Google-verbs): ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable);
+
             // also subscribe to CoAP request for: get, put, post, delete processing (listen on these...)
             this.subscribe(domain, ep, ept, path, this.createRequestToken(),true);
         }
         catch (Exception ex) {
+            // exception (verbs)
+            this.errorLogger().warning("subscribe(Google-verbs): Exception: ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable + " msg: " + ex.getMessage(),ex);
+
         }
         
         try {
+            // DEBUG
+            this.errorLogger().info("subscribe(Google-response): ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable);
+
             // also setup the CoAP command response topic (no listener)
             this.subscribe(domain, ep, ept, path, "cmd-response", false);
         }
-        catch (Exception ex) { 
+        catch (Exception ex) {
+            // exception (response)
+            this.errorLogger().warning("subscribe(Google-response): Exception: ep: " + ep + " ept: " + ept + " path: " + path + " obs: " + is_observable + " msg: " + ex.getMessage(),ex);
+
         }
     }
     
@@ -328,24 +346,39 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     @Override
     public void unsubscribe(String domain, String ep, String ept, String path) {
         try {
+            // DEBUG
+            this.errorLogger().info("unsubscribe(Google-notify): ep: " + ep + " ept: " + ept + " path: " + path);
+
             // unsubscribe to notifications
             this.unsubscribe(domain, ep, ept, path, this.m_observation_key);
         }
         catch (Exception ex) {
+            // exception (notification)
+            this.errorLogger().info("unsubscribe(Google-notify): Exception: ep: " + ep + " ept: " + ept + " path: " + path +  " msg: " + ex.getMessage(),ex);
         }
         
         try {
+            // DEBUG
+            this.errorLogger().info("unsubscribe(Google-verbs): ep: " + ep + " ept: " + ept + " path: " + path);
+            
             // also unsubscribe from CoAP request for get, put, post, delete processing
             this.unsubscribe(domain, ep, ept, path, this.createRequestToken());
         }
         catch (Exception ex) {
+            // exception (verbs)
+            this.errorLogger().info("unsubscribe(Google-verbs): Exception: ep: " + ep + " ept: " + ept + " path: " + path +  " msg: " + ex.getMessage(),ex);        
         }
         
         try {
+            // DEBUG
+            this.errorLogger().info("unsubscribe(Google-response): ep: " + ep + " ept: " + ept + " path: " + path);
+            
             // also remove the CoAP command response topic
             this.unsubscribe(domain, ep, ept, path, "cmd-response");
         }
         catch (Exception ex) {
+            // exception (response)
+            this.errorLogger().info("unsubscribe(Google-response): Exception: ep: " + ep + " ept: " + ept + " path: " + path +  " msg: " + ex.getMessage(),ex);
         }
     }
     
@@ -378,7 +411,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 }
                 catch (IOException ex) {
                     // unable to send message... exception raised
-                    this.errorLogger().info("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
+                    this.errorLogger().warning("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
                 }
             }
         }
@@ -414,7 +447,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             this.m_pubsub = new Pubsub.Builder(Utils.getDefaultTransport(),Utils.getDefaultJsonFactory(), initializer)
                              .setApplicationName(this.m_app_name)
                              .build();
-        
+            
             // success!
             success = true;
             
@@ -423,7 +456,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         }
         catch (IOException ex) {
             // caught exception during login
-            this.errorLogger().critical("googleCloudLogin(): Unable to log into Google Cloud: " + ex.getMessage(), ex);
+            this.errorLogger().warning("googleCloudLogin(): Unable to log into Google Cloud: " + ex.getMessage(), ex);
             success = false;
         }
         
@@ -444,11 +477,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (SSLHandshakeException ex) {
                 // DEBUG
-                // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
+                this.errorLogger().info("googleCloudRemoveSubscription: SSL exception during subscription removal: " + subscription);
             }
             catch (IOException ex) {
                 // DEBUG
-                // this.errorLogger().info("googleCloudRemoveSubscription: exception during subscription removal: " + ex.getMessage());
+                this.errorLogger().info("googleCloudRemoveSubscription: I/O exception during subscription removal: " + subscription);
+            }
+            catch (Exception ex) {
+                // DEBUG
+                this.errorLogger().info("googleCloudRemoveSubscription: General exception during subscription removal: " + subscription);
             }
         }
     }
@@ -466,11 +503,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (SSLHandshakeException ex) {
                 // DEBUG
-                // this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
+                this.errorLogger().info("googleCloudRemoveTopic: SSL exception during topic removal: " + topic);
             }
             catch (IOException ex) {
                 // DEBUG
-                //this.errorLogger().info("googleCloudRemoveTopic: exception during topic removal: " + ex.getMessage());
+                this.errorLogger().info("googleCloudRemoveTopic: I/O exception during topic removal: " + topic);
+            }
+            catch (Exception ex) {
+                // DEBUG
+                this.errorLogger().info("googleCloudRemoveTopic: General exception during topic removal: " + topic);
             }
         }
     }
@@ -491,11 +532,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (SSLHandshakeException ex) {
                 // no pubsub instance
-                this.errorLogger().info("googleCloudCreateTopic: SSL ERROR in topic creation: " + ex.getMessage());
+                this.errorLogger().info("googleCloudCreateTopic: SSL exception in topic creation: " + topic);
             }
             catch (IOException ex) {
                 // no pubsub instance
-                this.errorLogger().info("googleCloudCreateTopic: exception in topic creation: " + ex.getMessage(),ex);
+                this.errorLogger().info("googleCloudCreateTopic: I/O exception in topic creation: " + topic);
+            }
+            catch (Exception ex) {
+                // no pubsub instance
+                this.errorLogger().info("googleCloudCreateTopic: General exception in topic creation: " + topic);
             }
         }
         else {
@@ -525,11 +570,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (SSLHandshakeException ex) {
                 // handshake error
-                this.errorLogger().info("googleCloudCreateSubscription: SSL ERROR in subscription creation: " + ex.getMessage());
+                this.errorLogger().info("googleCloudCreateSubscription: SSL exception in subscription creation: " + topic + " sub: " + subscription);
             }
             catch (IOException ex) {
                 // no pubsub instance
-                this.errorLogger().info("googleCloudCreateSubscription: exception in subscription creation: " + ex.getMessage(),ex);
+                this.errorLogger().info("googleCloudCreateSubscription: I/O exception in subscription creation: " + topic + " sub: " + subscription);
+            }
+            catch (Exception ex) {
+                // no pubsub instance
+                this.errorLogger().info("googleCloudCreateSubscription: General exception in subscription creation: " + topic + " sub: " + subscription);
             }
         }
         else {

@@ -507,7 +507,7 @@ public class MQTTTransport extends Transport implements GenericSender {
 
                         // DEBUG
                         if (this.m_connected == true) {
-                            this.errorLogger().warning("MQTTTransport: Connection to: " + url + " successful");
+                            this.errorLogger().info("MQTTTransport: Connection to: " + url + " successful");
                             this.m_connect_host = host;
                             this.m_connect_port = port;
                             if (endpoint.getClientId() != null) {
@@ -889,7 +889,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         }
 
         // DEBUG
-        this.errorLogger().warning("MQTT: disconnected. Cleaning up...");
+        this.errorLogger().info("MQTT: disconnected. Cleaning up...");
 
         // clean up...
         super.disconnect();

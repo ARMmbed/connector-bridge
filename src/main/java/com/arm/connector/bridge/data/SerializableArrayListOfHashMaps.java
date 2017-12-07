@@ -89,10 +89,10 @@ public class SerializableArrayListOfHashMaps implements Distributable {
             }
             catch (Exception ex) {
                 if (value != null) {
-                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage());
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage(), ex);
                 }
                 else {
-                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed: NULL parameter. exception: " + ex.getMessage());
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<InMemory>: upcasting failed: NULL parameter. exception: " + ex.getMessage(), ex);
                 }
             }
         }
@@ -113,10 +113,10 @@ public class SerializableArrayListOfHashMaps implements Distributable {
             }
             catch (Exception ex) {
                 if (value != null) {
-                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage());
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed for value type: " + value.getClass().getName() + " exception: " + ex.getMessage(), ex);
                 }
                 else {
-                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed: NULL parameter. exception: " + ex.getMessage());
+                    this.m_orchestrator.errorLogger().warning("SerializableArrayListOfHashMaps<DB>: upcasting failed: NULL parameter. exception: " + ex.getMessage(), ex);
                 }
             }
         }

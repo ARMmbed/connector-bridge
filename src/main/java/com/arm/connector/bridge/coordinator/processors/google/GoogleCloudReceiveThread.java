@@ -30,6 +30,9 @@ import com.google.api.services.pubsub.model.PullRequest;
 import com.google.api.services.pubsub.model.PullResponse;
 import com.google.api.services.pubsub.model.ReceivedMessage;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,13 +40,15 @@ import java.util.List;
  * Google Cloud PubSub Receive Thread
  * @author Doug Anson
  */
-public class GoogleCloudReceiveThread extends Thread implements Transport.ReceiveListener {
+public class GoogleCloudReceiveThread extends Thread implements Transport.ReceiveListener, Serializable {
     private GoogleCloudReceiveThread.ReceiveListener m_receiver = null;
     private int m_sleep_time = 0;
     private int m_max_messages = 0;
     private boolean m_running = false;
     private Pubsub m_pubsub = null;
     private String m_goo_subscription = null;
+    
+    private static final long serialVersionUID = 7526472295622776148L;
     
     // ReceiveListener class for GoogleCloud PubSub callback event processing
     public interface ReceiveListener {
@@ -170,5 +175,27 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                 ;
             }
         }
+    }
+    
+    /**
+     * Always treat de-serialization as a full-blown constructor, by
+     * validating the final state of the de-serialized object.
+     */
+    private void readObject(ObjectInputStream aInputStream) throws ClassNotFoundException, IOException {
+        //always perform the default de-serialization first
+        aInputStream.defaultReadObject();
+        
+        // XXX TODO custom readObject() tasks...
+    }
+
+    /**
+     * This is the default implementation of writeObject.
+     * Customise if necessary.
+     */
+    private void writeObject(ObjectOutputStream aOutputStream) throws IOException {
+        //perform the default serialization for all non-transient, non-static fields
+        aOutputStream.defaultWriteObject();
+        
+        // XXX TODO custom writeObject() tasks...
     }
 }

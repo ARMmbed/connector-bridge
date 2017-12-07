@@ -511,6 +511,11 @@ public class WatsonIoTDeviceManager extends DeviceManager {
             this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS (already registered)");
             status = true;
         }
+        else if (http_code == 400 || http_code == 404) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: registerNewDevice: SUCCESS.");
+            status = true;
+        }
         else {
             // DEBUG
             this.errorLogger().warning("Watson IoT: registerNewDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
@@ -537,9 +542,14 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         String result = this.gwdelete(url);
 
         // check the result
-        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+        int http_code = this.m_http.getLastResponseCode();
+        if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
             this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS. RESULT: " + result);
+        }
+        else if (http_code == 404) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS");
         }
         else {
             // DEBUG

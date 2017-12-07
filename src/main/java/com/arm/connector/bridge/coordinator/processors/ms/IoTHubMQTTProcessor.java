@@ -719,7 +719,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     // discover the endpoint attributes
     private void retrieveEndpointAttributes(Map endpoint) {
         // DEBUG
-        this.errorLogger().warning("IoTHub: Creating New Device: " + endpoint);
+        this.errorLogger().info("IoTHub: Creating New Device: " + endpoint);
 
         // pre-populate the new endpoint with initial values for registration
         this.orchestrator().pullDeviceMetadata(endpoint, this);

@@ -224,9 +224,14 @@ public class IoTHubDeviceManager extends DeviceManager {
         String result = this.delete(url, etag);
 
         // check the result
-        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+        int http_code = this.m_http.getLastResponseCode();
+        if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
             this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS. RESULT: " + result);
+        }
+        else if (http_code == 404) {
+            // DEBUG
+            this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS");
         }
         else {
             // DEBUG
@@ -258,10 +263,15 @@ public class IoTHubDeviceManager extends DeviceManager {
         String result = this.get(url);
 
         // check the result
-        if (Utils.httpResponseCodeOK(this.m_http.getLastResponseCode())) {
+        int http_code = this.m_http.getLastResponseCode();
+        if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
             this.errorLogger().info("IoTHub: getDeviceDetails: SUCCESS. RESULT: " + result);
             status = true;
+        }
+        else if (http_code == 404) {
+            // DEBUG (not found... OK)
+            this.errorLogger().info("IoTHub: getDeviceDetails: SUCCESS");
         }
         else {
             // DEBUG
