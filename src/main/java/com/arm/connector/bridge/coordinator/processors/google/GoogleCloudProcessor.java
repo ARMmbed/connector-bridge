@@ -409,6 +409,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                     this.errorLogger().info("sendMessage(Google Cloud): Sending message to: " + goo_topic + " message: " + message);
                     this.m_pubsub.projects().topics().publish(goo_topic, publishRequest).execute();
                 }
+                catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                    // unable to send message... exception raised
+                    this.errorLogger().warning("sendMessage(Google GoogleJsonResponseException): Unable to send message: " + ex.getMessage());
+                }
                 catch (IOException ex) {
                     // unable to send message... exception raised
                     this.errorLogger().warning("sendMessage(Google Cloud): Unable to send message: " + ex.getMessage(),ex);
@@ -454,6 +458,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             // DEBUG
             this.errorLogger().info("googleCloudLogin(): LOGIN SUCCESS.");
         }
+        catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+            // caught exception during login
+            this.errorLogger().warning("googleCloudLogin(GoogleJsonResponseException): Unable to log into Google Cloud: " + ex.getMessage());
+        }
         catch (IOException ex) {
             // caught exception during login
             this.errorLogger().warning("googleCloudLogin(): Unable to log into Google Cloud: " + ex.getMessage(), ex);
@@ -475,6 +483,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudRemoveSubscription: removing subscription: " + goo_subscription + "...");
                 this.m_pubsub.projects().subscriptions().delete(goo_subscription).execute();
             }
+            catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                // DEBUG
+                this.errorLogger().warning("googleCloudRemoveSubscription(GoogleJsonResponseException): SSL Exception during subscription removal: " + subscription);
+            }   
             catch (SSLHandshakeException ex) {
                 // DEBUG
                 this.errorLogger().info("googleCloudRemoveSubscription: SSL exception during subscription removal: " + subscription);
@@ -501,6 +513,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudRemoveTopic: removing topic: " + goo_topic + "...");
                 this.m_pubsub.projects().topics().delete(goo_topic).execute();
             }
+            catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                // DEBUG
+                this.errorLogger().warning("googleCloudRemoveTopic(GoogleJsonResponseException): SSL Exception during topic removal: " + topic);
+            }   
             catch (SSLHandshakeException ex) {
                 // DEBUG
                 this.errorLogger().info("googleCloudRemoveTopic: SSL exception during topic removal: " + topic);
@@ -530,6 +546,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
                 return this.m_pubsub.projects().topics().create(goo_topic,new Topic()).execute();
             }
+            catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                // DEBUG
+                this.errorLogger().warning("googleCloudCreateTopic(GoogleJsonResponseException): SSL Exception during topic creeation: " + topic);
+            } 
             catch (SSLHandshakeException ex) {
                 // no pubsub instance
                 this.errorLogger().info("googleCloudCreateTopic: SSL exception in topic creation: " + topic);
@@ -568,6 +588,10 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 Subscription s = new Subscription().setTopic(goo_topic);
                 return this.m_pubsub.projects().subscriptions().create(goo_subscription,s).execute();
             }
+            catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                // DEBUG
+                this.errorLogger().warning("googleCloudCreateSubscription(GoogleJsonResponseException): SSL Exception during subscription creeation: " + topic + " sub: " + subscription);
+            } 
             catch (SSLHandshakeException ex) {
                 // handshake error
                 this.errorLogger().info("googleCloudCreateSubscription: SSL exception in subscription creation: " + topic + " sub: " + subscription);

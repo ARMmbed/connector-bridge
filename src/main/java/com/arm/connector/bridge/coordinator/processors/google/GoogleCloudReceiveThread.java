@@ -161,6 +161,10 @@ public class GoogleCloudReceiveThread extends Thread implements Transport.Receiv
                     //System.out.println("WARN: GoogleCloudReceiveThread: no messages received (OK).");
                 }
             }
+            catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                // debug
+                //System.out.println("WARN: GoogleCloudReceiveThread: exception(GoogleJsonResponseException) during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
+            }
             catch (IOException | NullPointerException ex) {
                 // debug
                 // System.out.println("WARN: GoogleCloudReceiveThread: exception during message receive: " + ex.getMessage() + " subscription: " + goo_subscription);
