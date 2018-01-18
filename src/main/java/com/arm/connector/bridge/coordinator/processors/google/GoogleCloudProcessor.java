@@ -470,7 +470,6 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             // remove \\00A0 as it can be copied during config setting of the auth json by the configurator...
             // hex(A0) = dec(160)... just replace with an ordinary space... that will make Google's JSON parser happy...
             edited_auth_json = com.arm.connector.bridge.core.Utils.replaceAllCharOccurances(auth_json,(char)160,' ');
-            edited_auth_json = edited_auth_json.replace("\u00A0","").replace(" ","");
             
             // DEBUG
             //this.errorLogger().info("googleCloudLogin():AUTH:" + edited_auth_json);
