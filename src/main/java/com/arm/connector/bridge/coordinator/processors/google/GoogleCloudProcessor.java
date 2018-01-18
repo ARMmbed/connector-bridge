@@ -54,8 +54,8 @@ import javax.net.ssl.SSLHandshakeException;
 public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface, GenericSender, SubscriptionProcessor, GoogleCloudReceiveThread.ReceiveListener {
     private GoogleCredential m_credential = null;
     private Pubsub m_pubsub = null;
-    private String m_app_name = null;
-    private String m_auth_json = null;
+    private String m_google_project_id = null;
+    private String m_google_auth_json = null;
     private boolean m_logged_in = false;
     private String m_google_cloud_topic_slash_delimiter = null;
     private String m_google_cloud_topic_segment_delimiter = null;
@@ -107,19 +107,30 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         this.m_google_cloud_topic_slash_delimiter = this.orchestrator().preferences().valueOf("google_cloud_topic_slash_delimiter",this.m_suffix);
         this.m_google_cloud_topic_segment_delimiter = this.orchestrator().preferences().valueOf("google_cloud_topic_segment_delimiter",this.m_suffix);
         
-        // get our Google info
-        this.m_app_name = this.orchestrator().preferences().valueOf("google_cloud_app_name",this.m_suffix);
-        this.m_auth_json = this.orchestrator().preferences().valueOf("google_cloud_auth_json",this.m_suffix);
+        // get our Google AUTH Json
+        this.m_google_auth_json = this.orchestrator().preferences().valueOf("google_cloud_auth_json",this.m_suffix);
+        
+        // extract the project_id from the AUTH Json
+        this.m_google_project_id = this.getProjectID(this.m_google_auth_json);
         
         // Log into Google Cloud
-        this.m_logged_in = this.googleCloudLogin(this.m_app_name, this.m_auth_json);
+        this.m_logged_in = this.googleCloudLogin(this.m_google_project_id, this.m_google_auth_json);
+    }
+    
+    // Get our Google Project ID from the Auth JSON
+    private String getProjectID(String auth_json) {
+        Map parsed = this.jsonParser().parseJson(auth_json);
+        if (parsed != null) {
+            return (String)parsed.get("project_id");
+        }
+        return null;
     }
     
     // Create the authentication hash
     @Override
     public String createAuthenticationHash() {
         // just create a hash of the AUTH JSON... 
-        return com.arm.connector.bridge.core.Utils.createHash(this.m_auth_json);
+        return com.arm.connector.bridge.core.Utils.createHash(this.m_google_auth_json);
     }
     
     // message receiver
@@ -475,7 +486,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             // retry upon failures.
             HttpRequestInitializer initializer = new RetryHttpInitializerWrapper(this.m_credential);
             this.m_pubsub = new Pubsub.Builder(Utils.getDefaultTransport(),Utils.getDefaultJsonFactory(), initializer)
-                             .setApplicationName(this.m_app_name)
+                             .setApplicationName(this.m_google_project_id)
                              .build();
             
             // success!
@@ -652,7 +663,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     
     // create preamble
     private String createPreamble(String type) {
-        return "projects/" + this.m_app_name + "/" + type + "/";
+        return "projects/" + this.m_google_project_id + "/" + type + "/";
     }
 
     // Connector-bridge topic format conversion TO Google Cloud PubSub format
