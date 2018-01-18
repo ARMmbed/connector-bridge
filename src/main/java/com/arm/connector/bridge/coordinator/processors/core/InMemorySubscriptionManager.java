@@ -44,8 +44,8 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
 
     private SerializableArrayListOfHashMaps m_subscriptions = null;
     
-    // default behavior is to ignore the ObjectID(3) and ObjectID(5) subscriptions - those are auto-handled.
-    private boolean m_enable_3_5_10255_objectid_subscriptions = false;
+    // default behavior is to ignore ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions - those are auto-handled.
+    private boolean m_enable_1_3_5_10255_objectid_subscriptions = false;
     
     // constructor
     public InMemorySubscriptionManager(Orchestrator orchestrator) {
@@ -55,15 +55,15 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
         this.m_non_domain = this.preferences().valueOf("mds_def_domain");
         this.m_subscription_processor = null;
         
-        // override for ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions
-        this.m_enable_3_5_10255_objectid_subscriptions = this.preferences().booleanValueOf("enable_3_5_10255_subscriptions");
-        if (this.m_enable_3_5_10255_objectid_subscriptions == true) {
+        // override for ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions
+        this.m_enable_1_3_5_10255_objectid_subscriptions = this.preferences().booleanValueOf("enable_1_3_5_10255_subscriptions");
+        if (this.m_enable_1_3_5_10255_objectid_subscriptions == true) {
             // Override ENABLED
-            this.errorLogger().warning("SubscriptionManager(InMemory): ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions are ENABLED.");
+            this.errorLogger().warning("SubscriptionManager(InMemory): ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions are ENABLED.");
         }
         else {
             // disabled
-            this.errorLogger().info("SubscriptionManager(InMemory): ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions are DISABLED.");
+            this.errorLogger().info("SubscriptionManager(InMemory): ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions are DISABLED.");
         }
         
         // DEBUG
@@ -79,8 +79,8 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     // ObjectID(3)/ObjectID(5)/ObjectID(10255) resource observation enablement
     @Override
     public boolean isNotASpecialityResource(String uri) {
-        if (this.m_enable_3_5_10255_objectid_subscriptions == false) {
-            if (this.isObjectID(uri,3) == true || this.isObjectID(uri,5) == true || this.isObjectID(uri,10255) == true) {
+        if (this.m_enable_1_3_5_10255_objectid_subscriptions == false) {
+            if (this.isObjectID(uri,1) == true || this.isObjectID(uri,3) == true || this.isObjectID(uri,5) == true || this.isObjectID(uri,10255) == true) {
                 return false;
             }
         }
@@ -104,8 +104,8 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     public void addSubscription(String domain, String endpoint, String ep_type, String uri, boolean is_observable) {
         domain = this.checkAndDefaultDomain(domain);
         if (!this.containsSubscription(domain, endpoint, ep_type, uri)) {
-            // adjust for ObjectID(3)/ObjectID(5)/ObjectID(10255) avoidance...
-            if (this.m_enable_3_5_10255_objectid_subscriptions == true) {
+            // adjust for ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) avoidance...
+            if (this.m_enable_1_3_5_10255_objectid_subscriptions == true) {
                 this.errorLogger().info("SubscriptionManager(InMemory): Adding Subscription: " + domain + ":" + endpoint + ":" + ep_type + ":" + uri);
                 this.m_subscriptions.add(this.makeSubscription(domain, endpoint, ep_type, uri));
                 if (this.m_subscription_processor != null) {
@@ -113,8 +113,8 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
                 }
             }
             else {
-                // not enabling ObjectID(3)/ObjectID(5)/ObjectID(10255) monitoring... so make sure the subscription does not refer to those...
-                if (this.isObjectID(uri,3) == false && this.isObjectID(uri,5) == false && this.isObjectID(uri,10255) == false) {
+                // not enabling ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) monitoring... so make sure the subscription does not refer to those...
+                if (this.isObjectID(uri,1) == false && this.isObjectID(uri,3) == false && this.isObjectID(uri,5) == false && this.isObjectID(uri,10255) == false) {
                     // is NOT ObjectID(3)/ObjectID(5)/ObjectID(10255)... so add it...
                     this.errorLogger().info("SubscriptionManager(InMemory): Adding Subscription: " + domain + ":" + endpoint + ":" + ep_type + ":" + uri);
                     this.m_subscriptions.add(this.makeSubscription(domain, endpoint, ep_type, uri));
