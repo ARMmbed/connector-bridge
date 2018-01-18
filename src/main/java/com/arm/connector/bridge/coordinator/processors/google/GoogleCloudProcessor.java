@@ -255,25 +255,40 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     
     // subscribe (cmd), optional listener
     private void subscribe(String domain, String ep, String ept, String path, String cmd,boolean enable_listener) {
-        // DEBUG
-        //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+        // create the subscription
+        String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         
-        // Topic created
-        String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        Topic t = this.googleCloudCreateTopic(topic);
-        if (t != null) {
-            // Subscription created
-            String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-            this.googleCloudCreateSubscription(topic,subscription);
+        // already subscribed?
+        if (this.getSubscription(subscription) < 0) {
+            // DEBUG
+            //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
+            
+            try {
+                // Topic created
+                String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
+                Topic t = this.googleCloudCreateTopic(topic);
+                if (t != null) {
+                    // Subscription created
+                    this.googleCloudCreateSubscription(topic,subscription);
 
-            // add a listener (if requested)
-            if (enable_listener == true) {
-                this.addSubscription(subscription);
+                    // add a listener (if requested)
+                    if (enable_listener == true) {
+                        this.addSubscription(subscription);
+                    }
+                }
+                else {
+                    // unable to create topic...
+                    this.errorLogger().warning("subscribe(Google): Unable to create Topic: " + topic + " so unable to subscribe to: " + subscription);
+                }
+            }
+            catch (Exception ex) {
+                // unable to subscribe...
+                this.errorLogger().warning("subscribe(Google): Unable to subscribe to: " + subscription);
             }
         }
         else {
-            // unable to create topic...
-            this.errorLogger().warning("subscribe(Google): Unable to create Topic: " + topic);
+            // already subscribed!
+            this.errorLogger().info("subscribe(Google): Already subscribed (OK): " + subscription);
         }
     }
     
@@ -281,15 +296,25 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     void unsubscribe(String domain, String ep, String ept, String path, String cmd) {
         // DEBUG
         //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
-        
-        // Subscription removed
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.googleCloudRemoveSubscription(subscription);
         this.removeSubscription(subscription);
         
-        // Topic removed
-        String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.googleCloudRemoveTopic(topic);
+        try {
+            // Subscription removed - remove from Google
+            this.googleCloudRemoveSubscription(subscription);
+        }
+        catch (Exception ex) {
+            // silent
+        }
+        
+        try {
+            // Also remove the Google Topic...
+            String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
+            this.googleCloudRemoveTopic(topic);
+        }
+        catch (Exception ex) {
+            // silent
+        }
     } 
     
     // create the "request" token 
