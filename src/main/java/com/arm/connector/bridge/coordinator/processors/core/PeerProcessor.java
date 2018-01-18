@@ -51,7 +51,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     private String m_mds_request_tag = null;
     
     // enable this if you want to have re-subscription even if the subscription already exists (i.e. wipe/reset)
-    protected boolean m_re_subscribe = false;
+    protected boolean m_re_subscribe = true;
     
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"

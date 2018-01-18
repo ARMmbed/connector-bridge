@@ -172,7 +172,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 HashMap<String,Serializable> entry = this.m_receivers.get(i);
                 if (entry != null) {
                     String t_subscription = (String)entry.get("subscription");
-                    if (t_subscription.equalsIgnoreCase(subscription) == true) {
+                    if (t_subscription != null && t_subscription.equalsIgnoreCase(subscription) == true) {
                         index = i;
                     }
                 }
@@ -259,7 +259,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
         
         // already subscribed?
-        if (this.getSubscription(subscription) < 0) {
+        if (!this.subscribed(subscription)) {
             // DEBUG
             //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
             
@@ -297,8 +297,6 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         // DEBUG
         //com.arm.connector.bridge.core.Utils.whereAmI(this.errorLogger());
         String subscription = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
-        this.removeSubscription(subscription);
-        
         try {
             // Subscription removed - remove from Google
             this.googleCloudRemoveSubscription(subscription);
@@ -306,7 +304,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         catch (Exception ex) {
             // silent
         }
-        
+
         try {
             // Also remove the Google Topic...
             String topic = this.createBaseTopicAndSubscriptionStructure(this.getTopicRoot(),cmd,ep,ept,path);
@@ -315,6 +313,9 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
         catch (Exception ex) {
             // silent
         }
+
+        // remove our subscription
+        this.removeSubscription(subscription);
     } 
     
     // create the "request" token 
