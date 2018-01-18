@@ -459,17 +459,18 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
     }
     
     // log into the Google Cloud as a Service Account
-    private boolean googleCloudLogin(String appName,String auth_json) {
+    private boolean googleCloudLogin(String project_id,String auth_json) {
         boolean success = false;
         String edited_auth_json = null;
         
         try {
-            // DEBUG
-            this.errorLogger().info("googleCloudLogin(): logging in...");
+            // announce login
+            this.errorLogger().warning("googleCloudLogin(): logging into project_id: " + project_id + "...");
             
             // remove \\00A0 as it can be copied during config setting of the auth json by the configurator...
             // hex(A0) = dec(160)... just replace with an ordinary space... that will make Google's JSON parser happy...
             edited_auth_json = com.arm.connector.bridge.core.Utils.replaceAllCharOccurances(auth_json,(char)160,' ');
+            edited_auth_json = edited_auth_json.replace("\n", "").replace("\r", "").replace("\\n","").replace("\u00A0","").replace(" ","");
             
             // DEBUG
             //this.errorLogger().info("googleCloudLogin():AUTH:" + edited_auth_json);
@@ -486,14 +487,14 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             // retry upon failures.
             HttpRequestInitializer initializer = new RetryHttpInitializerWrapper(this.m_credential);
             this.m_pubsub = new Pubsub.Builder(Utils.getDefaultTransport(),Utils.getDefaultJsonFactory(), initializer)
-                             .setApplicationName(this.m_google_project_id)
+                             .setApplicationName(project_id)
                              .build();
             
             // success!
             success = true;
             
             // DEBUG
-            this.errorLogger().info("googleCloudLogin(): LOGIN SUCCESS.");
+            this.errorLogger().warning("googleCloudLogin(): LOGIN SUCCESSFUL. project_id: " + project_id);
         }
         catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
             // caught exception during login
