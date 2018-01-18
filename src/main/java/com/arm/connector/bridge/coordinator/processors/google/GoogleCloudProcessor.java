@@ -542,9 +542,15 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 // Create the google-compatiable topic
                 String goo_topic = this.connectorTopicToGoogleTopic(topic);
                 
-                // Create the Topic
-                this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
-                return this.m_pubsub.projects().topics().create(goo_topic,new Topic()).execute();
+                try {
+                    // see if we already have the topic
+                    return this.m_pubsub.projects().topics().get(goo_topic).execute();
+                }
+                catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                    // Create the Topic
+                    this.errorLogger().info("googleCloudCreateTopic: Creating Main Topic: " + goo_topic);
+                    return this.m_pubsub.projects().topics().create(goo_topic,new Topic()).execute();
+                }
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
@@ -583,10 +589,16 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
                 // Create the google-compatiable subscription
                 String goo_subscription = this.connectorSubscriptionToGoogleSubscription(subscription);
                 
-                // Create the Observation Subscription
-                this.errorLogger().info("googleCloudCreateSubscription: Creating Subscription: " + goo_subscription);
-                Subscription s = new Subscription().setTopic(goo_topic);
-                return this.m_pubsub.projects().subscriptions().create(goo_subscription,s).execute();
+                try {
+                    // see if we already have a subscription
+                    return this.m_pubsub.projects().subscriptions().get(goo_subscription).execute();
+                }
+                catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
+                    // Create the Observation Subscription
+                    this.errorLogger().info("googleCloudCreateSubscription: Creating Subscription: " + goo_subscription);
+                    Subscription s = new Subscription().setTopic(goo_topic);
+                    return this.m_pubsub.projects().subscriptions().create(goo_subscription,s).execute();
+                }
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
