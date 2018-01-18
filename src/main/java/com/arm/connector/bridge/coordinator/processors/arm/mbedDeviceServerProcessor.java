@@ -224,11 +224,13 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     }
     
     // using mbed Cloud?
+    @Override
     public boolean usingMbedCloud() {
         return this.m_mbed_cloud_integration;
     }
     
     // device removal on deregistration?
+    @Override
     public boolean deviceRemovedOnDeRegistration() {
         return this.m_mds_remove_on_deregistration;
     }
@@ -705,22 +707,16 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // de-register endpoints
     @Override
     public void processDeregistrations(String[] endpoints) {
-        if (this.deviceRemovedOnDeRegistration() == true) {
-            for (int i = 0; i < endpoints.length; ++i) {
-                // create the endpoint subscription URL...
-                String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
-                this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
-                this.httpDelete(url);
+        for (int i = 0; i < endpoints.length; ++i) {
+            // create the endpoint subscription URL...
+            String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
+            this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
+            this.httpDelete(url);
 
-                // remove from the validator too
-                if (this.m_webhook_validator != null) {
-                    this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
-                }
+            // remove from the validator too
+            if (this.m_webhook_validator != null) {
+                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
             }
-        }
-        else {
-            // ignore deregistration
-            this.errorLogger().info("processDeregistrations: ignoring deregistration (OK)");
         }
     }
 

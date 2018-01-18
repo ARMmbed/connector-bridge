@@ -67,4 +67,10 @@ public interface mbedDeviceServerInterface {
 
     // create the mDS/mDC URI for subscriptions
     public String createSubscriptionURI(String ep_name, String resource_uri);
+    
+    // using mbed cloud integration
+    public boolean usingMbedCloud();
+    
+    // // device removal on deregistration?
+    public boolean deviceRemovedOnDeRegistration();
 }
