@@ -485,7 +485,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
-                this.errorLogger().warning("googleCloudRemoveSubscription(GoogleJsonResponseException): SSL Exception during subscription removal: " + subscription);
+                this.errorLogger().warning("googleCloudRemoveSubscription(GoogleJsonResponseException): Exception during subscription removal: " + subscription);
             }   
             catch (SSLHandshakeException ex) {
                 // DEBUG
@@ -515,7 +515,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
-                this.errorLogger().warning("googleCloudRemoveTopic(GoogleJsonResponseException): SSL Exception during topic removal: " + topic);
+                this.errorLogger().warning("googleCloudRemoveTopic(GoogleJsonResponseException): Exception during topic removal: " + topic);
             }   
             catch (SSLHandshakeException ex) {
                 // DEBUG
@@ -548,7 +548,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
-                this.errorLogger().warning("googleCloudCreateTopic(GoogleJsonResponseException): SSL Exception during topic creeation: " + topic);
+                this.errorLogger().warning("googleCloudCreateTopic(GoogleJsonResponseException): Exception during topic creeation: " + topic);
             } 
             catch (SSLHandshakeException ex) {
                 // no pubsub instance
@@ -590,7 +590,7 @@ public class GoogleCloudProcessor extends PeerProcessor implements PeerInterface
             }
             catch (com.google.api.client.googleapis.json.GoogleJsonResponseException ex) {
                 // DEBUG
-                this.errorLogger().warning("googleCloudCreateSubscription(GoogleJsonResponseException): SSL Exception during subscription creeation: " + topic + " sub: " + subscription);
+                this.errorLogger().warning("googleCloudCreateSubscription(GoogleJsonResponseException): Exception during subscription creeation: " + topic + " sub: " + subscription);
             } 
             catch (SSLHandshakeException ex) {
                 // handshake error
