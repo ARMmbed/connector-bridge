@@ -88,6 +88,12 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private String m_mds_long_poll_uri = null;
     private String m_mds_long_poll_url = null;
     private LongPollProcessor m_long_poll_processor = null;
+    
+    // Config: remove a device if it deregisters (default TRUE)
+    private boolean m_mds_remove_on_deregistration = true;
+    
+    // Integrating with mbed Cloud? (default FALSE)
+    private boolean m_mbed_cloud_integration = false;
 
     // constructor
     @SuppressWarnings("empty-statement")
@@ -112,6 +118,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         if (this.m_use_api_token == true) {
             this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         }
+        this.m_mds_remove_on_deregistration = this.prefBoolValue("mds_remove_on_deregistration");
         
         // adjust mds_username
         try {
@@ -196,6 +203,34 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
         // init the device metadata resource URI's
         this.initDeviceMetadataResourceURIs();
+        
+         // remove on deregistration - mbed Cloud Override
+        if (this.m_mds_host != null && this.m_mds_host.contains("mbedcloud.com")) {
+            // override - disable remove on deregistration
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: mbed Cloud Integration ");
+            
+            // adjust
+            this.m_mbed_cloud_integration = true;
+            this.m_mds_remove_on_deregistration = false;
+        }
+        
+        // announce deregistration behavior
+        if (this.m_mds_remove_on_deregistration == true) {
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: device removal on deregistration ENABLED");
+        }
+        else {
+            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: device removal on deregistration DISABLED");
+        }
+    }
+    
+    // using mbed Cloud?
+    public boolean usingMbedCloud() {
+        return this.m_mbed_cloud_integration;
+    }
+    
+    // device removal on deregistration?
+    public boolean deviceRemovedOnDeRegistration() {
+        return this.m_mds_remove_on_deregistration;
     }
 
     // using SSL or not for the webhook management set/get
@@ -670,16 +705,22 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // de-register endpoints
     @Override
     public void processDeregistrations(String[] endpoints) {
-        for (int i = 0; i < endpoints.length; ++i) {
-            // create the endpoint subscription URL...
-            String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
-            this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
-            this.httpDelete(url);
+        if (this.deviceRemovedOnDeRegistration() == true) {
+            for (int i = 0; i < endpoints.length; ++i) {
+                // create the endpoint subscription URL...
+                String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
+                this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
+                this.httpDelete(url);
 
-            // remove from the validator too
-            if (this.m_webhook_validator != null) {
-                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+                // remove from the validator too
+                if (this.m_webhook_validator != null) {
+                    this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+                }
             }
+        }
+        else {
+            // ignore deregistration
+            this.errorLogger().info("processDeregistrations: ignoring deregistration (OK)");
         }
     }
 
