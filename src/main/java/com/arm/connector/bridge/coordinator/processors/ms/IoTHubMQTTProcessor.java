@@ -497,10 +497,10 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
             notification.put("resourceId", uri);
             notification.put("deviceId", ep_name);
             if (value != null) {
-                notification.put("payload", Base64.encodeBase64(value.getBytes()));  // Base64 Encoded payload
+                notification.put("payload", Base64.encodeBase64String(value.getBytes()));  // Base64 Encoded payload
             }
             else {
-                notification.put("payload", Base64.encodeBase64("0".getBytes()));    // Base64 Encoded payload
+                notification.put("payload", Base64.encodeBase64String("0".getBytes()));    // Base64 Encoded payload
             }
             notification.put("method", verb);
         }

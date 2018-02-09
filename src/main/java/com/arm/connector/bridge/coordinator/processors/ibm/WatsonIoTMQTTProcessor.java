@@ -620,10 +620,10 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             notification.put("resourceId", uri.substring(1));                        // strip leading "/" off of the URI...
             notification.put("deviceId", ep_name);                                   // ep
             if (value != null) {
-                notification.put("payload", Base64.encodeBase64(value.getBytes()));  // Base64 Encoded payload
+                notification.put("payload", Base64.encodeBase64String(value.getBytes()));  // Base64 Encoded payload
             }
             else {
-                notification.put("payload", Base64.encodeBase64("0".getBytes()));    // Base64 Encoded payload
+                notification.put("payload", Base64.encodeBase64String("0".getBytes()));    // Base64 Encoded payload
             }
             notification.put("method", verb.toUpperCase());                          // verb (upper case)
         }
