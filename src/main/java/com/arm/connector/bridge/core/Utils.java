@@ -25,6 +25,7 @@ package com.arm.connector.bridge.core;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,14 +34,18 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.Key;
 import java.security.KeyFactory;
+import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -69,7 +74,12 @@ import org.apache.commons.codec.binary.Hex;
  * @author Doug Anson
  */
 public class Utils {
-
+    // Keystore aliases
+    private static String KEYSTORE_PRIV_KEY_ALIAS = "privkey";
+    private static String KEYSTORE_PUB_KEY_ALIAS = "pubkey";
+    private static String KEYSTORE_VENDOR_CERT_ALIAS = "vendor";
+    private static String KEYSTORE_CA_CERT_ALIAS = "ca";
+    
     // static variables
     private static char[] hexArray = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
     private static String __cache_hash = null;
@@ -550,11 +560,127 @@ public class Utils {
         }
         return new byte[0];
     }
+    
+    // convert X509 to PEM
+    public static String convertX509ToPem(X509Certificate cert) throws CertificateEncodingException {
+        return Utils.convertX509ToPem(cert.getEncoded());
+    }
+    
+    // convert private key to PEM
+    public static String convertPrivKeyToPem(KeyPair keys) {
+        return Utils.convertPrivKeyToPem(keys.getPrivate().getEncoded()); 
+    }
+    
+    // convert public key to PEM
+    public static String convertPubKeyToPem(KeyPair keys) {
+        return Utils.convertPubKeyToPem(keys.getPublic().getEncoded()); 
+    }
+    
+    // convert X509 to PEM
+    public static String convertX509ToPem(byte[] cert) throws CertificateEncodingException {
+        return Utils.convertToPem("BEGIN CERTIFICATE","END CERTIFICATE",cert);
+    }
+    
+    // convert private key to PEM
+    public static String convertPrivKeyToPem(byte[] priv) {
+        return Utils.convertToPem("BEGIN RSA PRIVATE KEY","END RSA PRIVATE KEY",priv); 
+    }
+    
+    // convert public key to PEM
+    public static String convertPubKeyToPem(byte[] pub) {
+        return Utils.convertToPem("BEGIN PUBLIC KEY","END PUBLIC KEY",pub); 
+    }
+    
+    // convert encoded data into PEM
+    public static String convertToPem(String start, String stop, byte[] data) {
+        java.util.Base64.Encoder encoder = java.util.Base64.getEncoder();
+        String begin = "-----" + start + "-----\n";
+        String end = "-----" + stop + "-----";
+
+        String str_data = new String(encoder.encode(data));
+        String str_pem = begin + str_data + end;
+        return str_pem;
+    }
+    
+    // Read the X.509 Cert from the Keystore in PEM format
+    public static String readCertFromKeystoreAsPEM(ErrorLogger logger,String filename,String pw) {
+        try {
+            FileInputStream is = new FileInputStream(filename);
+            KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+            char[] passwd = pw.toCharArray();
+            keystore.load(is, passwd);
+            Key cert = keystore.getKey(Utils.KEYSTORE_VENDOR_CERT_ALIAS, passwd);
+            if (cert instanceof X509Certificate) {
+                return Utils.convertX509ToPem(cert.getEncoded());
+            }
+            else {
+                // error
+                logger.warning("readCertFromKeystoreAsPEM: Cert not instance of X509Certificate... ERROR");
+            }
+        }
+        catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException ex) {
+            // error
+            logger.warning("readCertFromKeystoreAsPEM: Exception: " + ex.getMessage());
+        }
+        return null;
+    }
+    
+    // Read the Private Key from the Keystore in PEM format 
+    public static String readPrivKeyFromKeystoreAsPEM(ErrorLogger logger,String filename,String pw) {
+        try {
+            FileInputStream is = new FileInputStream(filename);
+            KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+            char[] passwd = pw.toCharArray();
+            keystore.load(is, passwd);
+            Key key = keystore.getKey(Utils.KEYSTORE_PRIV_KEY_ALIAS, passwd);
+            if (key instanceof PrivateKey) {
+                return Utils.convertPrivKeyToPem(key.getEncoded());
+            }
+            else {
+                // error
+                logger.warning("readPrivKeyFromKeystoreAsPEM: Key not instance of PrivateKey... ERROR");
+            }
+        }
+        catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException ex) {
+            // error
+            logger.warning("readPrivKeyFromKeystoreAsPEM: Exception: " + ex.getMessage());
+        }
+        return null;
+    }
+    
+    // Read the Public Key from the Keystore in PEM format
+    public static String readPubKeyFromKeystoreAsPEM(ErrorLogger logger,String filename,String pw) {
+        try {
+            FileInputStream is = new FileInputStream(filename);
+            KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+            char[] passwd = pw.toCharArray();
+            keystore.load(is, passwd);
+            Key key = keystore.getKey(Utils.KEYSTORE_PUB_KEY_ALIAS, passwd);
+            if (key instanceof PublicKey) {
+                return Utils.convertPubKeyToPem(key.getEncoded());
+            }
+            else {
+                // error
+                logger.warning("readPubKeyFromKeystoreAsPEM: Key not instance of Public Key... ERROR");
+            }
+        }
+        catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException ex) {
+            // error
+            logger.warning("readPubKeyFromKeystoreAsPEM: Exception: " + ex.getMessage());
+        }
+        return null;
+    }
+   
+    // make the keystore filename
+    public static String makeKeystoreFilename(String base, String sep, String filename) {
+        String basedir = base + File.separator + sep;
+        return basedir + File.separator + filename;
+    }
 
     // create a Keystore
-    public static String createKeystore(ErrorLogger logger, String base, String sep, String filename, X509Certificate cert, PrivateKey priv_key, String pw) {
+    public static String createKeystore(ErrorLogger logger, String base, String sep, String filename, X509Certificate cert, PrivateKey priv_key, PublicKey pub_key, String pw) {
         String basedir = base + File.separator + sep;
-        String keystore_filename = basedir + File.separator + filename;
+        String keystore_filename = Utils.makeKeystoreFilename(base, sep, filename);
 
         try {
             // first create the directory if it does not exist
@@ -581,18 +707,30 @@ public class Utils {
             // set the certificate, priv and pub keys
             if (cert != null) {
                 Certificate[] cert_list = new Certificate[2];
-                cert_list[0] = cert;
-                cert_list[1] = Utils.createCACertificate(logger);
+                cert_list[0] = cert;                                // Vendor
+                cert_list[1] = Utils.createCACertificate(logger);   // CA
 
-                ks.setCertificateEntry("aws", cert_list[0]);
-                ks.setCertificateEntry("verisign", cert_list[1]);
+                ks.setCertificateEntry(Utils.KEYSTORE_VENDOR_CERT_ALIAS, cert_list[0]);
+                ks.setCertificateEntry(Utils.KEYSTORE_CA_CERT_ALIAS, cert_list[1]);
 
                 if (priv_key != null) {
                     try {
-                        ks.setKeyEntry("privkey", priv_key, pw.toCharArray(), cert_list);
+                        ks.setKeyEntry(Utils.KEYSTORE_PRIV_KEY_ALIAS, priv_key, pw.toCharArray(), cert_list);
                     }
                     catch (KeyStoreException ex2) {
                         logger.warning("createKeystore: Exception during priv addition... not added to keystore", ex2);
+                    }
+                }
+                else {
+                    logger.warning("createKeystore: privkey is NULL... not added to keystore");
+                }
+                
+                if (pub_key != null) {
+                    try {
+                        ks.setKeyEntry(Utils.KEYSTORE_PUB_KEY_ALIAS, pub_key, pw.toCharArray(), cert_list);
+                    }
+                    catch (KeyStoreException ex2) {
+                        logger.warning("createKeystore: Exception during pub addition... not added to keystore", ex2);
                     }
                 }
                 else {

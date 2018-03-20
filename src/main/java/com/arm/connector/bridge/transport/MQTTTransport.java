@@ -98,6 +98,9 @@ public class MQTTTransport extends Transport implements GenericSender {
     private Topic[] m_subscribe_topics = null;
     private String[] m_unsubscribe_topics = null;
     
+    private boolean m_mqtt_import_keystore = false;
+    private boolean m_mqtt_no_client_creds = false;
+    
     // SSL Switches/Context
     private boolean m_use_ssl_connection = false;
     private SSLContext m_ssl_context = null;
@@ -155,6 +158,8 @@ public class MQTTTransport extends Transport implements GenericSender {
         
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
+        this.m_mqtt_import_keystore = this.prefBoolValue("mqtt_import_keystore", this.m_suffix);
+        this.m_mqtt_no_client_creds = this.prefBoolValue("mqtt_no_client_creds", this.m_suffix);
         this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
@@ -163,6 +168,9 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        
+        // sync our acceptance of self-signed client creds
+        this.noSelfSignedCertsOrKeys(this.m_mqtt_no_client_creds);
         
         // should never be used
         if (this.m_keystore_pw == null) {
@@ -189,6 +197,8 @@ public class MQTTTransport extends Transport implements GenericSender {
 
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
+        this.m_mqtt_import_keystore = this.prefBoolValue("mqtt_import_keystore", this.m_suffix);
+        this.m_mqtt_no_client_creds = this.prefBoolValue("mqtt_no_client_creds", this.m_suffix);
         this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
@@ -197,6 +207,9 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        
+        // sync our acceptance of self-signed client creds
+        this.noSelfSignedCertsOrKeys(this.m_mqtt_no_client_creds);
         
         // should never be used
         if (this.m_keystore_pw == null) {
@@ -270,32 +283,6 @@ public class MQTTTransport extends Transport implements GenericSender {
         return tm;
     }
     
-    // convert X509 to PEM
-    private String convertX509ToPem(X509Certificate cert) throws CertificateEncodingException {
-        return this.convertToPem("BEGIN CERTIFICATE","END CERTIFICATE",cert.getEncoded());
-    }
-    
-    // convert private key to PEM
-    private String convertPrivKeyToPem(KeyPair keys) {
-        return this.convertToPem("BEGIN RSA PRIVATE KEY","END RSA PRIVATE KEY",keys.getPrivate().getEncoded()); 
-    }
-    
-    // convert public key to PEM
-    private String convertPubKeyToPem(KeyPair keys) {
-        return this.convertToPem("BEGIN PUBLIC KEY","END PUBLIC KEY",keys.getPublic().getEncoded()); 
-    }
-    
-    // convert encoded data into PEM
-    private String convertToPem(String start, String stop, byte[] data) {
-        Base64.Encoder encoder = Base64.getEncoder();
-        String begin = "-----" + start + "-----\n";
-        String end = "-----" + stop + "-----";
-
-        String str_data = new String(encoder.encode(data));
-        String str_pem = begin + str_data + end;
-        return str_pem;
-    }
-    
     // Init a self-signed certificate
     private String initSelfSignedCert(KeyPair keys) {
         String cert = null;
@@ -323,7 +310,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             X509Certificate x509 = certGen.generate(keys.getPrivate(),"BC");
             
             // encode the certificate into a PEM string
-            cert = this.convertX509ToPem(x509);
+            cert = Utils.convertX509ToPem(x509);
         }
         catch (IllegalArgumentException | IllegalStateException | InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | SignatureException | CertificateEncodingException ex) {
             // unable to init self-signed cert
@@ -340,8 +327,8 @@ public class MQTTTransport extends Transport implements GenericSender {
             KeyPair keys= keyGen.generateKeyPair();
             
             // Create the key material
-            this.m_pki_priv_key = this.convertPrivKeyToPem(keys);
-            this.m_pki_pub_key = this.convertPubKeyToPem(keys);
+            this.m_pki_priv_key = Utils.convertPrivKeyToPem(keys);
+            this.m_pki_pub_key = Utils.convertPubKeyToPem(keys);
 
             // create the certificate
             this.m_pki_cert = this.initSelfSignedCert(keys);
@@ -350,6 +337,30 @@ public class MQTTTransport extends Transport implements GenericSender {
             // unable to init key material
             this.errorLogger().critical("MQTT: initKeyMaterial: Exception caught: " + ex.getMessage());
         }
+    }
+    
+    // reuse an exsiting keystore 
+    private String useExistingKeyStore(String id,String pw) {
+        // create our filename from the ID 
+        String filename =  Utils.makeKeystoreFilename(this.m_base_dir, id, this.m_keystore_basename);
+        
+        // now read from the Keystore
+        if (this.m_pki_cert == null || this.m_pki_priv_key == null || this.m_pki_pub_key == null) {
+            this.m_pki_cert = Utils.readCertFromKeystoreAsPEM(this.errorLogger(),filename,pw);
+            this.m_pki_priv_key = Utils.readPrivKeyFromKeystoreAsPEM(this.errorLogger(),filename,pw);
+            this.m_pki_pub_key = Utils.readPubKeyFromKeystoreAsPEM(this.errorLogger(),filename,pw);
+        }
+        
+        // display creds if debugging
+        if (this.m_debug_creds == true) {
+            // Creds DEBUG
+            this.errorLogger().info("MQTT: PRIV: " + this.m_pki_priv_key);
+            this.errorLogger().info("MQTT: PUB: " + this.m_pki_pub_key);
+            this.errorLogger().info("MQTT: CERT: " + this.m_pki_cert);
+        }
+        
+        // return the filename
+        return filename;
     }
 
     // create keystore
@@ -378,7 +389,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = Utils.generateKeystorePassword(this.m_keystore_pw, id);
 
         // create the keystore
-        return Utils.createKeystore(this.errorLogger(), this.m_base_dir, id, this.m_keystore_basename, this.m_cert, this.m_privkey, this.m_keystore_pw);
+        return Utils.createKeystore(this.errorLogger(), this.m_base_dir, id, this.m_keystore_basename, this.m_cert, this.m_privkey, this.m_pubkey, this.m_keystore_pw);
     }
 
     // initialize the SSL context
@@ -396,8 +407,15 @@ public class MQTTTransport extends Transport implements GenericSender {
                     this.m_ssl_context_initialized = true;
                 }
                 else {
-                    // initialize the keystores with certs/key...
-                    this.m_keystore_filename = this.initializeKeyStore(id);
+                    if (this.m_mqtt_import_keystore == false) {
+                        // initialize the keystores with certs/key...
+                        this.m_keystore_filename = this.initializeKeyStore(id);
+                    }
+                    else {
+                        // use existing keystore 
+                        this.m_keystore_filename = this.useExistingKeyStore(id,this.m_keystore_pw);
+                    }
+                    
                     if (this.m_keystore_filename != null) {
                         // create our SSL context - FYI: AWS IoT requires TLS v1.2
                         this.m_ssl_context = SSLContext.getInstance("TLSv1.2");
