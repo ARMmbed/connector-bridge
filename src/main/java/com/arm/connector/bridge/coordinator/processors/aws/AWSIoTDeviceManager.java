@@ -1,6 +1,6 @@
 /**
  * @file    AWSIoTDeviceManager.java
- * @brief MS AWSIoT Device Manager for the MS AWSIoT Peer Processor
+ * @brief   AWSIoT Device Manager for the AWSIoT Peer Processor
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * This class defines the required REST functions to manage AWSIoT devices via the gateway mapping
+ * This class defines the required REST functions to manage AWSIoT devices via the peer processor
  *
  * @author Doug Anson
  */
@@ -254,7 +254,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         String result = Utils.awsCLI(this.errorLogger(), args);
 
         // DEBUG
-        this.errorLogger().info("deregisterDevice: RESULT: " + result);
+        this.errorLogger().info("AWS: deregisterDevice: device: " + device + " deletion RESULT: " + result);
 
         // remove the endpoint details
         this.m_endpoint_details.remove(device);
@@ -343,7 +343,9 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
                     ep.put("ep_type", device_type);
 
                     // record the entire record for later...
-                    ep.put("json_record", json);
+                    if (json != null) {
+                        ep.put("json_record", json);
+                    }
 
                     // DEBUG
                     this.errorLogger().info("AWSIoT: parseDeviceDetails for " + device + ": " + ep);

@@ -34,7 +34,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * This class defines the required REST functions to manage IoTHub devices via the gateway mapping
+ * This class defines the required REST functions to manage IoTHub devices via the peer processor
  *
  * @author Doug Anson
  */

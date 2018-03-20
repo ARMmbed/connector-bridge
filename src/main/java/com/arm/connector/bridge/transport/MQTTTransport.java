@@ -30,24 +30,39 @@ import com.arm.connector.bridge.preferences.PreferenceManager;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 import java.security.KeyManagementException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Base64;
+import java.util.Date;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+import javax.security.auth.x500.X500Principal;
+import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
+import org.bouncycastle.asn1.x509.KeyPurposeId;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.asn1.x509.X509Name;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.fusesource.mqtt.client.BlockingConnection;
 import org.fusesource.mqtt.client.MQTT;
 import org.fusesource.mqtt.client.QoS;
@@ -59,7 +74,8 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class MQTTTransport extends Transport implements GenericSender {
-
+    // should never be used 
+    private static final String KEYSTORE_PW_DEFAULT = "Ub12u&hF83hf&t121dfjKr0";
     private static volatile MQTTTransport m_self = null;
     private BlockingConnection m_connection = null;
     private byte[] m_qoses = null;
@@ -69,6 +85,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     private String m_host_url = null;
     private int m_sleep_time = 0;
     private String m_client_id = null;
+    private String m_mqtt_version = null;
 
     private String m_connect_host = null;
     private int m_connect_port = 0;
@@ -77,16 +94,22 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     private int m_num_retries = 0;
     private int m_max_retries = 10;
+    private boolean m_set_mqtt_version = true;
     private Topic[] m_subscribe_topics = null;
     private String[] m_unsubscribe_topics = null;
-    private boolean m_forced_ssl = false;
-
-    private boolean m_use_pki = false;
+    
+    // SSL Switches/Context
+    private boolean m_use_ssl_connection = false;
+    private SSLContext m_ssl_context = null;
+    private boolean m_mqtt_use_ssl = false;
+    private boolean m_ssl_context_initialized = false;
+    private boolean m_no_tls_certs_or_keys = false;
+    
+    // X.509 Support
+    private boolean m_use_x509_auth = false;
     private String m_pki_priv_key = null;
     private String m_pki_pub_key = null;
     private String m_pki_cert = null;
-    private SSLContext m_ssl_context = null;
-
     private String m_keystore_pw = null;
     private String m_base_dir = null;
     private String m_keystore_filename = null;
@@ -94,7 +117,9 @@ public class MQTTTransport extends Transport implements GenericSender {
     private X509Certificate m_cert = null;
     private PublicKey m_pubkey = null;
     private PrivateKey m_privkey = null;
-    private boolean m_set_mqtt_version = true;
+    
+    // Debug X.509 Auth Creds
+    private boolean m_debug_creds = false;
 
     /**
      * Instance Factory
@@ -120,14 +145,17 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager, String suffix) {
         super(error_logger, preference_manager);
-        this.m_use_pki = false;
-        this.m_forced_ssl = false;
+        this.m_use_x509_auth = false;
+        this.m_use_ssl_connection = false;
         this.m_ssl_context = null;
         this.m_host_url = null;
         this.m_suffix = suffix;
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
-
+        
+        this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
+        this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
+        this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
         this.m_max_retries = this.preferences().intValueOf("mqtt_connect_retries", this.m_suffix);
@@ -135,6 +163,12 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        
+        // should never be used
+        if (this.m_keystore_pw == null) {
+            // default the keystore pw
+            this.m_keystore_pw = MQTTTransport.KEYSTORE_PW_DEFAULT;
+        }
     }
 
     /**
@@ -145,14 +179,17 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager) {
         super(error_logger, preference_manager);
-        this.m_use_pki = false;
-        this.m_forced_ssl = false;
+        this.m_use_x509_auth = false;
+        this.m_use_ssl_connection = false;
         this.m_ssl_context = null;
         this.m_host_url = null;
         this.m_suffix = null;
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
 
+        this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
+        this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
+        this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
         this.m_max_retries = this.preferences().intValueOf("mqtt_connect_retries", this.m_suffix);
@@ -160,43 +197,36 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        
+        // should never be used
+        if (this.m_keystore_pw == null) {
+            // default the keystore pw
+            this.m_keystore_pw = MQTTTransport.KEYSTORE_PW_DEFAULT;
+        }
     }
 
-    // disable setting of MQTT version
+    // disable/enable setting of MQTT version
     public void enableMQTTVersionSet(boolean set_mqtt_version) {
         this.m_set_mqtt_version = set_mqtt_version;
     }
-
-    // reset to using username/passwords
-    public void useUserPass() {
-        this.useUserPass(null, null, null);
+    
+    // if SSL is used, dont provide any certs/keys 
+    public void noSelfSignedCertsOrKeys(boolean no_tls_certs_or_keys) {
+        this.m_no_tls_certs_or_keys = no_tls_certs_or_keys;
     }
 
-    // reset to using username/passwords
-    public void useUserPass(String username, String pw, String client_id) {
-        this.useUserPass(username, pw, client_id, false);
-    }
-
-    // reset to using username/passwords
-    public void useUserPass(String username, String pw, String client_id, boolean use_ssl) {
-        this.m_use_pki = false;
-        this.m_ssl_context = null;
-        this.m_forced_ssl = use_ssl;
-        this.setUsername(username);
-        this.setPassword(pw);
-        this.setClientID(client_id);
-    }
-
-    // utilize PKI certs
-    public void enablePKI(String priv_key, String pub_key, String certificate, String id) {
+    // pre-plumb TLS/X.509 certs and keys
+    public void prePlumbTLSCertsAndKeys(String priv_key, String pub_key, String certificate, String id) {
         this.m_pki_priv_key = priv_key;
         this.m_pki_pub_key = pub_key;
         this.m_pki_cert = certificate;
         if (this.initializeSSLContext(id) == true) {
-            this.m_use_pki = true;
-            this.m_forced_ssl = true;
+            this.m_use_x509_auth = true;
+            this.m_use_ssl_connection = true;
         }
         else {
+            // unable to initialize the SSL context... so error out
+            this.errorLogger().critical("prePlumbTLSCerts: Unable to initialize SSL Context for ID: " + id);
             this.m_pki_priv_key = null;
             this.m_pki_pub_key = null;
             this.m_pki_cert = null;
@@ -239,9 +269,104 @@ public class MQTTTransport extends Transport implements GenericSender {
         tm[0] = new MQTTTrustManager(this.m_keystore_filename, this.m_keystore_pw);
         return tm;
     }
+    
+    // convert X509 to PEM
+    private String convertX509ToPem(X509Certificate cert) throws CertificateEncodingException {
+        return this.convertToPem("BEGIN CERTIFICATE","END CERTIFICATE",cert.getEncoded());
+    }
+    
+    // convert private key to PEM
+    private String convertPrivKeyToPem(KeyPair keys) {
+        return this.convertToPem("BEGIN RSA PRIVATE KEY","END RSA PRIVATE KEY",keys.getPrivate().getEncoded()); 
+    }
+    
+    // convert public key to PEM
+    private String convertPubKeyToPem(KeyPair keys) {
+        return this.convertToPem("BEGIN PUBLIC KEY","END PUBLIC KEY",keys.getPublic().getEncoded()); 
+    }
+    
+    // convert encoded data into PEM
+    private String convertToPem(String start, String stop, byte[] data) {
+        Base64.Encoder encoder = Base64.getEncoder();
+        String begin = "-----" + start + "-----\n";
+        String end = "-----" + stop + "-----";
+
+        String str_data = new String(encoder.encode(data));
+        String str_pem = begin + str_data + end;
+        return str_pem;
+    }
+    
+    // Init a self-signed certificate
+    private String initSelfSignedCert(KeyPair keys) {
+        String cert = null;
+        
+        try {
+            // build a certificate generator
+            X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
+            X500Principal dnName = new X500Principal("cn=127.0.0.1");
+
+            // add some options
+            certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
+            certGen.setSubjectDN(new X509Name("dc=ARM"));
+            certGen.setIssuerDN(dnName); // use the same
+            
+            // yesterday
+            certGen.setNotBefore(new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000));
+            
+            // in 2 years
+            certGen.setNotAfter(new Date(System.currentTimeMillis() + 2 * 365 * 24 * 60 * 60 * 1000));
+            certGen.setPublicKey(keys.getPublic());
+            certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
+            certGen.addExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(KeyPurposeId.id_kp_timeStamping));
+
+            // finally, sign the certificate with the private key of the same KeyPair
+            X509Certificate x509 = certGen.generate(keys.getPrivate(),"BC");
+            
+            // encode the certificate into a PEM string
+            cert = this.convertX509ToPem(x509);
+        }
+        catch (IllegalArgumentException | IllegalStateException | InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | SignatureException | CertificateEncodingException ex) {
+            // unable to init self-signed cert
+            this.errorLogger().critical("MQTT: initSelfSignedCert: Exception caught: " + ex.getMessage());
+        }
+        return cert;
+    }
+    
+    // create our own key material if we dont have it already
+    private void initKeyMaterial() {
+        try {
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(1024);
+            KeyPair keys= keyGen.generateKeyPair();
+            
+            // Create the key material
+            this.m_pki_priv_key = this.convertPrivKeyToPem(keys);
+            this.m_pki_pub_key = this.convertPubKeyToPem(keys);
+
+            // create the certificate
+            this.m_pki_cert = this.initSelfSignedCert(keys);
+        }
+        catch (NoSuchAlgorithmException ex) {
+            // unable to init key material
+            this.errorLogger().critical("MQTT: initKeyMaterial: Exception caught: " + ex.getMessage());
+        }
+    }
 
     // create keystore
     private String initializeKeyStore(String id) {
+        // create self-signed creds if we dont have them but need SSL
+        if (this.m_pki_cert == null || this.m_pki_priv_key == null || this.m_pki_pub_key == null) {
+            this.initKeyMaterial();
+        }
+        
+        // display creds if debugging
+        if (this.m_debug_creds == true) {
+            // Creds DEBUG
+            this.errorLogger().info("MQTT: PRIV: " + this.m_pki_priv_key);
+            this.errorLogger().info("MQTT: PUB: " + this.m_pki_pub_key);
+            this.errorLogger().info("MQTT: CERT: " + this.m_pki_cert);
+        }
+            
         // create our credentials
         this.m_cert = Utils.createX509CertificateFromPEM(this.errorLogger(), this.m_pki_cert, "X509");
         this.m_privkey = Utils.createPrivateKeyFromPEM(this.errorLogger(), this.m_pki_priv_key, "RSA");
@@ -258,28 +383,43 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     // initialize the SSL context
     private boolean initializeSSLContext(String id) {
-        try {
-            // enable proper parsing of the PKCS#1 private key from AWS... not sure why they dont just send it as PKCS#8...
-            java.security.Security.addProvider(new BouncyCastleProvider());
+        if (this.m_ssl_context_initialized == false) {
+            try {
+                // enable the Bouncy Castle SSL provider
+                java.security.Security.addProvider(new BouncyCastleProvider());
 
-            // initialize the keystores...
-            this.m_keystore_filename = this.initializeKeyStore(id);
-            if (this.m_keystore_filename != null) {
-                // create our SSL context - FYI: AWS IoT requires TLS v1.2
-                this.m_ssl_context = SSLContext.getInstance("TLSv1.2");
+                // do we want self-signed certs and keys?
+                if (this.m_no_tls_certs_or_keys == true) {
+                    // just create our SSL context... use defaults for everything
+                    this.m_ssl_context = SSLContext.getInstance("TLSv1.2");
+                    this.m_ssl_context.init(null, null, new SecureRandom());
+                    this.m_ssl_context_initialized = true;
+                }
+                else {
+                    // initialize the keystores with certs/key...
+                    this.m_keystore_filename = this.initializeKeyStore(id);
+                    if (this.m_keystore_filename != null) {
+                        // create our SSL context - FYI: AWS IoT requires TLS v1.2
+                        this.m_ssl_context = SSLContext.getInstance("TLSv1.2");
 
-                // initialize the SSL context with our KeyManager and our TrustManager
-                KeyManager km[] = this.createKeyManager("JKS");
-                TrustManager tm[] = this.createTrustManager();
-                this.m_ssl_context.init(km, tm, new SecureRandom());
-                return true;
+                        // initialize the SSL context with our KeyManager and our TrustManager
+                        KeyManager km[] = this.createKeyManager("JKS");
+                        TrustManager tm[] = this.createTrustManager();
+                        this.m_ssl_context.init(km, tm, new SecureRandom());
+                        this.m_ssl_context_initialized = true;
+                    }
+                    else {
+                        // unable to create the filename
+                        this.errorLogger().critical("MQTTTransport: initializeSSLContext(SSL) failed. unable to init keystore");
+                    }
+                }
+            }
+            catch (NoSuchAlgorithmException | KeyManagementException ex) {
+                // exception caught
+                this.errorLogger().critical("MQTTTransport: initializeSSLContext(SSL) failed. SSL DISABLED", ex);
             }
         }
-        catch (NoSuchAlgorithmException | KeyManagementException ex) {
-            // exception caught
-            this.errorLogger().critical("MQTTTransport: initializeSSLContext(PKI) failed. PKI DISABLED", ex);
-        }
-        return false;
+        return this.m_ssl_context_initialized;
     }
 
     // PUBLIC: Create the authentication hash
@@ -323,6 +463,15 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     public final void setPassword(String password) {
         this.m_password = password;
+    }
+    
+    /**
+     * Set the MQTT Version
+     *
+     * @param version
+     */
+    public final void setMQTTVersion(String version) {
+        this.m_mqtt_version = version;
     }
 
     /**
@@ -375,66 +524,67 @@ public class MQTTTransport extends Transport implements GenericSender {
     public boolean connect(String host, int port, String clientID, boolean clean_session) {
         int sleep_time = this.prefIntValue("mqtt_retry_sleep", this.m_suffix);
         int num_tries = this.prefIntValue("mqtt_connect_retries", this.m_suffix);
+        
+        // build out the URL connection string
+        String url = this.setupHostURL(host, port);
+
+        // setup default clientID
+        if (clientID == null || clientID.length() <= 0) {
+            clientID = this.prefValue("mqtt_client_id", this.m_suffix);
+        }
+        String def_client_id = this.prefValue("mqtt_default_client_id", this.m_suffix);
+
+        // DEBUG
+        this.errorLogger().info("MQTTTransport: Connection URL: [" + url + "]");
+        
+        // loop until connected
         for (int i = 0; i < num_tries && !this.m_connected; ++i) {
             try {
                 // MQTT endpoint 
                 MQTT endpoint = new MQTT();
-
-                // build out the URL connection string
-                String url = this.setupHostURL(host, port);
-
-                // setup default clientID
-                if (clientID == null || clientID.length() <= 0) {
-                    clientID = this.prefValue("mqtt_client_id", this.m_suffix);
-                }
-
-                // DEBUG
-                this.errorLogger().info("MQTTTransport: Connection URL: [" + url + "]");
-
-                // setup the hostname & port
+                
+                // set the target URL for our MQTT connection
                 endpoint.setHost(url);
 
-                // set the MQTT version
-                String mqtt_version = this.prefValue("mqtt_version", this.m_suffix);
-                if (mqtt_version != null && this.m_set_mqtt_version == true) {
-                    endpoint.setVersion(mqtt_version);
+                // MQTT version
+                if (this.m_mqtt_version != null && this.m_set_mqtt_version == true) {
+                    endpoint.setVersion(this.m_mqtt_version);
                 }
 
-                if (this.m_use_pki == true) {
+                // SSL Context for secured MQTT connections
+                if (this.m_ssl_context_initialized == true) {
                     // DEBUG
-                    this.errorLogger().info("MQTTTransport: PKI Cert/Keys Used");
+                    this.errorLogger().info("MQTTTransport: SSL Used... setting SSL context...");
 
-                    // PKI
+                    // SSL Context should be set
                     endpoint.setSslContext(this.m_ssl_context);
                 }
-                else {
-                    // non-PKI: configure credentials
-                    String username = this.getUsername();
-                    String pw = this.getPassword();
+                
+                // configure credentials
+                String username = this.getUsername();
+                String pw = this.getPassword();
 
-                    if (username != null && username.length() > 0 && username.equalsIgnoreCase("off") == false) {
-                        endpoint.setUserName(username);
-                        this.errorLogger().info("MQTTTransport: Username: [" + username + "] used");
-                    }
-                    else {
-                        this.errorLogger().info("MQTTTransport: Anonymous username used");
-                    }
-                    if (pw != null && pw.length() > 0 && pw.equalsIgnoreCase("off") == false) {
-                        endpoint.setPassword(pw);
-                        this.errorLogger().info("MQTTTransport: pw: [" + pw + "] used");
-                    }
-                    else {
-                        this.errorLogger().info("MQTTTransport: Anonymous pw used");
-                    }
+                if (username != null && username.length() > 0 && username.equalsIgnoreCase("off") == false) {
+                    endpoint.setUserName(username);
+                    this.errorLogger().info("MQTTTransport: Username: [" + username + "] used");
+                }
+                else {
+                    this.errorLogger().info("MQTTTransport: Anonymous username used");
+                }
+                if (pw != null && pw.length() > 0 && pw.equalsIgnoreCase("off") == false) {
+                    endpoint.setPassword(pw);
+                    this.errorLogger().info("MQTTTransport: pw: [" + pw + "] used");
+                }
+                else {
+                    this.errorLogger().info("MQTTTransport: Anonymous pw used");
                 }
 
-                // configure options... 
+                // Client ID 
                 if (clientID != null && clientID.length() > 0 && clientID.equalsIgnoreCase("off") == false) {
                     endpoint.setClientId(clientID);
                     this.errorLogger().info("MQTTTransport: Client ID: [" + clientID + "] used");
                 }
                 else if (clean_session == false) {
-                    String def_client_id = this.prefValue("mqtt_default_client_id", this.m_suffix);
                     if (def_client_id != null && def_client_id.equalsIgnoreCase("off") == false) {
                         // set a defaulted clientID
                         endpoint.setClientId(def_client_id);
@@ -449,45 +599,66 @@ public class MQTTTransport extends Transport implements GenericSender {
                     // no client ID used... clean session specified (OK)
                     this.errorLogger().info("MQTTTransport: No ClientID being used (clean session)");
                 }
+                
+                // set Clean Session...
                 endpoint.setCleanSession(clean_session);
+                
+                // Will Message...
                 String will = this.prefValue("mqtt_will_message", this.m_suffix);
                 if (will != null && will.length() > 0 && will.equalsIgnoreCase("off") == false) {
                     endpoint.setWillMessage(will);
                 }
+                
+                // Will Topic...
                 String will_topic = this.prefValue("mqtt_will_topic", this.m_suffix);
                 if (will_topic != null && will_topic.length() > 0 && will_topic.equalsIgnoreCase("off") == false) {
                     endpoint.setWillTopic(will_topic);
                 }
+                
+                // Traffic Class...
                 int trafficClass = this.prefIntValue("mqtt_traffic_class", this.m_suffix);
                 if (trafficClass >= 0) {
                     endpoint.setTrafficClass(trafficClass);
                 }
+                
+                // Reconnect Attempts...
                 int reconnectAttempts = this.prefIntValue("mqtt_reconnect_retries_max", this.m_suffix);
                 if (reconnectAttempts >= 0) {
                     endpoint.setReconnectAttemptsMax(reconnectAttempts);
                 }
+                
+                // Reconnect Delay...
                 long reconnectDelay = (long) this.prefIntValue("mqtt_reconnect_delay", this.m_suffix);
                 if (reconnectDelay >= 0) {
                     endpoint.setReconnectDelay(reconnectDelay);
                 }
+                
+                // Reconnect Max Delay...
                 long reconnectDelayMax = (long) this.prefIntValue("mqtt_reconnect_delay_max", this.m_suffix);
                 if (reconnectDelayMax >= 0) {
                     endpoint.setReconnectDelayMax(reconnectDelayMax);
                 }
+                
+                // Reconnect back-off multiplier
                 float backoffMultiplier = this.prefFloatValue("mqtt_backoff_multiplier", this.m_suffix);
                 if (backoffMultiplier >= 0) {
                     endpoint.setReconnectBackOffMultiplier(backoffMultiplier);
                 }
+                
+                // Keep-Alive...
                 short keepAlive = (short) this.prefIntValue("mqtt_keep_alive", this.m_suffix);
                 if (keepAlive >= 0) {
                     endpoint.setKeepAlive(keepAlive);
                 }
+                
+                // record the ClientID for later...
                 if (endpoint.getClientId() != null) {
                     this.m_client_id = endpoint.getClientId().toString();
                 }
 
+                // OK... now lets try to connect to the broker...
                 try {
-                    // connect MQTT...
+                    // connecting...
                     this.m_endpoint = endpoint;
                     this.m_connection = endpoint.blockingConnection();
                     if (this.m_connection != null) {
@@ -534,13 +705,22 @@ public class MQTTTransport extends Transport implements GenericSender {
                     this.errorLogger().warning("MQTT: URL: " + url);
                     this.errorLogger().warning("MQTT: clientID: " + this.m_client_id);
                     this.errorLogger().warning("MQTT: clean_session: " + clean_session);
-                    if (this.m_use_pki == false) {
+                    if (this.m_debug_creds == true) {
                         this.errorLogger().warning("MQTT: username: " + this.getUsername());
                         this.errorLogger().warning("MQTT: password: " + this.getPassword());
-                    }
-                    this.errorLogger().warning("MQTT: host: " + host);
-                    this.errorLogger().warning("MQTT: port: " + port);
 
+                        if (this.m_pki_priv_key != null) {
+                            this.errorLogger().info("MQTT: PRIV: " + this.m_pki_priv_key);
+                        }
+
+                        if (this.m_pki_pub_key != null) {
+                            this.errorLogger().info("MQTT: PUB: " + this.m_pki_pub_key);
+                        }
+                        if (this.m_pki_cert != null) {
+                            this.errorLogger().info("MQTT: CERT: " + this.m_pki_cert);
+                        }
+                    }
+                    
                     // sleep for a short bit...
                     try {
                         Thread.sleep(sleep_time);
@@ -551,7 +731,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                 }
             }
             catch (URISyntaxException ex) {
-                this.errorLogger().critical("MQTTTransport(connect): Exception occured", ex);
+                this.errorLogger().critical("MQTTTransport(connect): URI Syntax exception occured", ex);
                 this.m_connected = false;
             }
 
@@ -772,7 +952,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             this.resetConnection();
 
             // resend
-            if (this.m_connection.isConnected() == true) {
+            if (this.m_connection != null && this.m_connection.isConnected() == true) {
                 this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
                 sent = this.sendMessage(topic, message, qos);
             }
@@ -789,7 +969,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             this.resetConnection();
 
             // resend
-            if (this.m_connection.isConnected() == true) {
+            if (this.m_connection != null && this.m_connection.isConnected() == true) {
                 this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
                 sent = this.sendMessage(topic, message, qos);
             }
@@ -901,7 +1081,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             this.m_connect_host = null;
             this.m_connect_port = 0;
             this.m_connect_client_id = null;
-            if (this.m_use_pki == true && this.m_keystore_filename != null) {
+            if (this.m_use_x509_auth == true && this.m_keystore_filename != null) {
                 Utils.deleteKeystore(this.errorLogger(), this.m_keystore_filename, this.m_keystore_basename);
             }
             this.m_keystore_filename = null;
@@ -921,28 +1101,40 @@ public class MQTTTransport extends Transport implements GenericSender {
     }
 
     // force use of SSL
-    public void forceSSLUsage(boolean forced_ssl) {
-        this.m_forced_ssl = forced_ssl;
+    public void useSSLConnection(boolean use_ssl_connection) {
+        this.m_use_ssl_connection = use_ssl_connection;
     }
 
     // setup the MQTT host URL
     private String setupHostURL(String host, int port) {
         if (this.m_host_url == null) {
-            boolean secured = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
-
-            // override
-            if (this.m_forced_ssl == true) {
-                // override
+            // SSL override check...
+            if (this.m_use_ssl_connection == true && this.m_mqtt_use_ssl == false) {
+                // force use of SSL
                 this.errorLogger().info("MQTT: OVERRIDE use of SSL enabled");
-                secured = this.m_forced_ssl;
+                this.m_mqtt_use_ssl = true;
             }
 
-            // PREFIX determination
+            // MQTT prefix determination (non-SSL)
             String prefix = "tcp://";
-            if (secured) {
-                prefix = "ssl://";
-                port += 7000;           // 1883 --> 8883
+            
+            // adjust for SSL usage when needed
+            if (this.m_mqtt_use_ssl == true) {
+                // initialize our SSL context
+                port += 7000;           // take mqtt_port 1883 and add 7000 --> 8883
+                prefix = "ssl://";      // SSL used... 
+                
+                // by default, we use a fixed ID for the ssl context... this may be overriden
+                String id = host.replace(".","_") + "_" + port;
+                
+                // initialize the SSl context if not already done...
+                if (this.initializeSSLContext(id) == false) {
+                    // unable to initialize the SSL context
+                    this.errorLogger().warning("MQTT: Unable to initialize SSL context ID: " + id);
+                }
             }
+            
+            // complete the URL construction
             this.m_host_url = prefix + host + ":" + port;
         }
         return this.m_host_url;

@@ -31,6 +31,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -364,7 +366,7 @@ public class Utils {
             response = Utils.convertStreamToString(proc.getInputStream());
             error = Utils.convertStreamToString(proc.getErrorStream());
 
-            // wait to completion
+            // wait to tcompletion
             proc.waitFor();
             int status = proc.exitValue();
 
@@ -431,6 +433,122 @@ public class Utils {
                 + "-----END CERTIFICATE-----";
 
         return Utils.createX509CertificateFromPEM(logger, pem, "X509");
+    }
+    
+    // Google: create the RSA Keys for a given device...
+    public static String createRSAKeysforDevice(ErrorLogger logger,String root_dir,int num_days,String cmd,String cvt_cmd,int key_length,String id) {
+        String filename = root_dir + "/" + id + "/" + "private.pem";
+        String pkcs8_filename = root_dir + "/" + id + "/" + "private.pkcs8";
+        String pub_filename = root_dir + "/" + id + "/" + "cert.pem";
+        String final_cmd = cmd.replace("__PRIV_KEY_FILE__",filename)
+                              .replace("__CERT_FILE__",pub_filename)
+                              .replace("__NUM_DAYS__","" + num_days)
+                              .replace("__KEY_LENGTH__","" + key_length);
+        String final_cvt_cmd = cvt_cmd.replace("__PRIV_KEY_FILE__",filename)
+                              .replace("__PRIV_KEY_PKCS8__",pkcs8_filename);
+        
+        
+        // make the root directory if it does not exist
+        try {
+            File rootdir = new File(root_dir + "/" + id);
+            if (rootdir.exists() == false) {
+                // make the root directory
+                rootdir.mkdirs();
+            }
+        }
+        catch(Exception ex) {
+            // silence
+        }
+        
+        // execute the command
+        try {
+            // DEBUG
+            logger.info("createRSAKeysforDevice: OpenSSL Create Command: " + final_cmd);
+            
+            // invoke the OpenSSL command
+            Process proc = Runtime.getRuntime().exec(final_cmd);
+            String response = Utils.convertStreamToString(proc.getInputStream());
+            String error = Utils.convertStreamToString(proc.getErrorStream());
+
+            // wait to completion
+            proc.waitFor();
+            int status = proc.exitValue();
+
+            // DEBUG
+            if (status != 0) {
+                // command failed
+                logger.warning("createRSAKeysforDevice: ERROR: Unable to create device keys... status=" + status + " out: " + response + " error: " + error);
+                filename = null;
+            }
+            else {
+                // command succeeded
+                logger.info("createRSAKeysforDevice: device keys created SUCCESSFULLY");
+                
+                // DEBUG
+                logger.info("createRSAKeysforDevice: OpenSSL Convert Command: " + final_cvt_cmd);
+                
+                // now convert to PKCS8
+                proc = Runtime.getRuntime().exec(final_cvt_cmd);
+                response = Utils.convertStreamToString(proc.getInputStream());
+                error = Utils.convertStreamToString(proc.getErrorStream());
+                
+                // wait to completion
+                proc.waitFor();
+                status = proc.exitValue();
+                if (status != 0) {
+                    // command failed
+                    logger.warning("createRSAKeysforDevice: ERROR: Unable convert to PKCS8... status=" + status + " out: " + response + " error: " + error);
+                    filename = null;
+                }
+                else {
+                    // command succeeded
+                    logger.info("createRSAKeysforDevice: device keys converted to PKCS8 SUCCESSFULLY");
+                    
+                    // remove the old private file
+                    File doomed = new File(filename);
+                    if (doomed.delete()) {
+                        // command succeeded
+                        logger.info("createRSAKeysforDevice: old PEM private key deleted SUCCESSFULLY");
+                    }
+                    else {
+                        // command FAILED
+                        logger.info("createRSAKeysforDevice: old PEM private key deletion FAILED: " + filename);
+                    }
+                }
+            }
+        }
+        catch (IOException | InterruptedException ex) {
+            // DEBUG
+            logger.info("createRSAKeysforDevice: Exception occured: " + ex.getMessage(),ex);
+            
+            // exception in the command 
+            filename = null;
+        }
+        
+        // return the keystore filename
+        return filename;
+    }
+    
+    // Google: read all bytes from a given devices' keyfile
+    public static byte[] readRSAKeyforDevice(ErrorLogger logger, String root_dir, String id,boolean priv_key) {
+        String filename = root_dir + "/" + id + "/" + "private.pkcs8";
+        String cert_filename = root_dir + "/" + id + "/" + "cert.pem";
+        String debug_filename = filename;
+        try {
+            if (priv_key == true) {
+                debug_filename = filename;
+                return Files.readAllBytes(Paths.get(filename));
+            }
+            else {
+                debug_filename = cert_filename;
+                return Files.readAllBytes(Paths.get(cert_filename));
+            }
+        }
+        catch (IOException ex) {
+            // unable to read from the PEM file
+            logger.warning("readPrivateKeyForDevice: WARNING Unable to read from PEM file: " + debug_filename + " ID: " + id + " message: " + ex.getMessage());
+        }
+        return new byte[0];
     }
 
     // create a Keystore

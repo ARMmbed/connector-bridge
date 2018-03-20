@@ -1,6 +1,6 @@
 /**
  * @file    IoTHubMQTTProcessor.java
- * @brief MS IoTHub MQTT Peer Processor
+ * @brief IoTHub MQTT Peer Processor
  * @author Doug Anson
  * @version 1.0
  * @see
@@ -52,6 +52,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
     private IoTHubDeviceManager m_iot_hub_device_manager = null;
     private boolean m_iot_event_hub_enable_device_id_prefix = false;
     private String m_iot_event_hub_device_id_prefix = null;
+    private String m_iot_hub_version_tag = null;
 
     // constructor (singleton)
     public IoTHubMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
@@ -65,6 +66,9 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
         // IoTHub Processor Announce
         this.errorLogger().info("MS IoTHub Processor ENABLED.");
 
+        // get the IoTHub version tag
+        this.m_iot_hub_version_tag = this.orchestrator().preferences().valueOf("iot_event_hub_version_tag",this.m_suffix);
+        
         // get our defaults
         this.m_iot_hub_name = this.orchestrator().preferences().valueOf("iot_event_hub_name", this.m_suffix);
         this.m_mqtt_host = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_ip_address", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name);
@@ -838,14 +842,20 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Transpo
 
             // MQTT username is based upon the device ID (endpoint_name)
             String username = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_username", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name).replace("__EPNAME__", iothub_ep_name);
-
-            // set the creds for this MQTT Transport instance
+            
+            // add a version tag per: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
+            username = username + "/" + this.m_iot_hub_version_tag;
+            
+            // set the creds for the IoTHub MQTT Transport instance
             mqtt.setClientID(iothub_ep_name);
             mqtt.setUsername(username);
             mqtt.setPassword(this.m_iot_hub_device_manager.createMQTTPassword(iothub_ep_name));
 
-            // IoTHub only works with SSL... so force it
-            mqtt.forceSSLUsage(true);
+            // IoTHub only works with SSL... 
+            mqtt.useSSLConnection(true);
+            
+            // but DONT initialize the SSL context with self signed certs/keys
+            mqtt.noSelfSignedCertsOrKeys(true);
 
             // add it to the list indexed by the endpoint name... not the clientID...
             this.addMQTTTransport(iothub_ep_name, mqtt);

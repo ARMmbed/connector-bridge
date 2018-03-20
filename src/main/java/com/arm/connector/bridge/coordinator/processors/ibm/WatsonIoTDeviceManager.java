@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * This class defines the required REST functions to manage WatsonIoT devices via the gateway mapping
+ * This class defines the required REST functions to manage WatsonIoT devices via the peer processor
  *
  * @author Doug Anson
  */

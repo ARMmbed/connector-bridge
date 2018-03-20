@@ -34,7 +34,8 @@ import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProc
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.aws.AWSIoTPeerProcessorFactory;
-import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudProcessor;
+import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudMQTTProcessor;
+import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudPeerProcessorFactory;
 
 // Core
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
@@ -172,7 +173,7 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         if (this.googleCloudPeerEnabled()) {
             // Google Cloud: create the Google Cloud peer processor...
             this.errorLogger().info("Orchestrator: adding Google Cloud Processor");
-            this.m_peer_processor_list.add(GoogleCloudProcessor.createPeerProcessor(this));
+            this.m_peer_processor_list.add(GoogleCloudPeerProcessorFactory.createPeerProcessor(this, this.m_http));
         }
         if (this.genericMQTTPeerEnabled()) {
             // Create the sample peer processor...

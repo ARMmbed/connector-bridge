@@ -331,6 +331,13 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     protected boolean connectMQTT() {
         // if not connected attempt
         if (!this.isConnected()) {
+            // use SSL for security
+            this.mqtt().useSSLConnection(true);
+            
+            // ... but do not use self-signed certs/keys
+            this.mqtt().noSelfSignedCertsOrKeys(true);
+            
+            // now connect
             if (this.mqtt().connect(this.m_mqtt_ip_address, this.m_mqtt_port, this.m_client_id, this.m_use_clean_session)) {
                 this.orchestrator().errorLogger().info("Watson IoT: Setting CoAP command listener...");
                 this.mqtt().setOnReceiveListener(this);

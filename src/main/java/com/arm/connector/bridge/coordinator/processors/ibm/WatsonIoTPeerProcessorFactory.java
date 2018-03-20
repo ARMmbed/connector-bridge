@@ -44,23 +44,12 @@ public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory impl
         WatsonIoTPeerProcessorFactory me = new WatsonIoTPeerProcessorFactory(manager, http);
 
         // initialize me
-        boolean starterkit_enabled = manager.preferences().booleanValueOf("enable_starterkit_addon");
         boolean iotf_enabled = manager.preferences().booleanValueOf("enable_iotf_addon");
         String mgr_config = manager.preferences().valueOf("mqtt_mgr_config");
         if (mgr_config != null && mgr_config.length() > 0) {
             // muliple MQTT brokers requested... follow configuration and assign suffixes
             String[] config = mgr_config.split(";");
             for (int i = 0; i < config.length; ++i) {
-                if (starterkit_enabled == true && config[i].equalsIgnoreCase("sk") == true) {
-                    manager.errorLogger().info("Registering IBM StarterKit MQTT processor...");
-                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, "" + i, http);
-                    me.addProcessor(p);
-                }
-                if (starterkit_enabled == true && config[i].equalsIgnoreCase("sk-d") == true) {
-                    manager.errorLogger().info("Registering IBM StarterKit MQTT processor (default)...");
-                    GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, "" + i, http);
-                    me.addProcessor(p, true);
-                }
                 if (iotf_enabled == true && config[i].equalsIgnoreCase("iotf") == true) {
                     manager.errorLogger().info("Registering Watson IoT MQTT processor...");
                     GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
@@ -78,11 +67,6 @@ public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory impl
             if (iotf_enabled == true) {
                 manager.errorLogger().info("Registering Watson IoT MQTT processor (singleton)...");
                 GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
-                me.addProcessor(p);
-            }
-            else if (starterkit_enabled == true) {
-                manager.errorLogger().info("Registering StarterKit MQTT processor (singleton)...");
-                GenericMQTTProcessor p = new StarterKitMQTTProcessor(manager, http);
                 me.addProcessor(p);
             }
         }
