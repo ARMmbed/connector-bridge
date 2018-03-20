@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -74,6 +75,10 @@ import org.apache.commons.codec.binary.Hex;
  * @author Doug Anson
  */
 public class Utils {
+    // Keystore Type
+    private static String KEYSTORE_TYPE = "JKS";
+    public static String DEFAULT_PUBKEY_PEM_FILENAME = "pubkey.pem";
+    
     // Keystore aliases
     private static String KEYSTORE_PRIV_KEY_ALIAS = "privkey";
     private static String KEYSTORE_PUB_KEY_ALIAS = "pubkey";
@@ -649,30 +654,39 @@ public class Utils {
     }
     
     // Read the Public Key from the Keystore in PEM format
-    public static String readPubKeyFromKeystoreAsPEM(ErrorLogger logger,String filename,String pw) {
+    public static String readPubKeyAsPEM(ErrorLogger logger,String filename) {
         try {
-            FileInputStream is = new FileInputStream(filename);
-            KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
-            char[] passwd = pw.toCharArray();
-            keystore.load(is, passwd);
-            Key key = keystore.getKey(Utils.KEYSTORE_PUB_KEY_ALIAS, passwd);
-            if (key instanceof PublicKey) {
+            String pem = "";
+            try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
+                String line = null;
+                while ((line = br.readLine()) != null) {
+                    pem += line + "\n";
+                }
+            }
+            PublicKey key = Utils.createPublicKeyFromPEM(logger,pem,"RSA");
+            if (key != null) {
                 return Utils.convertPubKeyToPem(key.getEncoded());
             }
             else {
                 // error
-                logger.warning("readPubKeyFromKeystoreAsPEM: Key not instance of Public Key... ERROR");
+                logger.warning("readPubKeyAsPEM: Public key not found in PEM file: " + filename);
             }
         }
-        catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException ex) {
+        catch (IOException ex) {
             // error
-            logger.warning("readPubKeyFromKeystoreAsPEM: Exception: " + ex.getMessage());
+            logger.warning("readPubKeyAsPEM: Exception: " + ex.getMessage());
         }
         return null;
     }
    
     // make the keystore filename
     public static String makeKeystoreFilename(String base, String sep, String filename) {
+        String basedir = base + File.separator + sep;
+        return basedir + File.separator + filename;
+    }
+    
+    // make the pubkey PEM filename
+    public static String makePubkeyFilename(String base, String sep, String filename) {
         String basedir = base + File.separator + sep;
         return basedir + File.separator + filename;
     }
@@ -701,7 +715,7 @@ public class Utils {
             }
 
             // store data into the keystore
-            KeyStore ks = KeyStore.getInstance("JKS");
+            KeyStore ks = KeyStore.getInstance(Utils.KEYSTORE_TYPE);
             ks.load(null, pw.toCharArray());
 
             // set the certificate, priv and pub keys
@@ -719,18 +733,6 @@ public class Utils {
                     }
                     catch (KeyStoreException ex2) {
                         logger.warning("createKeystore: Exception during priv addition... not added to keystore", ex2);
-                    }
-                }
-                else {
-                    logger.warning("createKeystore: privkey is NULL... not added to keystore");
-                }
-                
-                if (pub_key != null) {
-                    try {
-                        ks.setKeyEntry(Utils.KEYSTORE_PUB_KEY_ALIAS, pub_key, pw.toCharArray(), cert_list);
-                    }
-                    catch (KeyStoreException ex2) {
-                        logger.warning("createKeystore: Exception during pub addition... not added to keystore", ex2);
                     }
                 }
                 else {

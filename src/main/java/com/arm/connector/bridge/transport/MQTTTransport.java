@@ -48,7 +48,6 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Base64;
 import java.util.Date;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -120,6 +119,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     private X509Certificate m_cert = null;
     private PublicKey m_pubkey = null;
     private PrivateKey m_privkey = null;
+    private String m_pubkey_pem_filename = null;
     
     // Debug X.509 Auth Creds
     private boolean m_debug_creds = false;
@@ -168,6 +168,12 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        this.m_pubkey_pem_filename = this.preferences().valueOf("mqtt_pubkey_pem_filename", this.m_suffix);
+        
+        // default pubkey filename if utilized
+        if (this.m_pubkey_pem_filename == null || this.m_pubkey_pem_filename.length() == 0) {
+            this.m_pubkey_pem_filename = Utils.DEFAULT_PUBKEY_PEM_FILENAME;
+        }
         
         // sync our acceptance of self-signed client creds
         this.noSelfSignedCertsOrKeys(this.m_mqtt_no_client_creds);
@@ -207,6 +213,12 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
         this.m_keystore_basename = this.preferences().valueOf("mqtt_keystore_basename", this.m_suffix);
+        this.m_pubkey_pem_filename = this.preferences().valueOf("mqtt_pubkey_pem_filename", this.m_suffix);
+        
+        // default pubkey filename if utilized
+        if (this.m_pubkey_pem_filename == null || this.m_pubkey_pem_filename.length() == 0) {
+            this.m_pubkey_pem_filename = Utils.DEFAULT_PUBKEY_PEM_FILENAME;
+        }
         
         // sync our acceptance of self-signed client creds
         this.noSelfSignedCertsOrKeys(this.m_mqtt_no_client_creds);
@@ -343,12 +355,13 @@ public class MQTTTransport extends Transport implements GenericSender {
     private String useExistingKeyStore(String id,String pw) {
         // create our filename from the ID 
         String filename =  Utils.makeKeystoreFilename(this.m_base_dir, id, this.m_keystore_basename);
+        String pubkey_pem = Utils.makePubkeyFilename(this.m_base_dir, id, this.m_pubkey_pem_filename);
         
         // now read from the Keystore
         if (this.m_pki_cert == null || this.m_pki_priv_key == null || this.m_pki_pub_key == null) {
             this.m_pki_cert = Utils.readCertFromKeystoreAsPEM(this.errorLogger(),filename,pw);
             this.m_pki_priv_key = Utils.readPrivKeyFromKeystoreAsPEM(this.errorLogger(),filename,pw);
-            this.m_pki_pub_key = Utils.readPubKeyFromKeystoreAsPEM(this.errorLogger(),filename,pw);
+            this.m_pki_pub_key = Utils.readPubKeyAsPEM(this.errorLogger(),pubkey_pem);
         }
         
         // display creds if debugging
