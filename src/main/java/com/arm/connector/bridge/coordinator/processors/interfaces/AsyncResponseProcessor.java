@@ -30,6 +30,6 @@ import java.util.Map;
  * @author Doug Anson
  */
 public interface AsyncResponseProcessor {
-
+    // process async response
     boolean processAsyncResponse(Map response);
 }

@@ -24,6 +24,7 @@ package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.DeviceManager;
+import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.data.SerializableHashMap;
@@ -37,12 +38,13 @@ import com.google.api.services.cloudiot.v1.model.EventNotificationConfig;
 import com.google.api.services.cloudiot.v1.model.HttpConfig;
 import com.google.api.services.cloudiot.v1.model.MqttConfig;
 import com.google.api.services.cloudiot.v1.model.PublicKeyCredential;
+import com.google.api.services.cloudiot.v1.model.StateNotificationConfig;
 import com.google.api.services.pubsub.Pubsub;
 import com.google.api.services.pubsub.model.Topic;
 import java.io.IOException;
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,8 @@ import java.util.Map;
  * @author Doug Anson
  */
 public class GoogleCloudDeviceManager extends DeviceManager implements Runnable {
+    private static String CLOUD_KEY_PREFIX = "lwm2m";
+    private static String CLOUD_KEY_SEPARATOR = "_";
     private String m_project_id = null;
     private String m_region = null;
     private String m_topic_root = null;
@@ -72,14 +76,15 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
     private String m_google_cloud_key_convert_cmd_template = null;
     private String m_keystore_rootdir = null;
     private int m_num_days = 0;
+    private SubscriptionManager m_subscription_manager = null;
     
     // constructor
-    public GoogleCloudDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http, Orchestrator orchestrator,String project_id,String region,CloudIot cloud_iot,Pubsub pub_sub,String obs_key,String cmd_key) {
-        this(logger,preferences,null,http,orchestrator,project_id,region,cloud_iot,pub_sub,obs_key,cmd_key);
+    public GoogleCloudDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http, Orchestrator orchestrator,String project_id,String region,CloudIot cloud_iot,Pubsub pub_sub,String obs_key,String cmd_key,SubscriptionManager subscription_manager) {
+        this(logger,preferences,null,http,orchestrator,project_id,region,cloud_iot,pub_sub,obs_key,cmd_key,subscription_manager);
     }
 
     // defaulted constructor
-    public GoogleCloudDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http, Orchestrator orchestrator,String project_id,String region,CloudIot cloud_iot,Pubsub pub_sub,String obs_key,String cmd_key) {
+    public GoogleCloudDeviceManager(ErrorLogger logger, PreferenceManager preferences, String suffix, HttpTransport http, Orchestrator orchestrator,String project_id,String region,CloudIot cloud_iot,Pubsub pub_sub,String obs_key,String cmd_key,SubscriptionManager subscription_manager) {
         super(logger,preferences,suffix,http,orchestrator);
         
         // create the registry ID
@@ -101,6 +106,7 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         this.m_google_cloud_key_convert_cmd_template = this.orchestrator().preferences().valueOf("google_cloud_key_convert_cmd_template",this.m_suffix);
         this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("google_cloud_keystore_rootdir",this.m_suffix);
         this.m_num_days = this.orchestrator().preferences().intValueOf("google_cloud_cert_days_length",this.m_suffix);
+        this.m_subscription_manager = subscription_manager;
         
         // ensure that we have a device registry        
         if (this.initDeviceRegistry(this.m_registry_id,this.m_obs_key,this.m_cmd_key)) {
@@ -176,6 +182,8 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         
         try {
             DeviceRegistry registry = new DeviceRegistry();
+            
+            // setup the event notification topic
             String eventNotificationTopic = this.buildFullPubSubPath(notifications);
             this.createTopic(eventNotificationTopic);
             EventNotificationConfig eventNotificationConfig = new EventNotificationConfig();
@@ -183,6 +191,15 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
             List<EventNotificationConfig> eventNotificationConfigs = new ArrayList<>();
             eventNotificationConfigs.add(eventNotificationConfig);
             registry.setEventNotificationConfigs(eventNotificationConfigs);
+            
+            // setup the state change notification topic
+            String stateChangeTopic = this.buildFullPubSubPath(commands);
+            this.createTopic(stateChangeTopic);
+            StateNotificationConfig stateChangeConfig = new StateNotificationConfig();
+            stateChangeConfig.setPubsubTopicName(stateChangeTopic);
+            registry.setStateNotificationConfig(stateChangeConfig);
+            
+            // now build out the registry configuration
             MqttConfig mqttConfig = new MqttConfig();
             registry.setMqttConfig(mqttConfig);
             HttpConfig httpConfig = new HttpConfig();
@@ -281,6 +298,88 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         // return the existance status
         return exists;
     }
+    
+    // map LWM2M URI to Google Cloud IoT compatible key
+    private String lwm2mURIToGoogleKey(String uri) {
+        if (uri != null) {
+            return CLOUD_KEY_PREFIX + uri.replace("/",CLOUD_KEY_SEPARATOR);
+        }
+        return uri;
+    }
+    
+    // map Google Cloud IoT compatible key to LWM2M URI
+    private String googleKeyToLwm2mURI(String key) {
+        if (key != null) {
+            return key.replace(CLOUD_KEY_PREFIX,"").replace(CLOUD_KEY_SEPARATOR, "/");
+        }
+        return key;
+    }
+    
+    // get the number of LWM2M resources in our device
+    private int getNumResources(Map message) {
+        List resources = (List)message.get("resources");
+        if (resources != null) {
+            return resources.size();
+        }
+        return 0;
+    }
+    
+    // get the ith LWMW2M resource
+    private Map getResource(int i,Map message) {
+        List resources = (List)message.get("resources");
+        if (resources != null && i >= 0 && i < resources.size()) {
+            return (Map)resources.get(i);
+        }
+        return (Map)null;
+    }
+    
+    // create the device metadata
+    private HashMap<String,String> createDeviceMetadata(Map message) {
+        HashMap<String,String> metadata = new HashMap<>();
+        metadata.put("device_type",(String)message.get("ept"));
+        metadata.put("device_id",(String)message.get("ep"));
+        metadata.put("serial_number",(String)message.get("meta_serial"));
+        metadata.put("device_description",(String)message.get("meta_description"));
+        metadata.put("hardware_version",(String)message.get("meta_hardware"));
+        metadata.put("firmware_version",(String)message.get("meta_firmware"));
+        metadata.put("platform_type",(String)message.get("meta_model"));
+        metadata.put("platform_cpu",(String)message.get("meta_class"));
+        
+        // create OBS records for each LWM2M resource...
+        int num_resources = this.getNumResources(message);
+        for(int i=0;i<num_resources;++i) {
+            Map resource = this.getResource(i,message);
+            if (resource != null) {
+                String uri = (String)resource.get("path");
+                if (this.m_subscription_manager.isNotASpecialityResource(uri) == true) {
+                    // not a speciality resource... so lets put it into the metadata
+                    String obs = (String)resource.get("obs");
+                    if (obs != null && obs.length() > 0) {
+                        String key = this.lwm2mURIToGoogleKey(uri);
+                        metadata.put(key,obs);
+                    }
+                }
+            }
+        }
+        
+        // DEBUG
+        this.errorLogger().warning("METADATA: " + metadata);
+        
+        return metadata;
+    }
+    
+    // create the device credentials
+    private ArrayList<DeviceCredential> createDeviceCredentials(Map message) throws UnsupportedEncodingException {
+        DeviceCredential cred = new DeviceCredential();
+        PublicKeyCredential pkc = new PublicKeyCredential();
+        byte[] pubKey = Utils.readRSAKeyforDevice(this.errorLogger(),this.m_keystore_rootdir,(String)message.get("ep"),false); //public key
+        pkc.setKey(new String(pubKey,"UTF-8"));
+        pkc.setFormat("RSA_X509_PEM");
+        cred.setPublicKey(pkc);
+        ArrayList<DeviceCredential> credlist = new ArrayList<>();
+        credlist.add(cred);
+        return credlist;
+    }
 
     // create and register a new device
     private boolean createAndRegisterNewDevice(Map message,boolean cache_device) {
@@ -301,30 +400,11 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
                 // create the key file for this device
                 String keystore = Utils.createRSAKeysforDevice(this.errorLogger(),this.m_keystore_rootdir,this.m_num_days,this.m_google_cloud_key_create_cmd_template,this.m_google_cloud_key_convert_cmd_template,this.m_google_cloud_key_length,ep_name);
                 if (keystore != null) {
-                    // create a mapped metadata hashmap...
-                    HashMap<String,String> metadata = new HashMap<>();
-                    metadata.put("type",ep_type);
-                    metadata.put("name",ep_name);
-                    metadata.put("serial",(String)message.get("meta_serial"));
-                    metadata.put("description",(String)message.get("meta_description"));
-                    metadata.put("hardware_version",(String)message.get("meta_hardware"));
-                    metadata.put("platform",(String)message.get("meta_model"));
-                    metadata.put("cpu",(String)message.get("meta_class"));
-                    metadata.put("firmware_version",(String)message.get("meta_firmware"));
-                    metadata.put("mfg",(String)message.get("meta_mfg"));
-                    metadata.put("keystore",keystore);
-                    //device.setMetadata(message);
+                    // set the device metadata
+                    device.setMetadata(this.createDeviceMetadata(message));
 
                     // create our credential for this device...
-                    DeviceCredential cred = new DeviceCredential();
-                    PublicKeyCredential pkc = new PublicKeyCredential();
-                    byte[] pubKey = Utils.readRSAKeyforDevice(this.errorLogger(),this.m_keystore_rootdir,ep_name,false); //public key
-                    pkc.setKey(new String(pubKey,"UTF-8"));
-                    pkc.setFormat("RSA_X509_PEM");
-                    cred.setPublicKey(pkc);
-                    ArrayList<DeviceCredential> credlist = new ArrayList<>();
-                    credlist.add(cred);
-                    device.setCredentials(credlist);
+                    device.setCredentials(this.createDeviceCredentials(message));
 
                     // create the device now... 
                     Device inst = this.m_cloud_iot.projects().locations().registries().devices().create(this.m_registry_path,device).execute();

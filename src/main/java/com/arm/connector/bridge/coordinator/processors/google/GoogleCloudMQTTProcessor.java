@@ -24,7 +24,6 @@ package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
-import static com.arm.connector.bridge.coordinator.processors.core.Processor.NUM_COAP_VERBS;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
@@ -65,11 +64,20 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+    // Google Cloud IoT notifications get published to this topic:  /devices/{deviceID}/events
+    private static String GOOGLE_CLOUDIOT_EVENT_TAG = "events";
+    
+    // Google Cloud IoT device state changes tag
+    private static String GOOGLE_CLOUDIOT_STATE_TAG = "state";
+    
+    // SUBSCRIBE to these topics
+    private String m_google_cloud_coap_config_topic = null;
+    
+    // PUBLISH to these topics
+    private String m_google_cloud_coap_state_topic = null;
     private String m_google_cloud_observe_notification_topic = null;
-    private String m_google_cloud_coap_cmd_topic_get = null;
-    private String m_google_cloud_coap_cmd_topic_put = null;
-    private String m_google_cloud_coap_cmd_topic_post = null;
-    private String m_google_cloud_coap_cmd_topic_delete = null;
+    
+    // keystore root directory
     private String m_keystore_rootdir = null;
 
     // GoogleCloud Device Manager
@@ -163,14 +171,28 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         // Google CloudIot Registry Name
         this.m_google_cloud_registry_name = this.orchestrator().preferences().valueOf("google_cloud_registry_name",this.m_suffix);
         
-        // Observation notification topic
+        // Observation notification topic (PUBLISH)
         this.m_google_cloud_observe_notification_topic = this.orchestrator().preferences().valueOf("google_cloud_observe_notification_topic",this.m_suffix);
         
-        // Required Google Cloud format:  /devices/{device-id}/events
-        this.m_observation_key = "events";
+        // We receive commands/results that go down to mbed Cloud via the CONFIG topic
+        this.m_google_cloud_coap_config_topic = this.orchestrator().preferences().valueOf("google_cloud_coap_config_topic", this.m_suffix);
         
-        // get the JWT expiration length
+        // we publish state changes that go up to Google Cloud IoT from mbed Cloud via the STATE topic
+        this.m_google_cloud_coap_state_topic = this.orchestrator().preferences().valueOf("google_cloud_coap_state_topic", this.m_suffix);
+
+        // Required Google Cloud format:  Event Tag redefinition
+        this.m_observation_key = GOOGLE_CLOUDIOT_EVENT_TAG;
+        
+        // Required Google Cloud format: State Tag redefinition
+        this.m_cmd_response_key = GOOGLE_CLOUDIOT_STATE_TAG;
+        
+        // get the JWT expiration length (and default if not present in the config)
         this.m_jwt_expiration_secs = this.orchestrator().preferences().intValueOf("google_cloud_jwt_expiration_secs",this.m_suffix);
+        if (this.m_jwt_expiration_secs <= 0) {
+            // set to default of 1 year.
+            this.errorLogger().info("Google: Setting JWT expiration to 1 year (not set it config). OK");
+            this.m_jwt_expiration_secs = 31557600; // 1 year
+        }
         
         // DEBUG
         this.errorLogger().info("ProjectID: " + this.m_google_cloud_project_id + 
@@ -179,12 +201,6 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
         // initialize the topic root
         this.initTopicRoot("google_cloud_topic_root");
-
-        // Send CoAP commands back through mDS into the endpoint via these Topics... 
-        this.m_google_cloud_coap_cmd_topic_get = this.orchestrator().preferences().valueOf("google_cloud_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "get");
-        this.m_google_cloud_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("google_cloud_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "put");
-        this.m_google_cloud_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("google_cloud_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "post");
-        this.m_google_cloud_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("google_cloud_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "delete");
         
         // create the CloudIoT instance
         this.m_cloud_iot = this.createCloudIoTInstance();
@@ -193,7 +209,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         this.m_pub_sub = this.createPubSubInstance();
         
         // GoogleCloud Device Manager - will initialize and upsert our GoogleCloud bindings/metadata
-        this.m_google_cloud_gw_device_manager = new GoogleCloudDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator(), this.m_google_cloud_project_id, this.m_google_cloud_region, this.m_cloud_iot,this.m_pub_sub,this.m_observation_key,this.m_cmd_response_key);
+        this.m_google_cloud_gw_device_manager = new GoogleCloudDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator(), this.m_google_cloud_project_id, this.m_google_cloud_region, this.m_cloud_iot,this.m_pub_sub,this.m_observation_key,this.m_cmd_response_key,this.subscriptionsManager());
 
         // initialize our MQTT transport list
         this.initMQTTTransportList();
@@ -344,7 +360,10 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
             // send to GoogleCloud...
             if (this.mqtt(ep_name) != null) {
-                String topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic, ep_name) + path;
+                // do not use subdirectories for the topic... no "path" at the end...
+                String topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic,ep_name);
+                
+                // send the observation...
                 boolean status = this.mqtt(ep_name).sendMessage(topic, google_cloud_gw_coap_json, QoS.AT_MOST_ONCE);
                 if (status == true) {
                     // not connected
@@ -365,27 +384,24 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     // create the endpoint GoogleCloud topic data
     private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
         HashMap<String, Object> topic_data = null;
-        if (this.m_google_cloud_coap_cmd_topic_get != null) {
-            Topic[] list = new Topic[NUM_COAP_VERBS];
-            String[] topic_string_list = new String[NUM_COAP_VERBS];
-            topic_string_list[0] = this.customizeTopic(this.m_google_cloud_coap_cmd_topic_get, ep_name);
-            topic_string_list[1] = this.customizeTopic(this.m_google_cloud_coap_cmd_topic_put, ep_name);
-            topic_string_list[2] = this.customizeTopic(this.m_google_cloud_coap_cmd_topic_post, ep_name);
-            topic_string_list[3] = this.customizeTopic(this.m_google_cloud_coap_cmd_topic_delete, ep_name);
-            for (int i = 0; i < NUM_COAP_VERBS; ++i) {
-                list[i] = new Topic(topic_string_list[i], QoS.AT_LEAST_ONCE);
-            }
+        
+        // these will be topics that we SUBSCRIBE to... hence CONFIG only for Google Cloud IoT
+        if (this.m_google_cloud_coap_config_topic != null) {
+            // config topic is the only one to listen on for Google
+            Topic[] list = new Topic[1];
+            String[] config_topic_str = { this.customizeTopic(this.m_google_cloud_coap_config_topic,ep_name) };
+            list[0] = new Topic(config_topic_str[0], QoS.AT_LEAST_ONCE);
             topic_data = new HashMap<>();
             topic_data.put("topic_list", list);
-            topic_data.put("topic_string_list", topic_string_list);
+            topic_data.put("topic_string_list", config_topic_str);
             topic_data.put("ep_type", ep_type);
         }
         return topic_data;
     }
 
-    // final customization of a MQTT Topic...
+    // final customization of our MQTT Topic...
     private String customizeTopic(String topic, String ep_name) {
-        String cust_topic = topic.replace("__EPNAME__", ep_name);
+        String cust_topic = topic.replace("__EPNAME__",this.m_google_cloud_gw_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
         return cust_topic;
     }
 
@@ -462,10 +478,10 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                 // DEBUG
                 this.errorLogger().info("GoogleCloud(CoAP Command): Sending Observation(GET): " + observation);
 
-                // send the observation (GET reply)...
+                // send the observation (a GET reply)...
                 if (this.mqtt(ep_name) != null) {
-                    String reply_topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic, ep_name);
-                    reply_topic = reply_topic.replace(this.m_observation_key, this.m_cmd_response_key);
+                    // Google: we publish this to the STATE change topic in Google... 
+                    String reply_topic = this.customizeTopic(this.m_google_cloud_coap_state_topic,ep_name);
                     boolean status = this.mqtt(ep_name).sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
                     if (status == true) {
                         // success
@@ -906,20 +922,20 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     @Override
     public String getEndpointNameFromTopic(String topic) {
         // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getTopicElement(topic, 3);                                   // POSITION SENSITIVE
+        return null;                                   // unused
     }
 
     // get the CoAP verb from the MQTT topic
     @Override
     public String getCoAPVerbFromTopic(String topic) {
         // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getTopicElement(topic, 1);                                   // POSITION SENSITIVE
+        return null;                                   // unused
     }
 
     // get the CoAP URI from the MQTT topic
     private String getCoAPURIFromTopic(String topic) {
         // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return this.getURIPathFromTopic(topic, 4);                               // POSITION SENSITIVE
+        return null;                               // unused
     }
 
     // get the endpoint type from the endpoint name

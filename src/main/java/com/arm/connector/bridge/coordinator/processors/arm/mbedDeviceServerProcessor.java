@@ -1198,8 +1198,13 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
         catch (Exception ex) {
             // caught exception
-            this.errorLogger().info("hasDeviceAttributes: Exception caught", ex);
+            this.errorLogger().info("hasDeviceAttributes: Exception caught: " + ex.getMessage(), ex);
         }
+        
+        // DEBUG
+        //if (has_device_attributes == true) {
+        //    this.errorLogger().info("hasDeviceAttributes: HAS ATTRIBUTES: " + endpoint);
+        //}
 
         // return our status
         return has_device_attributes;
@@ -1210,6 +1215,9 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         // Create the Device Attributes URL
         String url = this.createCoAPURL((String) endpoint.get("ep"), this.m_device_attributes_path);
 
+        // DEBUG
+        //this.errorLogger().info("ATTRIBUTES: Calling GET to receive: " + url);
+        
         // Dispatch and get the response (an AsyncId)
         String json_response = this.httpsGet(url, this.m_device_attributes_content_type);
 
@@ -1224,7 +1232,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         // dispatch GETs to retrieve the attributes from the endpoint... 
         if (this.hasDeviceAttributes(endpoint)) {
             // dispatch GETs to to retrieve and parse those attributes
-            this.dispatchDeviceAttributeGETs(endpoint, processor);
+            this.dispatchDeviceAttributeGETs(endpoint,processor);
         }
         else {
             // device does not have device attributes... so just use the defaults... 
@@ -1248,16 +1256,21 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
             byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
 
             // HACK: convert the TLV to a String Array.. 
-            String tlv_data[] = Utils.formatTLVToStringArray(tlv);
+            String[] device_attributes = Utils.formatTLVToStringArray(this.errorLogger(),tlv);
+            
+            // DEBUG
+            for(int i=0;device_attributes != null && i<device_attributes.length;++i) {
+                this.errorLogger().info("parseDeviceAttributes: Device Attribute(" + i + ")=[" + device_attributes[i] + "]");
+            }
 
             // Update the values
-            endpoint.put("meta_mfg", tlv_data[2]);
-            endpoint.put("meta_type", tlv_data[3]);
-            endpoint.put("meta_model", tlv_data[4]);
-            endpoint.put("meta_serial", tlv_data[5]);
-            endpoint.put("meta_firmware", tlv_data[6]);
-            endpoint.put("meta_software", tlv_data[7]);
-            endpoint.put("meta_hardware", tlv_data[8]);
+            endpoint.put("meta_mfg", device_attributes[2]);
+            endpoint.put("meta_type", device_attributes[3]);
+            endpoint.put("meta_model", device_attributes[4]);
+            endpoint.put("meta_serial", device_attributes[5]);
+            endpoint.put("meta_firmware", device_attributes[6]);
+            endpoint.put("meta_software", device_attributes[7]);
+            endpoint.put("meta_hardware", device_attributes[8]);
         }
         catch (Exception ex) {
             // exception during TLV parse... 
@@ -1283,7 +1296,12 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 AsyncResponseProcessor peer_processor = (AsyncResponseProcessor) orig_endpoint.get("peer_processor");
                 if (peer_processor != null) {
                     // parse the device attributes
-                    Map endpoint = this.parseDeviceAttributes(response, orig_endpoint);
+                    this.errorLogger().info("mDS: processAsyncResponse: ORIG endpoint: " + orig_endpoint);
+                    this.errorLogger().info("mDS: processAsyncResponse: RESPONSE: " + response);
+                    Map endpoint = this.parseDeviceAttributes(response,orig_endpoint);
+                    
+                    // DEBUG
+                    this.errorLogger().info("mDS: processAsyncResponse: endpoint: " + endpoint);
 
                     // call the AsyncResponseProcessor within the peer to finalize the device
                     peer_processor.processAsyncResponse(endpoint);
@@ -1317,7 +1335,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
         // invoke GETs to retrieve the actual attributes (we are the processor for the callbacks...)
         this.getActualDeviceAttributes(endpoint, this);
-
     }
 
     // read the request data

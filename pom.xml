@@ -60,12 +60,12 @@
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-pubsub</artifactId>
-            <version>v1-rev372-1.23.0</version>
+            <version>v1-rev380-1.23.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-cloudiot</artifactId>
-            <version>v1-rev22-1.23.0</version>
+            <version>v1-rev24-1.23.0</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

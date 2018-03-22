@@ -1,13 +1,13 @@
 # connector-bridge
-mbed Connector Integration bridge source
+mbed Connector/mbed Cloud Integration bridge source
 
-Integration bridge between mbed Connector and Third Parties
+Integration bridge between mbed Connector/mbed Cloud and Third Party Clouds
 
-This is the primary source tree for the prototype mbed Connector bridges.
+This is the primary source tree for the prototype mbed Connector/mbed Cloud bridge.
 
 This is a netbeans-based maven java project.
 
-Copyright 2015. ARM Ltd. All rights reserved.
+Copyright 2015-2018. ARM Ltd. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

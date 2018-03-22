@@ -877,27 +877,45 @@ public class Utils {
     }
 
     // Create a String Array from the TLV
-    public static String[] formatTLVToStringArray(byte tlv[]) {
-        // convert to array, removing separators... 
-        StringBuilder buf = new StringBuilder();
-        for (int i = 0; i < tlv.length; ++i) {
-            if (tlv[i] == 63) {
-                buf.append(" ");
+    public static String[] formatTLVToStringArray(ErrorLogger logger,byte tlv[]) {
+        String tlv_split[] = null;
+   
+        try {
+            if (tlv != null && tlv.length > 0) {
+                // convert to array, removing separators... 
+                StringBuilder buf = new StringBuilder();
+                for (int i = 0; i < tlv.length; ++i) {
+                    if (tlv[i] == 63) {
+                        // make a space
+                        buf.append(" ");
+                    }
+                    else if (Character.isSpaceChar(tlv[i]) || Character.isAlphabetic(tlv[i])) {
+                        buf.append((char) tlv[i]);
+                    }
+                }
+
+                // trim
+                String tlv_str = buf.toString().trim();
+                
+                // DEBUG
+                logger.info("formatTLVToStringArray: TLV: [" + tlv_str + "]");
+
+                // split into an array
+                tlv_split = tlv_str.split(" ");
+
+                // trim array elements
+                for (int i = 0; i < tlv_split.length; ++i) {
+                    tlv_split[i] = tlv_split[i].trim();
+                }
             }
             else {
-                buf.append((char) tlv[i]);
+                // empty TLV byte array
+                logger.info("formatTLVToStringArray:empty TLV provided...ignored (OK).");
             }
         }
-
-        // trim
-        String tlv_str = buf.toString().trim();
-
-        // split into an array
-        String tlv_split[] = tlv_str.split(" ");
-
-        // trim array elements
-        for (int i = 0; i < tlv_split.length; ++i) {
-            tlv_split[i] = tlv_split[i].trim();
+        catch (Exception ex) {
+            // exception during processing
+            logger.warning("formatTLVToStringArray: Exception caught during TLV parse: " + ex.getMessage());
         }
 
         // return the cleaned up array
