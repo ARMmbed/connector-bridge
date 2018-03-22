@@ -790,7 +790,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             JwtBuilder jwtBuilder =
                 Jwts.builder()
                     .setIssuedAt(now)
-                    .setExpiration(new Date(now.getTime() + this.m_jwt_expiration_secs))
+                    .setExpiration(new Date(now.getTime() + (this.m_jwt_expiration_secs * 1000))) // getTime() in ms... so x1000
                     .setAudience(this.m_google_cloud_project_id);
 
             byte[] privKey = Utils.readRSAKeyforDevice(this.errorLogger(),this.m_keystore_rootdir, ep_name, true); // priv key read
