@@ -45,6 +45,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.Serializable;
+import static java.lang.Thread.sleep;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -101,6 +102,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     // GoogleCloud MQTT Version
     private String m_google_cloud_mqtt_version = null;
     
+    // max number of connect retries (JwT expiration/reset)
+    private int m_max_retries = 0;
+    
     // Google Cloud Credential
     private GoogleCredential m_credential = null;
     
@@ -147,6 +151,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         
         // keystore root directory
         this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("mqtt_keystore_basedir",this.m_suffix);
+        
+        // max number of retries...
+        this.m_max_retries = this.preferences().intValueOf("mqtt_connect_retries", this.m_suffix);
 
         // get the client ID template
         this.m_google_cloud_client_id_template = this.orchestrator().preferences().valueOf("google_cloud_client_id_template",this.m_suffix);
@@ -829,24 +836,49 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
             // refresh the Google devices' JwT via CloudIoT API
             if (this.mqtt(ep_name) != null) {
+                // DEBUG
+                this.errorLogger().info("refreshJwTForEndpoint: Disconnecting MQTT... JwT refresh starting...");
+                
                 // disconnect MQTT
                 this.disconnect(ep_name);
                 
-                // create a new MQTT connection
-                MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
-                
-                // add it to the list indexed by the endpoint name... not the clientID...
-                this.addMQTTTransport(ep_name, mqtt);
+                // retry to connect a few times...
+                boolean connected = false;
+                for(int i=0;i<this.m_max_retries && connected == false;++i) {
+                    // DEBUG
+                    this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
+                    
+                    // create a new MQTT connection
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+
+                    // add it to the list indexed by the endpoint name... not the clientID...
+                    this.addMQTTTransport(ep_name, mqtt);
+
+                    // re-connect
+                    connected = this.connect(ep_name,this.createGoogleCloudMQTTclientID(ep_name),jwt);
+                    if (connected == true) {
+                        // success! new JwT active...
+                        this.errorLogger().info("refreshJwTForEndpoint: reconnected with new JwT (SUCCESS)");
+                    }
+                    else if (i < (this.m_max_retries -1)) {
+                        // failure to reconnect
+                        this.errorLogger().warning("refreshJwTForEndpoint: FAILED to reconnect with new JwT!! Retrying (" + (i+1) + " of " + this.m_max_retries + ")...");
                         
-                // re-connect
-                boolean connected = this.connect(ep_name,this.createGoogleCloudMQTTclientID(ep_name),jwt);
-                if (connected == true) {
-                    // success! new JwT active...
-                    this.errorLogger().info("refreshJwTForEndpoint: reconnected with new JwT (SUCCESS)");
-                }
-                else {
-                    // failure to reconnect
-                    this.errorLogger().critical("refreshJwTForEndpoint: FAILED to reconnect with new JwT!!");
+                        // remove from the list...
+                        this.remove(ep_name);
+                        
+                        // Sleep a bit
+                        try {
+                            sleep(5000);    // retry in 5 seconds...
+                        }
+                        catch(Exception ex) {
+                            // silent
+                        }
+                    }
+                    else {
+                        // failure to reconnect
+                        this.errorLogger().critical("refreshJwTForEndpoint: FAILED to reconnect with new JwT!! (Giving up).");
+                    }
                 }
             }
         }

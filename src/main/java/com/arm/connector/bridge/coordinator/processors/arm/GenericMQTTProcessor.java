@@ -183,8 +183,8 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     }
 
     // add a MQTT transport instance
-    protected void addMQTTTransport(String clientID, MQTTTransport mqtt) {
-        this.m_mqtt.put(clientID, mqtt);
+    protected void addMQTTTransport(String id, MQTTTransport mqtt) {
+        this.m_mqtt.put(id, mqtt);
     }
 
     // initialize the MQTT transport instance list
@@ -195,17 +195,17 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
     // PROTECTED: get the MQTT transport for the default clientID
     protected MQTTTransport mqtt() {
-        return this.mqtt(this.m_client_id);
+        return this.mqtt(this.m_client_id); // clientID is default "id"
     }
 
     // PROTECTED: get the MQTT transport for a given clientID
-    protected MQTTTransport mqtt(String clientID) {
-        return this.m_mqtt.get(clientID);
+    protected MQTTTransport mqtt(String id) {
+        return this.m_mqtt.get(id);
     }
 
     // PROTECTED: remove MQTT Transport for a given clientID
-    protected void remove(String clientID) {
-        this.m_mqtt.remove(clientID);
+    protected void remove(String id) {
+        this.m_mqtt.remove(id);
     }
 
     // close the tranports in the list
