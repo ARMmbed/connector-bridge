@@ -832,6 +832,12 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                 // disconnect MQTT
                 this.disconnect(ep_name);
                 
+                // create a new MQTT connection
+                MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+                
+                // add it to the list indexed by the endpoint name... not the clientID...
+                this.addMQTTTransport(ep_name, mqtt);
+                        
                 // re-connect
                 boolean connected = this.connect(ep_name,this.createGoogleCloudMQTTclientID(ep_name),jwt);
                 if (connected == true) {
