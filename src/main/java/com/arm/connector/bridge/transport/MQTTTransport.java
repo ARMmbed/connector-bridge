@@ -543,7 +543,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         return this.connect(host, port, clientID, this.prefBoolValue("mqtt_clean_session", this.m_suffix));
     }
 
-    /**
+     /**
      * Connect to the MQTT broker
      *
      * @param host
@@ -553,11 +553,25 @@ public class MQTTTransport extends Transport implements GenericSender {
      * @return
      */
     public boolean connect(String host, int port, String clientID, boolean clean_session) {
+        return this.connect(host,port,clientID,clean_session,null);
+    }
+    
+    /**
+     * Connect to the MQTT broker
+     *
+     * @param host
+     * @param port
+     * @param clientID
+     * @param clean_session
+     * @param id 
+     * @return
+     */
+    public boolean connect(String host, int port, String clientID, boolean clean_session, String id) {
         int sleep_time = this.prefIntValue("mqtt_retry_sleep", this.m_suffix);
         int num_tries = this.prefIntValue("mqtt_connect_retries", this.m_suffix);
         
         // build out the URL connection string
-        String url = this.setupHostURL(host, port);
+        String url = this.setupHostURL(host, port, id);
 
         // setup default clientID
         if (clientID == null || clientID.length() <= 0) {
@@ -1021,9 +1035,8 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     // get the next MQTT message
     private MQTTMessage getNextMessage() throws Exception {
-        MQTTMessage message = null;
-        if (this.isConnected() == true) {
-            message = new MQTTMessage(this.m_connection.receive());
+        MQTTMessage message = new MQTTMessage(this.m_connection.receive());
+        if (message != null) {
             message.ack();
         }
         return message;
@@ -1137,9 +1150,9 @@ public class MQTTTransport extends Transport implements GenericSender {
     public void useSSLConnection(boolean use_ssl_connection) {
         this.m_use_ssl_connection = use_ssl_connection;
     }
-
+    
     // setup the MQTT host URL
-    private String setupHostURL(String host, int port) {
+    private String setupHostURL(String host, int port,String id) {
         if (this.m_host_url == null) {
             // SSL override check...
             if (this.m_use_ssl_connection == true && this.m_mqtt_use_ssl == false) {
@@ -1158,7 +1171,9 @@ public class MQTTTransport extends Transport implements GenericSender {
                 prefix = "ssl://";      // SSL used... 
                 
                 // by default, we use a fixed ID for the ssl context... this may be overriden
-                String id = host.replace(".","_") + "_" + port;
+                if (id == null) {
+                    id = host.replace(".","_") + "_" + port;
+                }
                 
                 // initialize the SSl context if not already done...
                 if (this.initializeSSLContext(id) == false) {

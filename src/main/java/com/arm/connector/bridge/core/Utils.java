@@ -524,6 +524,7 @@ public class Utils {
                     if (doomed.delete()) {
                         // command succeeded
                         logger.info("createRSAKeysforDevice: old PEM private key deleted SUCCESSFULLY");
+                        filename = pkcs8_filename;
                     }
                     else {
                         // command FAILED

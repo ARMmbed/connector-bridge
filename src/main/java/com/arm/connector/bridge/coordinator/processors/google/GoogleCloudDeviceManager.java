@@ -104,7 +104,7 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         this.m_registry_path = this.buildRegistryPath(this.m_project_id,this.m_region);
         this.m_google_cloud_key_create_cmd_template = this.orchestrator().preferences().valueOf("google_cloud_key_create_cmd_template",this.m_suffix);
         this.m_google_cloud_key_convert_cmd_template = this.orchestrator().preferences().valueOf("google_cloud_key_convert_cmd_template",this.m_suffix);
-        this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("google_cloud_keystore_rootdir",this.m_suffix);
+        this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("mqtt_keystore_basedir",this.m_suffix);
         this.m_num_days = this.orchestrator().preferences().intValueOf("google_cloud_cert_days_length",this.m_suffix);
         this.m_subscription_manager = subscription_manager;
         
@@ -399,7 +399,7 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
                 
                 // create the key file for this device
                 String keystore = Utils.createRSAKeysforDevice(this.errorLogger(),this.m_keystore_rootdir,this.m_num_days,this.m_google_cloud_key_create_cmd_template,this.m_google_cloud_key_convert_cmd_template,this.m_google_cloud_key_length,ep_name);
-                if (keystore != null) {
+                if (keystore != null) {                    
                     // set the device metadata
                     device.setMetadata(this.createDeviceMetadata(message));
 

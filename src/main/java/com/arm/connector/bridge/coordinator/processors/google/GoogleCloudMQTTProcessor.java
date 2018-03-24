@@ -123,7 +123,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     private boolean m_google_cloud_logged_in = false;
     
     // default JWT expiration length (in seconds)
-    private long m_jwt_expiration_secs = 31557600;          // 1 year
+    private int m_jwt_refresh_interval = (5 * 60);  // (12 * 60* 60);     // JwT refresh interval: 12 hours
+    private long m_jwt_expiration_secs = (7 * 60);  // (23 * 60 * 60);    // JwT token expiration : 23 hours
+    
+    // JwT refresher Thread
+    private HashMap<String,GoogleJwTRefresherThread> m_jwt_refesher_thread_list = null;
 
     // constructor (singleton)
     public GoogleCloudMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
@@ -142,7 +146,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         this.m_suffix = suffix;
         
         // keystore root directory
-        this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("google_cloud_keystore_rootdir",this.m_suffix);
+        this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("mqtt_keystore_basedir",this.m_suffix);
 
         // get the client ID template
         this.m_google_cloud_client_id_template = this.orchestrator().preferences().valueOf("google_cloud_client_id_template",this.m_suffix);
@@ -186,14 +190,6 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         // Required Google Cloud format: State Tag redefinition
         this.m_cmd_response_key = GOOGLE_CLOUDIOT_STATE_TAG;
         
-        // get the JWT expiration length (and default if not present in the config)
-        this.m_jwt_expiration_secs = this.orchestrator().preferences().intValueOf("google_cloud_jwt_expiration_secs",this.m_suffix);
-        if (this.m_jwt_expiration_secs <= 0) {
-            // set to default of 1 year.
-            this.errorLogger().info("Google: Setting JWT expiration to 1 year (not set it config). OK");
-            this.m_jwt_expiration_secs = 31557600; // 1 year
-        }
-        
         // DEBUG
         this.errorLogger().info("ProjectID: " + this.m_google_cloud_project_id + 
                                 "Application Name: " + this.m_google_cloud_application_name + 
@@ -213,6 +209,14 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
         // initialize our MQTT transport list
         this.initMQTTTransportList();
+        
+        // initialize the JwT refresher thread list
+        this.m_jwt_refesher_thread_list = new HashMap<>();
+    }
+    
+    // get the JwT refresh interval in seconds
+    public long getJwTRefreshIntervalInSeconds() {
+        return this.m_jwt_refresh_interval;
     }
     
     // Get our Google Project ID from the Auth JSON
@@ -762,6 +766,10 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             // disconnect, remove the threaded listener... 
             if (this.m_mqtt_thread_list.get(device) != null) {
                 try {
+                    // stop the refresher list
+                    this.stopJwTRefresherThread(device);
+                    
+                    // disconnect
                     this.m_mqtt_thread_list.get(device).disconnect();
                 }
                 catch (Exception ex) {
@@ -783,14 +791,16 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     }
     
     // create our specific Google Cloud JWT for a device
-    private String createGoogleCloudJWT(String ep_name) throws IOException {
+    public String createGoogleCloudJWT(String ep_name) throws IOException {
         try {
             // use the appropriate keyfile
             Date now = new Date();
+            long expiration_seconds = (now.getTime()/1000) + this.m_jwt_expiration_secs; // 23 hours from now... expire.
+            Date expire_date = new Date(expiration_seconds*1000); // must be in ms
             JwtBuilder jwtBuilder =
                 Jwts.builder()
                     .setIssuedAt(now)
-                    .setExpiration(new Date(now.getTime() + (this.m_jwt_expiration_secs * 1000))) // getTime() in ms... so x1000
+                    .setExpiration(expire_date)
                     .setAudience(this.m_google_cloud_project_id);
 
             byte[] privKey = Utils.readRSAKeyforDevice(this.errorLogger(),this.m_keystore_rootdir, ep_name, true); // priv key read
@@ -809,6 +819,58 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             this.errorLogger().critical("createGoogleCloudJWT: Exception in creating JWT: " + ex.getMessage());
         }
         return null;
+    }
+    
+    // Refresh the JwT for a given endpoint
+    public void refreshJwTForEndpoint(String ep_name) {
+        try {
+            // create a new JwT
+            String jwt = this.createGoogleCloudJWT(ep_name);
+
+            // refresh the Google devices' JwT via CloudIoT API
+            if (this.mqtt(ep_name) != null) {
+                // disconnect MQTT
+                this.disconnect(ep_name);
+                
+                // re-connect
+                boolean connected = this.connect(ep_name,this.createGoogleCloudMQTTclientID(ep_name),jwt);
+                if (connected == true) {
+                    // success! new JwT active...
+                    this.errorLogger().info("refreshJwTForEndpoint: reconnected with new JwT (SUCCESS)");
+                }
+                else {
+                    // failure to reconnect
+                    this.errorLogger().critical("refreshJwTForEndpoint: FAILED to reconnect with new JwT!!");
+                }
+            }
+        }
+        catch(IOException ex) {
+            // error creating JWT
+            this.errorLogger().critical("refreshJwTForEndpoint: Exception in refreshing JWT: " + ex.getMessage());
+        }
+    }
+    
+    // End the JwT refresher thread
+    public void stopJwTRefresherThread(String ep_name) {
+        GoogleJwTRefresherThread doomed = this.m_jwt_refesher_thread_list.get(ep_name);
+        if (doomed != null) {
+            // DEBUG
+            this.errorLogger().warning("stopJwTRefresherThread: Stopping JwT Refresher for: " + ep_name);
+            
+            // remove from ThreadList
+            this.m_jwt_refesher_thread_list.remove(ep_name);
+            
+            try {
+                // stop the event loop in the thread
+                doomed.haltThread();
+                
+                // re-join the thread to end it
+                doomed.join();
+            }
+            catch (InterruptedException ex) {
+                // silent
+            }
+        }
     }
     
     // create our specific Google Cloud ClientID
@@ -861,6 +923,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                             listener.setOnReceiveListener(this);
                             this.m_mqtt_thread_list.put(ep_name, listener);
                             listener.start();
+                            
+                            // Also start a JwT refresher
+                            GoogleJwTRefresherThread jwt_refresher = new GoogleJwTRefresherThread(this,ep_name);
+                            this.m_jwt_refesher_thread_list.put(ep_name,jwt_refresher);
+                            jwt_refresher.start();
                         }
                         else {
                             // unable to connect!
@@ -1006,7 +1073,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             this.mqtt(ep_name).useSSLConnection(true);
             
             // Connect to the Google MQTT Service
-            if (this.mqtt(ep_name).connect(this.m_google_cloud_mqtt_host,this.m_google_cloud_mqtt_port,client_id,this.m_use_clean_session)) {
+            if (this.mqtt(ep_name).connect(this.m_google_cloud_mqtt_host,this.m_google_cloud_mqtt_port,client_id,this.m_use_clean_session,ep_name)) {
                 this.orchestrator().errorLogger().info("GoogleCloud: Setting CoAP command listener...");
                 this.mqtt(ep_name).setOnReceiveListener(this);
                 this.orchestrator().errorLogger().info("GoogleCloud: connection completed successfully");
