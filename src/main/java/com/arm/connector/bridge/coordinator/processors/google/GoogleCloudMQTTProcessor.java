@@ -123,8 +123,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     private boolean m_google_cloud_logged_in = false;
     
     // default JWT expiration length (in seconds)
-    private int m_jwt_refresh_interval = (5 * 60);  // (12 * 60* 60);     // JwT refresh interval: 12 hours
-    private long m_jwt_expiration_secs = (7 * 60);  // (23 * 60 * 60);    // JwT token expiration : 23 hours
+    private int m_jwt_refresh_interval = (18 * 60* 60);     // JwT refresh interval: 18 hours
+    private long m_jwt_expiration_secs = (23 * 60 * 60);    // JwT token expiration : 23 hours
     
     // JwT refresher Thread
     private HashMap<String,GoogleJwTRefresherThread> m_jwt_refesher_thread_list = null;
