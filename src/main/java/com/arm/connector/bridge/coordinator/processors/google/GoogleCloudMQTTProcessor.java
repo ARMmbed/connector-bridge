@@ -105,6 +105,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     // max number of connect retries (JwT expiration/reset)
     private int m_max_retries = 0;
     
+    // number of ms to wait prior to reconnect from JwT refresh
+    private int m_jwt_refresh_wait_ms = 30000;          // 30 seconds
+    
     // Google Cloud Credential
     private GoogleCredential m_credential = null;
     
@@ -127,8 +130,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     private boolean m_google_cloud_logged_in = false;
     
     // default JWT expiration length (in seconds)
-    private int m_jwt_refresh_interval = (18 * 60* 60);     // JwT refresh interval: 18 hours
-    private long m_jwt_expiration_secs = (23 * 60 * 60);    // JwT token expiration : 23 hours
+    private int m_jwt_refresh_interval = (5 * 60 * 60);    // JwT refresh interval: 5 hours
+    private long m_jwt_expiration_secs = (23 * 60 * 60);   // JwT token max expiration : 23 hours
     
     // JwT refresher Thread
     private HashMap<String,GoogleJwTRefresherThread> m_jwt_refesher_thread_list = null;
@@ -846,6 +849,17 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                 boolean connected = false;
                 for(int i=0;i<this.m_max_retries && connected == false;++i) {
                     // DEBUG
+                    this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...waiting a bit...");
+                    
+                    // Sleep a bit
+                    try {
+                        sleep(this.m_jwt_refresh_wait_ms);    // retry
+                    }
+                    catch(Exception ex) {
+                        // silent
+                    }
+                        
+                    // DEBUG
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
                     
                     // create a new MQTT connection
@@ -866,14 +880,6 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                         
                         // remove from the list...
                         this.remove(ep_name);
-                        
-                        // Sleep a bit
-                        try {
-                            sleep(5000);    // retry in 5 seconds...
-                        }
-                        catch(Exception ex) {
-                            // silent
-                        }
                     }
                     else {
                         // failure to reconnect
