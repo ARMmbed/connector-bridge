@@ -378,7 +378,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                 String topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic,ep_name);
                 
                 // send the observation...
-                boolean status = this.mqtt(ep_name).sendMessage(topic, google_cloud_gw_coap_json, QoS.AT_MOST_ONCE);
+                boolean status = this.mqtt(ep_name).sendMessage(topic, google_cloud_gw_coap_json, QoS.AT_LEAST_ONCE);
                 if (status == true) {
                     // not connected
                     this.errorLogger().info("GoogleCloud: CoAP notification sent. SUCCESS");
@@ -496,7 +496,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                 if (this.mqtt(ep_name) != null) {
                     // Google: we publish this to the STATE change topic in Google... 
                     String reply_topic = this.customizeTopic(this.m_google_cloud_coap_state_topic,ep_name);
-                    boolean status = this.mqtt(ep_name).sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
+                    boolean status = this.mqtt(ep_name).sendMessage(reply_topic, observation, QoS.AT_LEAST_ONCE);
                     if (status == true) {
                         // success
                         this.errorLogger().info("GoogleCloud(CoAP Command): CoAP observation(get) sent. SUCCESS");
@@ -855,7 +855,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                     try {
                         sleep(this.m_jwt_refresh_wait_ms);    // retry
                     }
-                    catch(Exception ex) {
+                    catch(InterruptedException ex) {
                         // silent
                     }
                         
