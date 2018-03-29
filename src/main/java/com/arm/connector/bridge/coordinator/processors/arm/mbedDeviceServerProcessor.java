@@ -1206,10 +1206,10 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         
         // DEBUG
         if (has_device_attributes == true) {
-            this.errorLogger().warning("hasDeviceAttributes: HAS DEVICE ATTRIBUTES: " + endpoint);
+            this.errorLogger().info("hasDeviceAttributes: HAS DEVICE ATTRIBUTES: " + endpoint);
         }
         else {
-            this.errorLogger().warning("hasDeviceAttributes: DOES NOT HAVE DEVICE ATTRIBUTES: " + endpoint);
+            this.errorLogger().info("hasDeviceAttributes: DOES NOT HAVE DEVICE ATTRIBUTES: " + endpoint);
         }
 
         // return our status
