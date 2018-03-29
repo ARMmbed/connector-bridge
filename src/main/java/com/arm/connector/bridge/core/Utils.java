@@ -26,7 +26,6 @@ import com.mbed.lwm2m.DecodingException;
 import com.mbed.lwm2m.EncodingType;
 import com.mbed.lwm2m.LWM2MResource;
 import com.mbed.lwm2m.base64.Base64Decoder;
-import com.mbed.lwm2m.tlv.TLVDecoder;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;

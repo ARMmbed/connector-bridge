@@ -38,7 +38,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
 import com.mbed.lwm2m.LWM2MResource;
-import org.joda.time.DateTime;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
