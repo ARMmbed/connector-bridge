@@ -22,6 +22,11 @@
  */
 package com.arm.connector.bridge.core;
 
+import com.mbed.lwm2m.DecodingException;
+import com.mbed.lwm2m.EncodingType;
+import com.mbed.lwm2m.LWM2MResource;
+import com.mbed.lwm2m.base64.Base64Decoder;
+import com.mbed.lwm2m.tlv.TLVDecoder;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -877,52 +882,6 @@ public class Utils {
         return null;
     }
 
-    // Create a String Array from the TLV
-    public static String[] formatTLVToStringArray(ErrorLogger logger,byte tlv[]) {
-        String tlv_split[] = null;
-   
-        try {
-            if (tlv != null && tlv.length > 0) {
-                // convert to array, removing separators... 
-                StringBuilder buf = new StringBuilder();
-                for (int i = 0; i < tlv.length; ++i) {
-                    if (tlv[i] == 63) {
-                        // make a space
-                        buf.append(" ");
-                    }
-                    else if (Character.isSpaceChar(tlv[i]) || Character.isAlphabetic(tlv[i])) {
-                        buf.append((char) tlv[i]);
-                    }
-                }
-
-                // trim
-                String tlv_str = buf.toString().trim();
-                
-                // DEBUG
-                logger.info("formatTLVToStringArray: TLV: [" + tlv_str + "]");
-
-                // split into an array
-                tlv_split = tlv_str.split(" ");
-
-                // trim array elements
-                for (int i = 0; i < tlv_split.length; ++i) {
-                    tlv_split[i] = tlv_split[i].trim();
-                }
-            }
-            else {
-                // empty TLV byte array
-                logger.info("formatTLVToStringArray:empty TLV provided...ignored (OK).");
-            }
-        }
-        catch (Exception ex) {
-            // exception during processing
-            logger.warning("formatTLVToStringArray: Exception caught during TLV parse: " + ex.getMessage());
-        }
-
-        // return the cleaned up array
-        return tlv_split;
-    }
-
     // ensure that an HTTP response code is in the 200's
     public static boolean httpResponseCodeOK(int code) {
         int check = code - 200;
@@ -1012,5 +971,68 @@ public class Utils {
     public static void whereAmI(ErrorLogger logger) {
         Exception ex = new Exception();
         logger.info("whereAmI: StackTrace",ex);
+    }
+    
+    // TLV Decode to LWM2M Resource list (ARM SDK)
+    public static List<LWM2MResource> tlvDecodeToLWM2MObjectList(ErrorLogger logger,String payload) {
+        List<LWM2MResource> list = null;
+        if (payload != null && payload.length() > 0) {
+            // use the TLV decoder from ARM mbed
+            try {
+                // Get the LWM2MResource instance list
+                list = Base64Decoder.decodeBase64(ByteBuffer.wrap(payload.getBytes()),LWM2MResource.class,EncodingType.TLV);
+                
+                // DEBUG
+                if (list != null) {
+                    // parsed with content
+                    logger.info("tlvDecodeToLWM2MObjectList: list length: " + list.size() + " payload: " + payload);
+                    logger.info("tlvDecodeToLWM2MObjectList: list: " + list);
+                }
+                else {
+                    // empty parse
+                    logger.info("tlvDecodeToLWM2MObjectList: parsed list is EMPTY for payload: " + payload);
+                }
+            }
+            catch (DecodingException ex) {
+                // error in decoding
+                logger.warning("Utils.tlvDecodeToLWM2MObjectList: Exception caught in TLV decode: " + ex.getMessage());
+            }
+        }
+        
+        // return the list of LWM2M objects
+        return list;
+    }
+    
+    // get the specific LWM2M resource instance by resource ID from the list
+    public static LWM2MResource getLWM2MResourceInstanceByResourceID(List<LWM2MResource> list,int id) {
+        LWM2MResource res = null;
+        
+        // loop to find the appropriate LWM2MResource
+        for(int i=0;list != null && res == null && i<list.size();++i) {
+            LWM2MResource tmp = list.get(i);
+            if (tmp.getId().intValue() == id) {
+                res = tmp;
+            }
+        }
+        return res;
+    }
+    
+    // get the specific LWM2M resource value by resource ID from the list
+    public static String getLWM2MResourceValueByResourceID(ErrorLogger logger,List<LWM2MResource> list,int id) {
+        String value = null;
+        
+        LWM2MResource res = Utils.getLWM2MResourceInstanceByResourceID(list,id);
+        if (res != null) {
+            // found the resource... so get the value of it
+            value = res.getStringValue();
+            
+            // DEBUG
+            logger.info("Utils.getLWM2MResourceValueByResourceID: ID: " + id + " Value: " + value);
+        }
+        else {
+            // no such resource ID
+            logger.info("Utils.getLWM2MResourceValueByResourceID: no resource found for ID: " + id);
+        }
+        return value;
     }
 }

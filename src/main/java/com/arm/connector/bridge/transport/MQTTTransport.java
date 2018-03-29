@@ -587,192 +587,198 @@ public class MQTTTransport extends Transport implements GenericSender {
             try {
                 // MQTT endpoint 
                 MQTT endpoint = new MQTT();
-                
-                // set the target URL for our MQTT connection
-                endpoint.setHost(url);
+                if (endpoint != null) {
+                    // set the target URL for our MQTT connection
+                    endpoint.setHost(url);
 
-                // MQTT version
-                if (this.m_mqtt_version != null && this.m_set_mqtt_version == true) {
-                    endpoint.setVersion(this.m_mqtt_version);
-                }
+                    // MQTT version
+                    if (this.m_mqtt_version != null && this.m_set_mqtt_version == true) {
+                        endpoint.setVersion(this.m_mqtt_version);
+                    }
 
-                // SSL Context for secured MQTT connections
-                if (this.m_ssl_context_initialized == true) {
-                    // DEBUG
-                    this.errorLogger().info("MQTTTransport: SSL Used... setting SSL context...");
+                    // SSL Context for secured MQTT connections
+                    if (this.m_ssl_context_initialized == true) {
+                        // DEBUG
+                        this.errorLogger().info("MQTTTransport: SSL Used... setting SSL context...");
 
-                    // SSL Context should be set
-                    endpoint.setSslContext(this.m_ssl_context);
-                }
-                
-                // configure credentials
-                String username = this.getUsername();
-                String pw = this.getPassword();
+                        // SSL Context should be set
+                        endpoint.setSslContext(this.m_ssl_context);
+                    }
 
-                if (username != null && username.length() > 0 && username.equalsIgnoreCase("off") == false) {
-                    endpoint.setUserName(username);
-                    this.errorLogger().info("MQTTTransport: Username: [" + username + "] used");
-                }
-                else {
-                    this.errorLogger().info("MQTTTransport: Anonymous username used");
-                }
-                if (pw != null && pw.length() > 0 && pw.equalsIgnoreCase("off") == false) {
-                    endpoint.setPassword(pw);
-                    this.errorLogger().info("MQTTTransport: pw: [" + pw + "] used");
-                }
-                else {
-                    this.errorLogger().info("MQTTTransport: Anonymous pw used");
-                }
+                    // configure credentials
+                    String username = this.getUsername();
+                    String pw = this.getPassword();
 
-                // Client ID 
-                if (clientID != null && clientID.length() > 0 && clientID.equalsIgnoreCase("off") == false) {
-                    endpoint.setClientId(clientID);
-                    this.errorLogger().info("MQTTTransport: Client ID: [" + clientID + "] used");
-                }
-                else if (clean_session == false) {
-                    if (def_client_id != null && def_client_id.equalsIgnoreCase("off") == false) {
-                        // set a defaulted clientID
-                        endpoint.setClientId(def_client_id);
-                        this.errorLogger().info("MQTTTransport: Client ID (default for clean): [" + def_client_id + "] used");
+                    if (username != null && username.length() > 0 && username.equalsIgnoreCase("off") == false) {
+                        endpoint.setUserName(username);
+                        this.errorLogger().info("MQTTTransport: Username: [" + username + "] used");
                     }
                     else {
-                        // non-clean session specified, but no clientID was given...
-                        this.errorLogger().warning("MQTTTransport: ERROR: Non-clean session requested but no ClientID specified");
+                        this.errorLogger().info("MQTTTransport: Anonymous username used");
                     }
-                }
-                else {
-                    // no client ID used... clean session specified (OK)
-                    this.errorLogger().info("MQTTTransport: No ClientID being used (clean session)");
-                }
-                
-                // set Clean Session...
-                endpoint.setCleanSession(clean_session);
-                
-                // Will Message...
-                String will = this.prefValue("mqtt_will_message", this.m_suffix);
-                if (will != null && will.length() > 0 && will.equalsIgnoreCase("off") == false) {
-                    endpoint.setWillMessage(will);
-                }
-                
-                // Will Topic...
-                String will_topic = this.prefValue("mqtt_will_topic", this.m_suffix);
-                if (will_topic != null && will_topic.length() > 0 && will_topic.equalsIgnoreCase("off") == false) {
-                    endpoint.setWillTopic(will_topic);
-                }
-                
-                // Traffic Class...
-                int trafficClass = this.prefIntValue("mqtt_traffic_class", this.m_suffix);
-                if (trafficClass >= 0) {
-                    endpoint.setTrafficClass(trafficClass);
-                }
-                
-                // Reconnect Attempts...
-                int reconnectAttempts = this.prefIntValue("mqtt_reconnect_retries_max", this.m_suffix);
-                if (reconnectAttempts >= 0) {
-                    endpoint.setReconnectAttemptsMax(reconnectAttempts);
-                }
-                
-                // Reconnect Delay...
-                long reconnectDelay = (long) this.prefIntValue("mqtt_reconnect_delay", this.m_suffix);
-                if (reconnectDelay >= 0) {
-                    endpoint.setReconnectDelay(reconnectDelay);
-                }
-                
-                // Reconnect Max Delay...
-                long reconnectDelayMax = (long) this.prefIntValue("mqtt_reconnect_delay_max", this.m_suffix);
-                if (reconnectDelayMax >= 0) {
-                    endpoint.setReconnectDelayMax(reconnectDelayMax);
-                }
-                
-                // Reconnect back-off multiplier
-                float backoffMultiplier = this.prefFloatValue("mqtt_backoff_multiplier", this.m_suffix);
-                if (backoffMultiplier >= 0) {
-                    endpoint.setReconnectBackOffMultiplier(backoffMultiplier);
-                }
-                
-                // Keep-Alive...
-                short keepAlive = (short) this.prefIntValue("mqtt_keep_alive", this.m_suffix);
-                if (keepAlive >= 0) {
-                    endpoint.setKeepAlive(keepAlive);
-                }
-                
-                // record the ClientID for later...
-                if (endpoint.getClientId() != null) {
-                    this.m_client_id = endpoint.getClientId().toString();
-                }
+                    if (pw != null && pw.length() > 0 && pw.equalsIgnoreCase("off") == false) {
+                        endpoint.setPassword(pw);
+                        this.errorLogger().info("MQTTTransport: pw: [" + pw + "] used");
+                    }
+                    else {
+                        this.errorLogger().info("MQTTTransport: Anonymous pw used");
+                    }
 
-                // OK... now lets try to connect to the broker...
-                try {
-                    // connecting...
-                    this.m_endpoint = endpoint;
-                    this.m_connection = endpoint.blockingConnection();
-                    if (this.m_connection != null) {
-                        // attempt connection
-                        this.m_connection.connect();
+                    // Client ID 
+                    if (clientID != null && clientID.length() > 0 && clientID.equalsIgnoreCase("off") == false) {
+                        endpoint.setClientId(clientID);
+                        this.errorLogger().info("MQTTTransport: Client ID: [" + clientID + "] used");
+                    }
+                    else if (clean_session == false) {
+                        if (def_client_id != null && def_client_id.equalsIgnoreCase("off") == false) {
+                            // set a defaulted clientID
+                            endpoint.setClientId(def_client_id);
+                            this.errorLogger().info("MQTTTransport: Client ID (default for clean): [" + def_client_id + "] used");
+                        }
+                        else {
+                            // non-clean session specified, but no clientID was given...
+                            this.errorLogger().warning("MQTTTransport: ERROR: Non-clean session requested but no ClientID specified");
+                        }
+                    }
+                    else {
+                        // no client ID used... clean session specified (OK)
+                        this.errorLogger().info("MQTTTransport: No ClientID being used (clean session)");
+                    }
+
+                    // set Clean Session...
+                    endpoint.setCleanSession(clean_session);
+
+                    // Will Message...
+                    String will = this.prefValue("mqtt_will_message", this.m_suffix);
+                    if (will != null && will.length() > 0 && will.equalsIgnoreCase("off") == false) {
+                        endpoint.setWillMessage(will);
+                    }
+
+                    // Will Topic...
+                    String will_topic = this.prefValue("mqtt_will_topic", this.m_suffix);
+                    if (will_topic != null && will_topic.length() > 0 && will_topic.equalsIgnoreCase("off") == false) {
+                        endpoint.setWillTopic(will_topic);
+                    }
+
+                    // Traffic Class...
+                    int trafficClass = this.prefIntValue("mqtt_traffic_class", this.m_suffix);
+                    if (trafficClass >= 0) {
+                        endpoint.setTrafficClass(trafficClass);
+                    }
+
+                    // Reconnect Attempts...
+                    int reconnectAttempts = this.prefIntValue("mqtt_reconnect_retries_max", this.m_suffix);
+                    if (reconnectAttempts >= 0) {
+                        endpoint.setReconnectAttemptsMax(reconnectAttempts);
+                    }
+
+                    // Reconnect Delay...
+                    long reconnectDelay = (long) this.prefIntValue("mqtt_reconnect_delay", this.m_suffix);
+                    if (reconnectDelay >= 0) {
+                        endpoint.setReconnectDelay(reconnectDelay);
+                    }
+
+                    // Reconnect Max Delay...
+                    long reconnectDelayMax = (long) this.prefIntValue("mqtt_reconnect_delay_max", this.m_suffix);
+                    if (reconnectDelayMax >= 0) {
+                        endpoint.setReconnectDelayMax(reconnectDelayMax);
+                    }
+
+                    // Reconnect back-off multiplier
+                    float backoffMultiplier = this.prefFloatValue("mqtt_backoff_multiplier", this.m_suffix);
+                    if (backoffMultiplier >= 0) {
+                        endpoint.setReconnectBackOffMultiplier(backoffMultiplier);
+                    }
+
+                    // Keep-Alive...
+                    short keepAlive = (short) this.prefIntValue("mqtt_keep_alive", this.m_suffix);
+                    if (keepAlive >= 0) {
+                        endpoint.setKeepAlive(keepAlive);
+                    }
+
+                    // record the ClientID for later...
+                    if (endpoint.getClientId() != null) {
+                        this.m_client_id = endpoint.getClientId().toString();
+                    }
+
+                    // OK... now lets try to connect to the broker...
+                    try {
+                        // connecting...
+                        this.m_endpoint = endpoint;
+                        this.m_connection = endpoint.blockingConnection();
+                        if (this.m_connection != null) {
+                            // attempt connection
+                            this.m_connection.connect();
+
+                            // sleep for a short bit...
+                            try {
+                                Thread.sleep(sleep_time);
+                            }
+                            catch (InterruptedException ex) {
+                                this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex);
+                            }
+
+                            // check our connection status
+                            this.m_connected = this.m_connection.isConnected();
+
+                            // DEBUG
+                            if (this.m_connected == true) {
+                                this.errorLogger().info("MQTTTransport: Connection to: " + url + " successful");
+                                this.m_connect_host = host;
+                                this.m_connect_port = port;
+                                if (endpoint.getClientId() != null) {
+                                    this.m_client_id = endpoint.getClientId().toString();
+                                }
+                                else {
+                                    this.m_client_id = null;
+                                }
+                                this.m_connect_client_id = this.m_client_id;
+                                this.m_connect_clean_session = clean_session;
+                            }
+                            else {
+                                this.errorLogger().warning("MQTTTransport: Connection to: " + url + " FAILED");
+                            }
+                        }
+                        else {
+                            this.errorLogger().warning("WARNING: MQTT connection instance is NULL. connect() failed");
+                        }
+                    }
+                    catch (Exception ex) {
+                        this.errorLogger().warning("MQTTTransport: Exception during connect()", ex);
+
+                        // DEBUG
+                        this.errorLogger().warning("MQTT: URL: " + url);
+                        this.errorLogger().warning("MQTT: clientID: " + this.m_client_id);
+                        this.errorLogger().warning("MQTT: clean_session: " + clean_session);
+                        if (this.m_debug_creds == true) {
+                            this.errorLogger().warning("MQTT: username: " + this.getUsername());
+                            this.errorLogger().warning("MQTT: password: " + this.getPassword());
+
+                            if (this.m_pki_priv_key != null) {
+                                this.errorLogger().info("MQTT: PRIV: " + this.m_pki_priv_key);
+                            }
+
+                            if (this.m_pki_pub_key != null) {
+                                this.errorLogger().info("MQTT: PUB: " + this.m_pki_pub_key);
+                            }
+                            if (this.m_pki_cert != null) {
+                                this.errorLogger().info("MQTT: CERT: " + this.m_pki_cert);
+                            }
+                        }
 
                         // sleep for a short bit...
                         try {
                             Thread.sleep(sleep_time);
                         }
-                        catch (InterruptedException ex) {
-                            this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex);
+                        catch (InterruptedException ex2) {
+                            this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex2);
                         }
-
-                        // check our connection status
-                        this.m_connected = this.m_connection.isConnected();
-
-                        // DEBUG
-                        if (this.m_connected == true) {
-                            this.errorLogger().info("MQTTTransport: Connection to: " + url + " successful");
-                            this.m_connect_host = host;
-                            this.m_connect_port = port;
-                            if (endpoint.getClientId() != null) {
-                                this.m_client_id = endpoint.getClientId().toString();
-                            }
-                            else {
-                                this.m_client_id = null;
-                            }
-                            this.m_connect_client_id = this.m_client_id;
-                            this.m_connect_clean_session = clean_session;
-                        }
-                        else {
-                            this.errorLogger().warning("MQTTTransport: Connection to: " + url + " FAILED");
-                        }
-                    }
-                    else {
-                        this.errorLogger().warning("WARNING: MQTT connection instance is NULL. connect() failed");
                     }
                 }
-                catch (Exception ex) {
-                    this.errorLogger().warning("MQTTTransport: Exception during connect()", ex);
-
-                    // DEBUG
-                    this.errorLogger().warning("MQTT: URL: " + url);
-                    this.errorLogger().warning("MQTT: clientID: " + this.m_client_id);
-                    this.errorLogger().warning("MQTT: clean_session: " + clean_session);
-                    if (this.m_debug_creds == true) {
-                        this.errorLogger().warning("MQTT: username: " + this.getUsername());
-                        this.errorLogger().warning("MQTT: password: " + this.getPassword());
-
-                        if (this.m_pki_priv_key != null) {
-                            this.errorLogger().info("MQTT: PRIV: " + this.m_pki_priv_key);
-                        }
-
-                        if (this.m_pki_pub_key != null) {
-                            this.errorLogger().info("MQTT: PUB: " + this.m_pki_pub_key);
-                        }
-                        if (this.m_pki_cert != null) {
-                            this.errorLogger().info("MQTT: CERT: " + this.m_pki_cert);
-                        }
-                    }
-                    
-                    // sleep for a short bit...
-                    try {
-                        Thread.sleep(sleep_time);
-                    }
-                    catch (InterruptedException ex2) {
-                        this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex2);
-                    }
+                else {
+                    // cannot create an instance of the MQTT client
+                    this.errorLogger().warning("MQTTTransport(connect): unable to create instance of MQTT client");
+                    this.m_connected = false;
                 }
             }
             catch (URISyntaxException ex) {

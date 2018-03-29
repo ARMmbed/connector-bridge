@@ -202,8 +202,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         
         // DEBUG
         this.errorLogger().info("ProjectID: " + this.m_google_cloud_project_id + 
-                                "Application Name: " + this.m_google_cloud_application_name + 
-                                "Region: " + this.m_google_cloud_region);
+                                " Application Name: " + this.m_google_cloud_application_name + 
+                                " Region: " + this.m_google_cloud_region);
 
         // initialize the topic root
         this.initTopicRoot("google_cloud_topic_root");

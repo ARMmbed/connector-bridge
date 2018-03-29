@@ -68,7 +68,6 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
     private String m_project_path_template = null;
     private String m_project_path = null;
     private String m_device_path_template = null;
-    private String m_registry_id = null;
     private String m_obs_key = null;
     private String m_cmd_key = null; 
     private int m_google_cloud_key_length = 0;
@@ -109,13 +108,13 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         this.m_subscription_manager = subscription_manager;
         
         // ensure that we have a device registry        
-        if (this.initDeviceRegistry(this.m_registry_id,this.m_obs_key,this.m_cmd_key)) {
+        if (this.initDeviceRegistry(this.m_registry_name,this.m_obs_key,this.m_cmd_key)) {
             // DEBUG
-            this.errorLogger().info("Google: device registry exists: " + this.m_registry_id + "... (OK).");
+            this.errorLogger().info("Google: device registry exists: " + this.m_registry_name + "... (OK).");
         }
         else {
             // unable to create the device registry
-            this.errorLogger().critical("Google: CRITICAL Unable to create device registry: " + this.m_registry_id);
+            this.errorLogger().critical("Google: CRITICAL Unable to create device registry: " + this.m_registry_name);
         }
     }
     

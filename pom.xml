@@ -16,6 +16,22 @@
     
     <dependencies>
         <dependency>
+            <groupId>com.arm.mbed.cloud.sdk</groupId>
+            <artifactId>mbed-cloud-sdk</artifactId>
+            <version>1.2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.7.25</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>log4j-over-slf4j</artifactId>
+            <version>1.7.25</version>
+        </dependency>
+        <dependency>
             <groupId>com.codesnippets4all</groupId>
             <artifactId>quick-json</artifactId>
             <version>1.0.4</version>

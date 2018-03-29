@@ -37,6 +37,8 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
+import com.mbed.lwm2m.LWM2MResource;
+import org.joda.time.DateTime;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
@@ -1166,9 +1168,10 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         this.pullDeviceModel(endpoint);
         this.pullDeviceClass(endpoint);
         this.pullDeviceDescription(endpoint);
-        this.pullDeviceFirmwareInfo(endpoint);
         this.pullDeviceHardwareInfo(endpoint);
         this.pullDeviceLocationDescriptionInfo(endpoint);
+        this.pullDeviceCurrentTimeInfo(endpoint);
+        this.pullDeviceTotalMemoryInfo(endpoint);
     }
 
     // determine if a given endpoint actually has device attributes or not... if not, the defaults will be used
@@ -1202,9 +1205,12 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
         
         // DEBUG
-        //if (has_device_attributes == true) {
-        //    this.errorLogger().info("hasDeviceAttributes: HAS ATTRIBUTES: " + endpoint);
-        //}
+        if (has_device_attributes == true) {
+            this.errorLogger().warning("hasDeviceAttributes: HAS DEVICE ATTRIBUTES: " + endpoint);
+        }
+        else {
+            this.errorLogger().warning("hasDeviceAttributes: DOES NOT HAVE DEVICE ATTRIBUTES: " + endpoint);
+        }
 
         // return our status
         return has_device_attributes;
@@ -1250,31 +1256,43 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
     // parse the device attributes
     private Map parseDeviceAttributes(Map response, Map endpoint) {
+        LWM2MResource res = null;
+        
         try {
-            // Parse the payload into a TLV
-            String b64_payload = (String) response.get("payload");
-            byte tlv[] = Utils.decodeCoAPPayload(b64_payload).getBytes();
-
-            // HACK: convert the TLV to a String Array.. 
-            String[] device_attributes = Utils.formatTLVToStringArray(this.errorLogger(),tlv);
+            // Convert the TLV to a LWM2M Resource List...
+            List<LWM2MResource> list = Utils.tlvDecodeToLWM2MObjectList(this.errorLogger(),(String) response.get("payload"));
             
             // DEBUG
-            for(int i=0;device_attributes != null && i<device_attributes.length;++i) {
-                this.errorLogger().info("parseDeviceAttributes: Device Attribute(" + i + ")=[" + device_attributes[i] + "]");
-            }
-
-            // Update the values
-            endpoint.put("meta_mfg", device_attributes[2]);
-            endpoint.put("meta_type", device_attributes[3]);
-            endpoint.put("meta_model", device_attributes[4]);
-            endpoint.put("meta_serial", device_attributes[5]);
-            endpoint.put("meta_firmware", device_attributes[6]);
-            endpoint.put("meta_software", device_attributes[7]);
-            endpoint.put("meta_hardware", device_attributes[8]);
+            //for(int i=0;list != null && i<list.size();++i) {
+            //    res = list.get(i);
+            //    this.errorLogger().info("parseDeviceAttributes: URI: " + 
+            //                            this.m_device_attributes_path + "/" + res.getId().intValue() + " Value: " + res.getStringValue() + "]");
+            //}
+            
+            // /3/0/0
+            endpoint.put("meta_mfg", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,0)); 
+            
+            // /3/0/1
+            endpoint.put("meta_model", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,1));
+            
+            // /3/0/2
+            endpoint.put("meta_serial", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,2));
+            
+            // /3/0/13
+            endpoint.put("meta_time", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,13)); 
+            
+            // /3/0/17
+            endpoint.put("meta_type", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,17)); 
+            
+            // /3/0/18
+            endpoint.put("meta_hardware", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,18)); 
+            
+            // /3/0/21
+            endpoint.put("meta_total_mem", Utils.getLWM2MResourceValueByResourceID(this.errorLogger(),list,21)); 
         }
         catch (Exception ex) {
             // exception during TLV parse... 
-            this.errorLogger().info("parseDeviceAttributes: Error parsing TLV device attributes... using defaults...OK");
+            this.errorLogger().info("parseDeviceAttributes: Error parsing TLV device attributes... using defaults...OK: " + ex.getMessage(),ex);
         }
 
         // return the updated endpoint
@@ -1459,12 +1477,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         endpoint.put("meta_description", "mbed device");
     }
 
-    // pull the device firmware information
-    private void pullDeviceFirmwareInfo(Map endpoint) {
-        //this.m_device_firmware_info_res
-        endpoint.put("meta_firmware", "1.0");
-    }
-
     // pull the device hardware information
     private void pullDeviceHardwareInfo(Map endpoint) {
         //this.m_device_hardware_info_res
@@ -1475,6 +1487,18 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private void pullDeviceLocationDescriptionInfo(Map endpoint) {
         //this.m_device_descriptive_location_res
         endpoint.put("meta_location", "n/a");
+    }
+    
+    // pull the current time from the device
+    private void pullDeviceCurrentTimeInfo(Map endpoint) {
+        //epoc
+        endpoint.put("meta_time",Utils.getUTCTime());  // UTC time
+    }
+    
+    // pull the total device memory information for the device
+    private void pullDeviceTotalMemoryInfo(Map endpoint) {
+        //this.m_device_descriptive_location_res
+        endpoint.put("meta_total_mem", "128K");  // typical min: 128k
     }
     
     // get the last response code
