@@ -707,7 +707,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                         this.m_endpoint = endpoint;
                         this.m_connection = endpoint.blockingConnection();
                         if (this.m_connection != null) {
-                            // attempt connection
+                            // attempt connection (if we have a failure, this.m_connection will go NULL)
                             this.m_connection.connect();
 
                             // sleep for a short bit...
@@ -719,14 +719,17 @@ public class MQTTTransport extends Transport implements GenericSender {
                             }
 
                             // check our connection status
-                            this.m_connected = this.m_connection.isConnected();
-
+                            this.m_connected = false;
+                            if (this.m_connection != null) {
+                                this.m_connected = this.m_connection.isConnected();
+                            }
+                            
                             // DEBUG
                             if (this.m_connected == true) {
                                 this.errorLogger().info("MQTTTransport: Connection to: " + url + " successful");
                                 this.m_connect_host = host;
                                 this.m_connect_port = port;
-                                if (endpoint.getClientId() != null) {
+                                if (endpoint != null && endpoint.getClientId() != null) {
                                     this.m_client_id = endpoint.getClientId().toString();
                                 }
                                 else {
