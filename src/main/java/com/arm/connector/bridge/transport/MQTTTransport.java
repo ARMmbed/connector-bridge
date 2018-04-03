@@ -27,7 +27,6 @@ import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
-import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -834,36 +833,37 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
+        // disconnect()...
+        ++this.m_num_retries;
+        this.disconnect(false);
+        
+        // sleep a bit...
         try {
-            // disconnect()...
-            ++this.m_num_retries;
-            this.disconnect(false);
-
             // sleep a bit
             Thread.sleep(this.m_sleep_time);
-
-            // reconnect()...
-            if (this.reconnect() == true) {
+        }
+        catch(InterruptedException ex2) {
+            // silent
+        }
+        
+        // reconnect()...
+        if (this.reconnect() == true) {
+            // DEBUG
+            this.errorLogger().info("resetConnection: SUCCESS.");
+            
+            // reconnected OK...
+            this.m_num_retries = 0;
+            
+            // resubscribe
+            if (this.m_subscribe_topics != null) {
                 // DEBUG
-                this.errorLogger().info("resetConnection: SUCCESS.");
-
-                // reconnected OK...
-                this.m_num_retries = 0;
-
-                // resubscribe
-                if (this.m_subscribe_topics != null) {
-                    // DEBUG
-                    this.errorLogger().info("resetConnection: SUCCESS. re-subscribing...");
-                    this.subscribe(this.m_subscribe_topics);
-                }
-            }
-            else {
-                // DEBUG
-                this.errorLogger().info("resetConnection: FAILURE num_tries = " + this.m_num_retries);
+                this.errorLogger().info("resetConnection: SUCCESS. re-subscribing...");
+                this.subscribe(this.m_subscribe_topics);
             }
         }
-        catch (InterruptedException ex) {
-            this.errorLogger().info("resetConnection: Exception: " + ex.getMessage(), ex);
+        else {
+            // DEBUG
+            this.errorLogger().info("resetConnection: FAILURE num_tries = " + this.m_num_retries);
         }
     }
 
@@ -970,32 +970,31 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.errorLogger().info("sendMessage(MQTT): message sent. SUCCESS");
                 sent = true;
             }
-            catch (EOFException ex) {
+            catch (Exception ex) {
                 if (this.retriesExceeded()) {
                     // unable to send (EOF) - final
-                    this.errorLogger().critical("sendMessage:EOF on message send... resetting MQTT (final): " + message, ex);
+                    this.errorLogger().critical("sendMessage:Exception in sendMessage... resetting MQTT (final): " + message, ex);
+                    
+                    // disconnect
+                    this.disconnect(false);
                 }
                 else {
                     // unable to send (EOF) - final
-                    this.errorLogger().warning("sendMessage:EOF on message send... resetting MQTT (" + this.m_num_retries + " of " + this.m_max_retries + "): " + message, ex);
+                    this.errorLogger().warning("sendMessage:Exception in sendMessage... resetting MQTT (" + this.m_num_retries + " of " + this.m_max_retries + "): " + message, ex);
 
                     // reset the connection
                     this.resetConnection();
 
                     // resend
                     if (this.m_connection.isConnected() == true) {
-                        this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
+                        this.errorLogger().info("sendMessage: retrying send() afterreconnect....");
                         sent = this.sendMessage(topic, message, qos);
                     }
                     else {
                         // unable to send (not connected)
-                        this.errorLogger().warning("sendMessage: NOT CONNECTED after EOF/reconnect. Unable to send message: " + message);
+                        this.errorLogger().warning("sendMessage: NOT CONNECTED after reconnect. Unable to send message: " + message);
                     }
                 }
-            }
-            catch (Exception ex) {
-                // unable to send (general fault)
-                this.errorLogger().critical("sendMessage: unable to send message: " + message, ex);
             }
         }
         else if (this.m_connection != null && message != null) {
