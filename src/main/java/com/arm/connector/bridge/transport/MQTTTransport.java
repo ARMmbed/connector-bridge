@@ -1042,19 +1042,13 @@ public class MQTTTransport extends Transport implements GenericSender {
     }
 
     // get the next MQTT message
-    private MQTTMessage getNextMessage() {
-        try {
-            if (this.m_connection != null) {
-                MQTTMessage message = new MQTTMessage(this.m_connection.receive());
-                if (message != null) {
-                    message.ack();
-                }
-                return message;
+    private MQTTMessage getNextMessage() throws Exception {
+        if (this.m_connection != null) {
+            MQTTMessage message = new MQTTMessage(this.m_connection.receive());
+            if (message != null) {
+                message.ack();
             }
-        }
-        catch (Exception ex) {
-            // getNextMessage failed
-            this.errorLogger().warning("MQTT: getNextMessage failed with exception: " + ex.getMessage());
+            return message;
         }
         return null;
     }
