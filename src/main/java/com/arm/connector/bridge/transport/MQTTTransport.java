@@ -1050,7 +1050,9 @@ public class MQTTTransport extends Transport implements GenericSender {
             }
             return message;
         }
-        return null;
+        else {
+            throw new Exception();
+        }
     }
 
     /**
