@@ -31,6 +31,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
 
     private boolean m_running = false;
     private Transport m_transport = null;
+    private int m_sleep_time_ms = 0;
     private Transport.ReceiveListener m_listener = null;
 
     /**
@@ -43,6 +44,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
         this.m_transport.setOnReceiveListener(this);
         this.m_running = false;
         this.m_listener = null;
+        this.m_sleep_time_ms = this.m_transport.preferences().intValueOf("mqtt_receive_loop_sleep") * 1000;
     }
 
     /**
@@ -88,14 +90,13 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      */
     @SuppressWarnings("empty-statement")
     private void listenerThreadLoop() {
-        int sleep_time = ((this.m_transport.preferences().intValueOf("mqtt_receive_loop_sleep")) * 1000);
         while (this.m_running && this.m_transport.isConnected() == true) {
             // receive and process...
             this.m_transport.receiveAndProcess();
 
             // sleep for a bit...
             try {
-                Thread.sleep(sleep_time);
+                Thread.sleep(this.m_sleep_time_ms);
             }
             catch (InterruptedException ex) {
                 // silent

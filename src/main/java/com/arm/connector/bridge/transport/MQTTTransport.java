@@ -1042,12 +1042,21 @@ public class MQTTTransport extends Transport implements GenericSender {
     }
 
     // get the next MQTT message
-    private MQTTMessage getNextMessage() throws Exception {
-        MQTTMessage message = new MQTTMessage(this.m_connection.receive());
-        if (message != null) {
-            message.ack();
+    private MQTTMessage getNextMessage() {
+        try {
+            if (this.m_connection != null) {
+                MQTTMessage message = new MQTTMessage(this.m_connection.receive());
+                if (message != null) {
+                    message.ack();
+                }
+                return message;
+            }
         }
-        return message;
+        catch (Exception ex) {
+            // getNextMessage failed
+            this.errorLogger().warning("MQTT: getNextMessage failed with exception: " + ex.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -1069,21 +1078,21 @@ public class MQTTTransport extends Transport implements GenericSender {
             }
             else if (this.m_listener != null) {
                 // no listener
-                this.errorLogger().critical("receiveMessage: Not processing message: " + message + ". Listener is NULL");
+                this.errorLogger().warning("receiveMessage: Not processing message: " + message + ". Listener is NULL");
             }
             else {
-                // no message
-                this.errorLogger().critical("receiveMessage: Not processing NULL message");
+                // no message - just skip
+                this.errorLogger().info("receiveMessage: Not processing NULL message");
             }
         }
         catch (Exception ex) {
             if (this.retriesExceeded()) {
                 // unable to receiveMessage - final
-                this.errorLogger().critical("receiveMessage: unable to receive message (final)", ex);
+                this.errorLogger().warning("receiveMessage: unable to receive message (final)", ex);
             }
             else {
                 // unable to receiveMessage - final
-                this.errorLogger().critical("receiveMessage: unable to receive message (" + this.m_num_retries + " of " + this.m_max_retries + "): " + ex.getMessage(), ex);
+                this.errorLogger().warning("receiveMessage: unable to receive message (" + this.m_num_retries + " of " + this.m_max_retries + "): " + ex.getMessage(), ex);
 
                 // reset the connection
                 this.resetConnection();
