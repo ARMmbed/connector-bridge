@@ -89,6 +89,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     private int m_connect_port = 0;
     private String m_connect_client_id = null;
     private boolean m_connect_clean_session = false;
+    private String m_connect_id = null;
 
     private int m_num_retries = 0;
     private int m_max_retries = 10;
@@ -736,6 +737,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                                 }
                                 this.m_connect_client_id = this.m_client_id;
                                 this.m_connect_clean_session = clean_session;
+                                this.m_connect_id = id;
                             }
                             else {
                                 this.errorLogger().warning("MQTTTransport: Connection to: " + url + " FAILED");
@@ -1139,6 +1141,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         if (clear_creds == true) {
             this.m_connect_host = null;
             this.m_connect_port = 0;
+            this.m_connect_id = null;
             this.m_connect_client_id = null;
             if (this.m_use_x509_auth == true && this.m_keystore_filename != null) {
                 Utils.deleteKeystore(this.errorLogger(), this.m_keystore_filename, this.m_keystore_basename);
@@ -1150,7 +1153,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     private boolean reconnect() {
         if (this.m_connect_host != null) {
             // attempt reconnect with cached creds...
-            return this.connect(this.m_connect_host, this.m_connect_port, this.m_connect_client_id, this.m_connect_clean_session);
+            return this.connect(this.m_connect_host, this.m_connect_port, this.m_connect_client_id, this.m_connect_clean_session,this.m_connect_id);
         }
         else {
             // no initial connect() has succeeded... so no cached creds available
