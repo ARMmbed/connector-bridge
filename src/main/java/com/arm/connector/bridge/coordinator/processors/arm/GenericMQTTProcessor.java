@@ -24,15 +24,20 @@ package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
+import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.data.SerializableHashMap;
 import java.util.HashMap;
+import java.util.Map;
+import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 
 /**
  * Generic MQTT peer processor
@@ -120,11 +125,299 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
             this.m_mqtt_thread_list.put(this.m_default_tr_key, rt);
         }
     }
+    
+    // create an observation JSON
+    protected String createObservation(String verb, String ep_name, String uri, String value) {
+        Map notification = new HashMap<>();
 
+        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
+        if (value != null && value.length() > 0) {
+            notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue(value));
+        }
+        else {
+            notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue("0"));
+        }
+        notification.put("path", uri);
+        notification.put("ep", ep_name);
+
+        // add a new field to denote its a GET
+        notification.put("coap_verb", verb);
+
+        // Unified Format?
+        if (this.unifiedFormatEnabled() == true) {
+            notification.put("resourceId", uri.substring(1)); // strip off leading /
+            notification.put("deviceId", ep_name);
+            if (value != null) {
+                notification.put("payload", Base64.encodeBase64String(value.getBytes()));  // Base64 Encoded payload
+            }
+            else {
+                notification.put("payload", Base64.encodeBase64String("0".getBytes()));    // Base64 Encoded payload
+            }
+            notification.put("method", verb.toUpperCase()); // VERB is upper case
+        }
+
+        // we will send the raw CoAP JSON... 
+        String coap_raw_json = this.jsonGenerator().generateJson(notification);
+
+        // strip off []...
+        String observation_json = this.stripArrayChars(coap_raw_json);
+
+
+        // DEBUG
+        this.errorLogger().info("CoAP notification(" + verb + " REPLY): " + observation_json);
+
+        // return observation JSON
+        return observation_json;
+    }
+    
+    // default formatter for AsyncResponse replies
+    @Override
+    public String formatAsyncResponseAsReply(Map async_response, String verb) {
+        // DEBUG
+        this.errorLogger().info("MQTT(" + verb + ") AsyncResponse: ID: " + async_response.get("id") + " response: " + async_response);
+
+        if (verb != null && verb.equalsIgnoreCase("GET") == true) {
+            try {
+                // DEBUG
+                this.errorLogger().info("MQTT: CoAP AsyncResponse for GET: " + async_response);
+
+                // get the payload from the ith entry
+                String payload = (String) async_response.get("payload");
+                if (payload != null) {
+                    // trim 
+                    payload = payload.trim();
+
+                    // parse if present
+                    if (payload.length() > 0) {
+                        // Base64 decode
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
+
+                        // DEBUG
+                        this.errorLogger().info("MQTT: Created(" + verb + ") GET observation: " + message);
+
+                        // return the message
+                        return message;
+                    }
+                }
+            }
+            catch (Exception ex) {
+                // Error in creating the observation message from the AsyncResponse GET reply... 
+                this.errorLogger().warning("MQTT(GET): Exception in formatAsyncResponseAsReply(): ", ex);
+            }
+        }
+
+        // Handle AsyncReplies that are CoAP PUTs
+        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
+            try {
+                // check to see if we have a payload or not... 
+                String payload = (String) async_response.get("payload");
+                if (payload != null) {
+                    // trim 
+                    payload = payload.trim();
+
+                    // parse if present
+                    if (payload.length() > 0) {
+                        // Base64 decode
+                        String value = Utils.decodeCoAPPayload(payload);
+
+                        // build out the response
+                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
+                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
+
+                        // build out the observation
+                        String message = this.createObservation(verb, ep_name, uri, value);
+
+                        // DEBUG
+                        this.errorLogger().info("MQTT: Created(" + verb + ") PUT Observation: " + message);
+
+                        // return the message
+                        return message;
+                    }
+                }
+                else {
+                    // no payload... so we simply return the async-id
+                    String value = (String) async_response.get("async-id");
+
+                    // build out the response
+                    String uri = this.getURIFromAsyncID((String) async_response.get("id"));
+                    String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
+
+                    // build out the observation
+                    String message = this.createObservation(verb, ep_name, uri, value);
+
+                    // DEBUG
+                    this.errorLogger().info("MQTT: Created(" + verb + ") PUT Observation: " + message);
+
+                    // return message
+                    return message;
+                }
+            }
+            catch (Exception ex) {
+                // Error in creating the observation message from the AsyncResponse PUT reply... 
+                this.errorLogger().warning("MQTT(PUT): Exception in formatAsyncResponseAsReply(): ", ex);
+            }
+        }
+
+        // return null message
+        return null;
+    }
+    
+    // subscribe to the GoogleCloud MQTT topics
+    protected void subscribe_to_topics(String ep_name, Topic topics[]) {
+        this.mqtt(ep_name).subscribe(topics);
+    }
+
+    // does this endpoint already have registered subscriptions?
+    protected boolean hasSubscriptions(String ep_name) {
+        try {
+            if (this.m_endpoints.get(ep_name) != null) {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
+                if (topic_data != null && topic_data.size() > 0) {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex) {
+            //silent
+        }
+        return false;
+    }
+    
+    // create endpoint topic data
+    protected HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
+        // base class is empty
+        return null;
+    }
+    
+    // register topics for CoAP commands
+    protected void subscribe(String ep_name, String ep_type,HashMap<String, Object> topic_data,ConnectionCreator cc) {
+        if (ep_name != null && this.validateMQTTConnection(cc, ep_name, ep_type)) {
+            // DEBUG
+            this.orchestrator().errorLogger().info("MQTT: Subscribing to CoAP command topics for endpoint: " + ep_name + " type: " + ep_type);
+            try {
+                if (topic_data != null) {
+                    // get,put,post,delete enablement
+                    this.m_endpoints.remove(ep_name);
+                    this.m_endpoints.put(ep_name, topic_data);
+                    this.setEndpointTypeFromEndpointName(ep_name, ep_type);
+                    cc.subscribe_to_topics(ep_name, (Topic[]) topic_data.get("topic_list"));
+                }
+                else {
+                    // unable to register as topic data is NULL
+                    this.orchestrator().errorLogger().warning("MQTT: GET/PUT/POST/DELETE topic data NULL. Unable to subscribe(): ep_name: " + ep_name + " ept: " + ep_type);
+                }
+            }
+            catch (Exception ex) {
+                this.orchestrator().errorLogger().warning("MQTT: Exception in subscribe for " + ep_name + " : " + ex.getMessage(),ex);
+            }
+        }
+        else if (ep_name != null) {
+            // unable to validate the MQTT connection
+            this.orchestrator().errorLogger().warning("MQTT: Unable to validate MQTT connection. Unable to subscribe(): ep_name: " + ep_name + " ept: " + ep_type);
+        }
+        else {
+            // NULL endpoint name
+            this.orchestrator().errorLogger().warning("MQTT: NULL Endpoint name in subscribe()... ignoring...");
+        }
+    }
+    
+    // validate the MQTT Connection
+    protected synchronized boolean validateMQTTConnection(ConnectionCreator cc,String ep_name, String ep_type) {
+        if (cc != null) {
+            // create a MQTT connection via the connector validator
+            return cc.createAndStartMQTTForEndpoint(ep_name, ep_type);
+        }
+        else {
+            // invalid params
+            this.errorLogger().critical("MQTT: validateMQTTConnection(). Unable to call createAndStartMQTTForEndpoint() as ConnectionCreator parameter is NULL");
+        }
+        return false;
+    }
+    
+    // un-register topics for CoAP commands
+    protected boolean unsubscribe(String ep_name) {
+        boolean unsubscribed = false;
+        if (ep_name != null && this.mqtt(ep_name) != null) {
+            // DEBUG
+            this.orchestrator().errorLogger().info("MQTT: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
+            try {
+                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
+                if (topic_data != null) {
+                    // unsubscribe...
+                    this.mqtt(ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
+                }
+                else {
+                    // not in subscription list (OK)
+                    this.orchestrator().errorLogger().info("MQTT: Endpoint: " + ep_name + " not in subscription list (OK).");
+                    unsubscribed = true;
+                }
+            }
+            catch (Exception ex) {
+                this.orchestrator().errorLogger().info("MQTT: Exception in unsubscribe for " + ep_name + " : " + ex.getMessage());
+            }
+        }
+        else if (this.mqtt(ep_name) != null) {
+            this.orchestrator().errorLogger().info("v: NULL Endpoint name... ignoring unsubscribe()...");
+            unsubscribed = true;
+        }
+        else {
+            this.orchestrator().errorLogger().info("MQTT: No MQTT connection for " + ep_name + "... ignoring unsubscribe()...");
+            unsubscribed = true;
+        }
+
+        // clean up
+        if (ep_name != null) {
+            this.m_endpoints.remove(ep_name);
+        }
+
+        // return the unsubscribe status
+        return unsubscribed;
+    }
+
+    // discover the endpoint attributes
+    protected void retrieveEndpointAttributes(Map endpoint,AsyncResponseProcessor arp) {
+        // DEBUG
+        this.errorLogger().info("MQTT: Creating New Device: " + endpoint);
+
+        // pre-populate the new endpoint with initial values for registration
+        this.orchestrator().pullDeviceMetadata(endpoint, arp);
+    }
+    
     // create our MQTT-based authentication hash
     @Override
     public String createAuthenticationHash() {
         return this.mqtt().createAuthenticationHash();
+    }
+    
+    // disconnect
+    protected void disconnect(String ep_name) {
+        if (this.isConnected(ep_name)) {
+            this.mqtt(ep_name).disconnect(true);
+        }
+        this.remove(ep_name);
+    }
+    
+    // are we connected (indexed by ep_name)
+    protected boolean isConnected(String ep_name) {
+        if (this.mqtt(ep_name) != null) {
+            return this.mqtt(ep_name).isConnected();
+        }
+        return false;
+    }
+    
+    // are we connected (non-indexed)
+    protected boolean isConnected() {
+        if (this.mqtt() != null) {
+            return this.mqtt().isConnected();
+        }
+        return false;
     }
     
     // start our MQTT listener

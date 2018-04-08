@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.ibm;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -33,7 +34,6 @@ import com.arm.connector.bridge.core.Transport;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 
@@ -42,7 +42,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     private String m_mqtt_ip_address = null;
     private String m_watson_iot_observe_notification_topic = null;
     private String m_watson_iot_coap_cmd_topic_get = null;
@@ -204,7 +204,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             }
 
             // invoke a GET to get the resource information for this endpoint... we will upsert the Metadata when it arrives
-            this.retrieveEndpointAttributes(endpoint);
+            this.retrieveEndpointAttributes(endpoint,this);
         }
     }
     
@@ -322,11 +322,18 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     @Override
     public String getReplyTopic(String ep_name, String ep_type, String def) {
         String val = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_key, this.m_cmd_response_key);
-        //this.errorLogger().warning("REPLY TOPIC DOUG: " + val);
+        //this.errorLogger().warning("Watson IoT: REPLY TOPIC: " + val);
         return val;
     }
+    
+    // ConnectionCreator
+    @Override 
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+        // Watson IoT uses a shared MQTT connection for all endpoints... its already setup... so just return true
+        return true;
+    }
 
-    // OVERRIDE: Connection to WatsonIoT vs. stock MQTT...
+    // OVERRIDE: Connection to Watson IoT vs. stock MQTT...
     @Override
     protected boolean connectMQTT() {
         // if not connected attempt
@@ -356,10 +363,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
     // OVERRIDE: (Listening) Topics for WatsonIoT vs. stock MQTT...
     @Override
-    @SuppressWarnings("empty-statement")
     protected void subscribeToMQTTTopics() {
-        // do nothing... WatsonIoT will have "listenable" topics for the CoAP verbs via the CMD event type...
-        ;
+        // unused: WatsonIoT will have "listenable" topics for the CoAP verbs via the CMD event type...
     }
 
     // legacy mode
@@ -392,8 +397,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         return this.m_client_id_template + domain.substring(0, length);  // 12 digits only of the domain
     }
 
-    // create the endpoint WatsonIoT topic data
-    private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
+    // Watson IoT: create the endpoint WatsonIoT topic data
+    @Override
+    protected HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
         HashMap<String, Object> topic_data = null;
         if (this.m_watson_iot_coap_cmd_topic_get != null) {
             Topic[] list = new Topic[NUM_COAP_VERBS];
@@ -433,11 +439,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
     }
 
     // subscribe to the WatsonIoT MQTT topics
-    private void subscribe_to_topics(Topic topics[]) {
-        // (4/7/16): OFF
-        // this.mqtt().subscribe(topics);
-
-        // (4/7/16): subscribe to each topic individually
+    @Override
+    public void subscribe_to_topics(String ep_name, Topic topics[]) {
+        // subscribe to each topic individually
         for (int i = 0; i < topics.length; ++i) {
             Topic[] single_topic = new Topic[1];
             single_topic[0] = topics[i];
@@ -445,50 +449,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
     }
 
-    // does this endpoint already have registered subscriptions?
-    private boolean hasSubscriptions(String ep_name) {
-        try {
-            if (this.m_endpoints.get(ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
-                if (topic_data != null && topic_data.size() > 0) {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ex) {
-            //silent
-        }
-        return false;
-    }
-
-    // register topics for CoAP commands
-    private void subscribe(String ep_name, String ep_type) {
-        if (ep_name != null) {
-            // DEBUG
-            this.orchestrator().errorLogger().info("Watson IoT: Subscribing to CoAP command topics for endpoint: " + ep_name);
-            try {
-                this.setEndpointTypeFromEndpointName(ep_name, ep_type);
-                HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
-                if (topic_data != null) {
-                    // get,put,post,delete enablement
-                    this.m_endpoints.put(ep_name, topic_data);
-                    this.subscribe_to_topics((Topic[]) topic_data.get("topic_list"));
-                }
-                else {
-                    this.orchestrator().errorLogger().warning("Watson IoT: GET/PUT/POST/DELETE topic data NULL. GET/PUT/POST/DELETE disabled");
-                }
-            }
-            catch (Exception ex) {
-                this.orchestrator().errorLogger().info("Watson IoT: Exception in subscribe for " + ep_name + " : " + ex.getMessage());
-            }
-        }
-        else {
-            this.orchestrator().errorLogger().info("Watson IoT: NULL Endpoint name in subscribe()... ignoring...");
-        }
-    }
-
-    // un-register topics for CoAP commands
-    private boolean unsubscribe(String ep_name) {
+    // Watson IoT Specific: un-register topics for CoAP commands
+    @Override
+    protected boolean unsubscribe(String ep_name) {
         boolean do_register = false;
         if (ep_name != null) {
             // DEBUG
@@ -496,7 +459,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
             try {
                 HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
                 if (topic_data != null) {
-                    // unsubscribe...
+                    // unsubscribe...(Watson IoT specific MQTT handle...)
                     this.mqtt().unsubscribe((String[]) topic_data.get("topic_string_list"));
                 }
                 else {
@@ -607,44 +570,16 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         }
     }
 
-    // create an observation JSON as a response to a GET request...
-    private String createObservation(String verb, String ep_name, String uri, String value) {
-        Map notification = new HashMap<>();
-
-        // Create the prototype-compatible version of the notification
-        if (value != null && value.length() > 0) {
-            notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue(value));
-        }
-        else {
-            notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue("0"));
-        }
-        notification.put("path", uri);
-        notification.put("ep", ep_name);
-        notification.put("coap_verb", verb);
-
-        if (this.legacyBridge() == false) {
-            // add compatibility with the production version of IBM's Connector Bridge
-            notification.put("resourceId", uri.substring(1));                        // strip leading "/" off of the URI...
-            notification.put("deviceId", ep_name);                                   // ep
-            if (value != null) {
-                notification.put("payload", Base64.encodeBase64String(value.getBytes()));  // Base64 Encoded payload
-            }
-            else {
-                notification.put("payload", Base64.encodeBase64String("0".getBytes()));    // Base64 Encoded payload
-            }
-            notification.put("method", verb.toUpperCase());                          // verb (upper case)
-        }
-
-        // we will send the raw CoAP JSON... WatsonIoT can parse that... 
-        String coap_raw_json = this.jsonGenerator().generateJson(notification);
-
-        // strip off []...
-        String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-
-        // encapsulate into a coap/device packet...
-        String iotf_coap_json = coap_json_stripped;
+    // Watson IoT Specific: create an observation JSON as a response to a GET request...
+    @Override
+    protected String createObservation(String verb, String ep_name, String uri, String value) {
+        // use the base class to create the observation
+        String base_observation_json = super.createObservation(verb, ep_name, uri, value);
+        
+        // encapsulate into a Watson IoT compatible observation...
+        String iotf_coap_json = base_observation_json;
         if (this.m_watson_iot_device_data_key != null && this.m_watson_iot_device_data_key.length() > 0) {
-            iotf_coap_json = "{ \"" + this.m_watson_iot_device_data_key + "\":" + coap_json_stripped + "}";
+            iotf_coap_json = "{ \"" + this.m_watson_iot_device_data_key + "\":" + base_observation_json + "}";
         }
 
         // DEBUG
@@ -652,105 +587,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
         // return the WatsonIoT-specific observation JSON...
         return iotf_coap_json;
-    }
-
-    // default formatter for AsyncResponse replies
-    @Override
-    public String formatAsyncResponseAsReply(Map async_response, String verb) {
-        // DEBUG
-        this.errorLogger().info("Watson IoT(" + verb + ") AsyncResponse: " + async_response);
-
-        if (verb != null && verb.equalsIgnoreCase("GET") == true) {
-            try {
-                // DEBUG
-                this.errorLogger().info("Watson IoT: CoAP AsyncResponse for GET: " + async_response);
-
-                // get the payload from the ith entry
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("Watson IoT: Created(" + verb + ") GET observation: " + message);
-
-                        // return the message
-                        return message;
-                    }
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("Watson IoT(GET): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
-        }
-
-        // Handle AsyncReplies that are CoAP PUTs
-        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
-            try {
-                // check to see if we have a payload or not... 
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("Watson IoT: Created(" + verb + ") PUT Observation: " + message);
-
-                        // return the message
-                        return message;
-                    }
-                }
-                else {
-                    // no payload... so we simply return the async-id
-                    String value = (String) async_response.get("async-id");
-
-                    // build out the response
-                    String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                    String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                    // build out the observation
-                    String message = this.createObservation(verb, ep_name, uri, value);
-
-                    // DEBUG
-                    this.errorLogger().info("Watson IoT: Created(" + verb + ") PUT Observation: " + message);
-
-                    // return message
-                    return message;
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse PUT reply... 
-                this.errorLogger().warning("Watson IoT(PUT): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
-        }
-
-        // return null message
-        return null;
     }
 
     // process new device registration
@@ -784,15 +620,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
         return true;
     }
 
-    // discover the endpoint attributes
-    private void retrieveEndpointAttributes(Map endpoint) {
-        // DEBUG
-        this.errorLogger().info("Watson IoT: Creating New Device: " + endpoint);
-
-        // pre-populate the new endpoint with initial values for registration
-        this.orchestrator().pullDeviceMetadata(endpoint, this);
-    }
-
     // complete processing of adding the new device
     private void completeNewDeviceRegistration(Map endpoint) {
         try {
@@ -807,21 +634,15 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Tran
 
         try {
             // subscribe for WatsonIoT as well..
+            String ep_name = (String) endpoint.get("ep");
+            String ep_type = (String) endpoint.get("ept");
             this.errorLogger().info("Watson IoT: completeNewDeviceRegistration: calling subscribe(): " + endpoint);
-            this.subscribe((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+            this.subscribe(ep_name,ep_type,this.createEndpointTopicData(ep_name, ep_type),this);
             this.errorLogger().info("Watson IoT: completeNewDeviceRegistration: subscribe() completed");
         }
         catch (Exception ex) {
             this.errorLogger().warning("Watson IoT: completeNewDeviceRegistration: caught exception in registerNewDevice(): " + endpoint, ex);
         }
-    }
-    
-    // are we connected
-    private boolean isConnected() {
-        if (this.mqtt() != null) {
-            return this.mqtt().isConnected();
-        }
-        return false;
     }
     
     // get the endpoint name from the MQTT topic

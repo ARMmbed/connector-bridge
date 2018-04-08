@@ -25,6 +25,7 @@ package com.arm.connector.bridge.coordinator.processors.google;
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
@@ -55,7 +56,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 
@@ -64,7 +64,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     // Google Cloud IoT notifications get published to this topic:  /devices/{deviceID}/events
     private static String GOOGLE_CLOUDIOT_EVENT_TAG = "events";
     
@@ -281,7 +281,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             }
 
             // invoke a GET to get the resource information for this endpoint... we will upsert the Metadata when it arrives
-            this.retrieveEndpointAttributes(endpoint);
+            this.retrieveEndpointAttributes(endpoint,this);
         }
     }
 
@@ -394,32 +394,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             }
         }
     }
-
-    // create the endpoint GoogleCloud topic data
-    private HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
-        HashMap<String, Object> topic_data = null;
-        
-        // these will be topics that we SUBSCRIBE to... hence CONFIG only for Google Cloud IoT
-        if (this.m_google_cloud_coap_config_topic != null) {
-            // config topic is the only one to listen on for Google
-            Topic[] list = new Topic[1];
-            String[] config_topic_str = { this.customizeTopic(this.m_google_cloud_coap_config_topic,ep_name) };
-            list[0] = new Topic(config_topic_str[0], QoS.AT_LEAST_ONCE);
-            topic_data = new HashMap<>();
-            topic_data.put("topic_list", list);
-            topic_data.put("topic_string_list", config_topic_str);
-            topic_data.put("ep_type", ep_type);
-        }
-        return topic_data;
-    }
-
-    // final customization of our MQTT Topic...
-    private String customizeTopic(String topic, String ep_name) {
-        String cust_topic = topic.replace("__EPNAME__",this.m_google_cloud_gw_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
-        return cust_topic;
-    }
-
-    // CoAP command handler - processes CoAP commands coming over MQTT channel
+    
+    // GoogleCloud Specific: CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
     public void onMessageReceive(String topic, String message) {
         // DEBUG
@@ -494,7 +470,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
                 // send the observation (a GET reply)...
                 if (this.mqtt(ep_name) != null) {
-                    // Google: we publish this to the STATE change topic in Google... 
+                    // GoogleCloud Specific: we publish this to the STATE change topic in Google... 
                     String reply_topic = this.customizeTopic(this.m_google_cloud_coap_state_topic,ep_name);
                     boolean status = this.mqtt(ep_name).sendMessage(reply_topic, observation, QoS.AT_LEAST_ONCE);
                     if (status == true) {
@@ -514,232 +490,29 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         }
     }
 
-    // create an observation JSON as a response to a GET request...
-    private String createObservation(String verb, String ep_name, String uri, String value) {
-        Map notification = new HashMap<>();
-
-        // needs to look like this:  {"path":"/303/0/5700","payload":"MjkuNzU\u003d","max-age":"60","ep":"350e67be-9270-406b-8802-dd5e5f20","value":"29.75"}    
-        notification.put("value", this.fundamentalTypeDecoder().getFundamentalValue(value));
-        notification.put("path", uri);
-        notification.put("ep", ep_name);
-
-        // add a new field to denote its a GET
-        notification.put("coap_verb", verb);
-
-        // Unified Format?
-        if (this.unifiedFormatEnabled() == true) {
-            notification.put("resourceId", uri);
-            notification.put("deviceId", ep_name);
-            if (value != null) {
-                notification.put("payload", Base64.encodeBase64String(value.getBytes()));  // Base64 Encoded payload
-            }
-            else {
-                notification.put("payload", Base64.encodeBase64String("0".getBytes()));    // Base64 Encoded payload
-            }
-            notification.put("method", verb);
-        }
-
-        // we will send the raw CoAP JSON... GoogleCloud can parse that... 
-        String coap_raw_json = this.jsonGenerator().generateJson(notification);
-
-        // strip off []...
-        String coap_json_stripped = this.stripArrayChars(coap_raw_json);
-
-        // encapsulate into a coap/device packet...
-        String google_cloud_gw_coap_json = coap_json_stripped;
-
-        // DEBUG
-        this.errorLogger().info("GoogleCloud: CoAP notification(" + verb + " REPLY): " + google_cloud_gw_coap_json);
-
-        // return the GoogleCloud-specific observation JSON...
-        return google_cloud_gw_coap_json;
-    }
-
-    // default formatter for AsyncResponse replies
+    // Google Cloud: create the endpoint GoogleCloud topic data
     @Override
-    public String formatAsyncResponseAsReply(Map async_response, String verb) {
-        // DEBUG
-        this.errorLogger().info("GoogleCloud(" + verb + ") AsyncResponse: ID: " + async_response.get("id") + " response: " + async_response);
-
-        if (verb != null && verb.equalsIgnoreCase("GET") == true) {
-            try {
-                // DEBUG
-                this.errorLogger().info("GoogleCloud: CoAP AsyncResponse for GET: " + async_response);
-
-                // get the payload from the ith entry
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("GoogleCloud: Created(" + verb + ") GET observation: " + message);
-
-                        // return the message
-                        return message;
-                    }
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse GET reply... 
-                this.errorLogger().warning("GoogleCloud(GET): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
+    protected HashMap<String, Object> createEndpointTopicData(String ep_name, String ep_type) {
+        HashMap<String, Object> topic_data = null;
+        
+        // these will be topics that we SUBSCRIBE to... hence CONFIG only for Google Cloud IoT
+        if (this.m_google_cloud_coap_config_topic != null) {
+            // config topic is the only one to listen on for Google
+            Topic[] list = new Topic[1];
+            String[] config_topic_str = { this.customizeTopic(this.m_google_cloud_coap_config_topic,ep_name) };
+            list[0] = new Topic(config_topic_str[0], QoS.AT_LEAST_ONCE);
+            topic_data = new HashMap<>();
+            topic_data.put("topic_list", list);
+            topic_data.put("topic_string_list", config_topic_str);
+            topic_data.put("ep_type", ep_type);
         }
-
-        // Handle AsyncReplies that are CoAP PUTs
-        if (verb != null && verb.equalsIgnoreCase("PUT") == true) {
-            try {
-                // check to see if we have a payload or not... 
-                String payload = (String) async_response.get("payload");
-                if (payload != null) {
-                    // trim 
-                    payload = payload.trim();
-
-                    // parse if present
-                    if (payload.length() > 0) {
-                        // Base64 decode
-                        String value = Utils.decodeCoAPPayload(payload);
-
-                        // build out the response
-                        String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                        String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                        // build out the observation
-                        String message = this.createObservation(verb, ep_name, uri, value);
-
-                        // DEBUG
-                        this.errorLogger().info("GoogleCloud: Created(" + verb + ") PUT Observation: " + message);
-
-                        // return the message
-                        return message;
-                    }
-                }
-                else {
-                    // no payload... so we simply return the async-id
-                    String value = (String) async_response.get("async-id");
-
-                    // build out the response
-                    String uri = this.getURIFromAsyncID((String) async_response.get("id"));
-                    String ep_name = this.getEndpointNameFromAsyncID((String) async_response.get("id"));
-
-                    // build out the observation
-                    String message = this.createObservation(verb, ep_name, uri, value);
-
-                    // DEBUG
-                    this.errorLogger().info("GoogleCloud: Created(" + verb + ") PUT Observation: " + message);
-
-                    // return message
-                    return message;
-                }
-            }
-            catch (Exception ex) {
-                // Error in creating the observation message from the AsyncResponse PUT reply... 
-                this.errorLogger().warning("GoogleCloud(PUT): Exception in formatAsyncResponseAsReply(): ", ex);
-            }
-        }
-
-        // return null message
-        return null;
+        return topic_data;
     }
 
-    // subscribe to the GoogleCloud MQTT topics
-    private void subscribe_to_topics(String ep_name, Topic topics[]) {
-        this.mqtt(ep_name).subscribe(topics);
-    }
-
-    // does this endpoint already have registered subscriptions?
-    private boolean hasSubscriptions(String ep_name) {
-        try {
-            if (this.m_endpoints.get(ep_name) != null) {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
-                if (topic_data != null && topic_data.size() > 0) {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ex) {
-            //silent
-        }
-        return false;
-    }
-
-    // register topics for CoAP commands
-    private void subscribe(String ep_name, String ep_type) {
-        if (ep_name != null && this.validateMQTTConnection(ep_name, ep_type)) {
-            // DEBUG
-            this.orchestrator().errorLogger().info("GoogleCloud: Subscribing to CoAP command topics for endpoint: " + ep_name + " type: " + ep_type);
-            try {
-                HashMap<String, Object> topic_data = this.createEndpointTopicData(ep_name, ep_type);
-                if (topic_data != null) {
-                    // get,put,post,delete enablement
-                    this.m_endpoints.remove(ep_name);
-                    this.m_endpoints.put(ep_name, topic_data);
-                    this.setEndpointTypeFromEndpointName(ep_name, ep_type);
-                    this.subscribe_to_topics(ep_name, (Topic[]) topic_data.get("topic_list"));
-                }
-                else {
-                    this.orchestrator().errorLogger().warning("GoogleCloud: GET/PUT/POST/DELETE topic data NULL. GET/PUT/POST/DELETE disabled");
-                }
-            }
-            catch (Exception ex) {
-                this.orchestrator().errorLogger().info("GoogleCloud: Exception in subscribe for " + ep_name + " : " + ex.getMessage());
-            }
-        }
-        else {
-            this.orchestrator().errorLogger().info("GoogleCloud: NULL Endpoint name in subscribe()... ignoring...");
-        }
-    }
-
-    // un-register topics for CoAP commands
-    private boolean unsubscribe(String ep_name) {
-        boolean unsubscribed = false;
-        if (ep_name != null && this.mqtt(ep_name) != null) {
-            // DEBUG
-            this.orchestrator().errorLogger().info("GoogleCloud: Un-Subscribing to CoAP command topics for endpoint: " + ep_name);
-            try {
-                HashMap<String, Object> topic_data = (HashMap<String, Object>) this.m_endpoints.get(ep_name);
-                if (topic_data != null) {
-                    // unsubscribe...
-                    this.mqtt(ep_name).unsubscribe((String[]) topic_data.get("topic_string_list"));
-                }
-                else {
-                    // not in subscription list (OK)
-                    this.orchestrator().errorLogger().info("GoogleCloud: Endpoint: " + ep_name + " not in subscription list (OK).");
-                    unsubscribed = true;
-                }
-            }
-            catch (Exception ex) {
-                this.orchestrator().errorLogger().info("GoogleCloud: Exception in unsubscribe for " + ep_name + " : " + ex.getMessage());
-            }
-        }
-        else if (this.mqtt(ep_name) != null) {
-            this.orchestrator().errorLogger().info("GoogleCloud: NULL Endpoint name... ignoring unsubscribe()...");
-            unsubscribed = true;
-        }
-        else {
-            this.orchestrator().errorLogger().info("GoogleCloud: No MQTT connection for " + ep_name + "... ignoring unsubscribe()...");
-            unsubscribed = true;
-        }
-
-        // clean up
-        if (ep_name != null) {
-            this.m_endpoints.remove(ep_name);
-        }
-
-        // return the unsubscribe status
-        return unsubscribed;
+    // final customization of our MQTT Topic...
+    private String customizeTopic(String topic, String ep_name) {
+        String cust_topic = topic.replace("__EPNAME__",this.m_google_cloud_gw_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
+        return cust_topic;
     }
 
     // process new device registration
@@ -757,7 +530,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
             // if successful, validate (i.e. add...) an MQTT Connection
             if (success == true) {
-                this.validateMQTTConnection((String) message.get("ep"), (String) message.get("ept"));
+                this.validateMQTTConnection(this, (String) message.get("ep"), (String) message.get("ept"));
             }
 
             // return status
@@ -928,7 +701,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
     }
 
     // add a MQTT transport for a given endpoint - this is how MS GoogleCloud MQTT integration works... 
-    private synchronized void createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+    @Override
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+        boolean connected = false;
         try {
             // we may already have a connection established for this endpoint... if so, we just ignore...
             if (this.mqtt(ep_name) == null) {
@@ -972,6 +747,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
                             GoogleJwTRefresherThread jwt_refresher = new GoogleJwTRefresherThread(this,ep_name);
                             this.m_jwt_refesher_thread_list.put(ep_name,jwt_refresher);
                             jwt_refresher.start();
+                            
+                            // we are connected
+                            connected = true;
                         }
                         else {
                             // unable to connect!
@@ -999,12 +777,22 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
             else {
                 // already connected... just ignore
                 this.errorLogger().info("GoogleCloud: already have connection for " + ep_name + " (OK)");
+                connected = true;
             }
         }
         catch (IOException ex) {
             // exception caught... capture and note the stack trace
             this.errorLogger().critical("GoogleCloud: createAndStartMQTTForEndpoint(): exception: " + ex.getMessage() + " endpoint: " + ep_name, ex);
         }
+        
+        // return the connected status
+        return connected;
+    }
+    
+    // OVERRIDE: subscirption to topics
+    @Override
+    public void subscribe_to_topics(String ep_name, Topic topics[]) {
+        super.subscribe_to_topics(ep_name, topics);
     }
     
     // AsyncResponse response processor
@@ -1061,15 +849,6 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         return ep_type;
     }
 
-    // discover the endpoint attributes
-    private void retrieveEndpointAttributes(Map endpoint) {
-        // DEBUG
-        this.errorLogger().info("GoogleCloud: Requesting Device Metadata for: " + endpoint);
-
-        // pre-populate the new endpoint with initial values for registration
-        this.orchestrator().pullDeviceMetadata(endpoint, this);
-    }
-
     // complete processing of adding the new device
     private void completeNewDeviceRegistration(Map endpoint) {
         try {
@@ -1084,22 +863,15 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
 
         try {
             // subscribe for GoogleCloud as well..
+            String ep_name = (String) endpoint.get("ep");
+            String ep_type = (String) endpoint.get("ept");
             this.errorLogger().info("completeNewDeviceRegistration: calling subscribe(): " + endpoint);
-            this.subscribe((String) endpoint.get("ep"), (String) endpoint.get("ept"));
+            this.subscribe(ep_name,ep_type,this.createEndpointTopicData(ep_name, ep_type),this);
             this.errorLogger().info("completeNewDeviceRegistration: subscribe() completed");
         }
         catch (Exception ex) {
             this.errorLogger().warning("completeNewDeviceRegistration: caught exception in subscribe(): " + endpoint, ex);
         }
-    }
-    
-    // validate the MQTT Connection
-    private synchronized boolean validateMQTTConnection(String ep_name, String ep_type) {
-        // create a MQTT connection for this endpoint... 
-        this.createAndStartMQTTForEndpoint(ep_name, ep_type);
-
-        // return our connection status
-        return this.isConnected(ep_name);
     }
     
     // Connection to GoogleCloud MQTT vs. generic MQTT...
@@ -1133,36 +905,18 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Tr
         return this.isConnected(ep_name);
     }
     
-    // are we connected
-    private boolean isConnected(String ep_name) {
-        if (this.mqtt(ep_name) != null) {
-            return this.mqtt(ep_name).isConnected();
-        }
-        return false;
-    }
-    
-    // disconnect
-    private void disconnect(String ep_name) {
-        if (this.isConnected(ep_name)) {
-            this.mqtt(ep_name).disconnect(true);
-        }
-        this.remove(ep_name);
-    }
-    
     // OVERRIDE: initListener() needs to accomodate a MQTT connection for each endpoint
     @Override
     @SuppressWarnings("empty-statement")
     public void initListener() {
-        // do nothing...
-        ;
+        // unused
     }
 
     // OVERRIDE: stopListener() needs to accomodate a MQTT connection for each endpoint
     @Override
     @SuppressWarnings("empty-statement")
     public void stopListener() {
-        // do nothing...
-        ;
+        // unused
     }
     
     // create our CloudIoT instance
