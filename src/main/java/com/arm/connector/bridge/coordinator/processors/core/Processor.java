@@ -46,6 +46,9 @@ public class Processor extends BaseClass {
     // EXPERIMENTAL: bulk subscriptions
     protected boolean m_enable_bulk_subscriptions = false;
     
+    // Sync lock
+    private boolean m_operation_pending = false;
+    
     // constructor
     public Processor(Orchestrator orchestrator, String suffix) {
         super(orchestrator.errorLogger(), orchestrator.preferences());
@@ -66,6 +69,28 @@ public class Processor extends BaseClass {
         if (this.m_enable_bulk_subscriptions == true) {
             this.errorLogger().info("Bulk subscriptions ENABLED (EXPERIMENTAL)");
         }
+        
+        // unlock
+        this.operationStop();
+    }
+    
+    // Lock 
+    public synchronized boolean operationStart() {
+        if (this.m_operation_pending == false) {
+            this.m_operation_pending = true;
+            return true;
+        }
+        return false;
+    }
+    
+    // Pending?
+    public synchronized boolean operationPending() {
+        return this.m_operation_pending;
+    }
+    
+    // Unlock
+    public synchronized void operationStop() {
+        this.m_operation_pending = false;
     }
     
     // jsonParser is broken with empty strings... so we have to fill them in with spaces.. 

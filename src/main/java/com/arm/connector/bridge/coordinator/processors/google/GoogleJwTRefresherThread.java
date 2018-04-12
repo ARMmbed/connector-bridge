@@ -23,7 +23,6 @@
 package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.core.ErrorLogger;
-import com.arm.connector.bridge.core.Transport;
 
 /**
  *
@@ -34,12 +33,14 @@ public class GoogleJwTRefresherThread extends Thread {
     private boolean m_running = false;
     private long m_wait_between_refresh_ms = 0;
     private String m_ep_name = null;
+    private long m_wait_for_lock = 0;
     
     // Constructor
     GoogleJwTRefresherThread(GoogleCloudMQTTProcessor processor,String ep_name) {
         this.m_processor = processor;
         this.m_ep_name = ep_name;
         this.m_wait_between_refresh_ms = this.m_processor.getJwTRefreshIntervalInSeconds() * 1000;
+        this.m_wait_for_lock = this.m_processor.waitForLockTime();        
     }
     
     /**
@@ -80,11 +81,26 @@ public class GoogleJwTRefresherThread extends Thread {
                 // sleep until we need to refresh our JwT
                 Thread.sleep(this.m_wait_between_refresh_ms);
                 
+                // wait until the processor is idle
+                while(this.m_processor.operationStart() == false) {
+                    // continue sleeping until we have a lock on the processor
+                    try {
+                        Thread.sleep(this.m_wait_for_lock);
+                    }
+                    catch(InterruptedException ex) {
+                        // silent
+                    }
+                }
+                
                 // DEBUG
                 this.errorLogger().info("GoogleJwTRefresherThread: Refreshing JwT for: " + this.m_ep_name);
-                
+
                 // now refresh our token
                 this.m_processor.refreshJwTForEndpoint(this.m_ep_name);
+                
+                // UNLOCK
+                this.m_processor.operationStop();
+                
             }
             catch (InterruptedException ex) {
                 // silent

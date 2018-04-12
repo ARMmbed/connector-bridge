@@ -269,7 +269,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         return null;
     }
     
-    // subscribe to the GoogleCloud MQTT topics
+    // subscribe MQTT Topics
     protected void subscribe_to_topics(String ep_name, Topic topics[]) {
         this.mqtt(ep_name).subscribe(topics);
     }
@@ -477,32 +477,44 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
     // add a MQTT transport instance
     protected void addMQTTTransport(String id, MQTTTransport mqtt) {
-        this.m_mqtt.put(id, mqtt);
+        if (this.m_mqtt != null) {
+            this.m_mqtt.remove(id);
+            this.m_mqtt.put(id, mqtt);
+        }
     }
 
     // initialize the MQTT transport instance list
     protected void initMQTTTransportList() {
         this.closeMQTTTransportList();
-        this.m_mqtt.clear();
+        if (this.m_mqtt != null) {
+            this.m_mqtt.clear();
+        }
     }
 
     // PROTECTED: get the MQTT transport for the default clientID
     protected MQTTTransport mqtt() {
-        return this.mqtt(this.m_client_id); // clientID is default "id"
+        if (this.m_mqtt != null) {
+            return this.mqtt(this.m_client_id); // clientID is default "id"
+        }
+        return null;
     }
 
     // PROTECTED: get the MQTT transport for a given clientID
     protected MQTTTransport mqtt(String id) {
-        return this.m_mqtt.get(id);
+        if (this.m_mqtt != null) {
+            return this.m_mqtt.get(id);
+        }
+        return null;
     }
 
     // PROTECTED: remove MQTT Transport for a given clientID
     protected void remove(String id) {
-        this.m_mqtt.remove(id);
+        if (this.m_mqtt != null) {
+            this.m_mqtt.remove(id);
+        }
     }
 
     // close the tranports in the list
-    @SuppressWarnings("empty-statement")
     private void closeMQTTTransportList() {
         for (String key : this.m_mqtt.keySet()) {
             try {
@@ -515,7 +527,6 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
             }
             catch (Exception ex) {
                 // silent
-                ;
             }
         }
     }

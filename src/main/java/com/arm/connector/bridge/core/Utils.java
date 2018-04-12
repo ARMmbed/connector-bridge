@@ -716,7 +716,7 @@ public class Utils {
                 logger.info("createKeystore: keystore created:  " + keystore_filename);
             }
             else {
-                logger.warning("createKeystore: keystore already exists " + keystore_filename);
+                logger.info("createKeystore: keystore already exists " + keystore_filename);
             }
 
             // store data into the keystore

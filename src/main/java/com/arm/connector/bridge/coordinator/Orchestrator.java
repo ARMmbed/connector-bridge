@@ -34,7 +34,6 @@ import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProc
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.aws.AWSIoTPeerProcessorFactory;
-import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudMQTTProcessor;
 import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudPeerProcessorFactory;
 
 // Core
