@@ -69,9 +69,17 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      * disconnect
      */
     public void disconnect() {
-        if (this.m_transport != null) {
+        this.halt();
+        if (this.m_transport != null && this.m_transport.isConnected() == true) {
             this.m_transport.disconnect();
         }
+    }
+    
+    /**
+     * Halt Loop
+     */
+    public void halt() {
+        this.m_running = false;
     }
 
     /**

@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
@@ -42,7 +43,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements ReconnectionInterface, ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     private String m_mqtt_ip_address = null;
     private String m_watson_iot_observe_notification_topic = null;
     private String m_watson_iot_coap_cmd_topic_get = null;
@@ -657,5 +658,11 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Conn
     public String getCoAPVerbFromTopic(String topic) {
         // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
         return this.getTopicElement(topic, 6);
+    }
+
+    // ReconnectionInterface
+    @Override
+    public void startListenerThread(String ep_name, MQTTTransport mqtt) {
+        // listener threads not used for Watson IoT
     }
 }

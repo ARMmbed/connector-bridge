@@ -38,6 +38,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 
 /**
  * Generic MQTT peer processor
@@ -62,7 +63,9 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
     // Factory method for initializing the Sample 3rd Party peer
     public static GenericMQTTProcessor createPeerProcessor(Orchestrator manager, HttpTransport http) {
-        return new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
+        MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+        GenericMQTTProcessor proc = new GenericMQTTProcessor(manager, mqtt, http);
+        return proc;
     }
     
     // constructor (singleton)
@@ -528,6 +531,15 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
             catch (Exception ex) {
                 // silent
             }
+        }
+    }
+
+    // ReconnectionInterface: reconnection sequence requested
+    public void finishReconnection(String ep_name,String ep_type,MQTTTransport mqtt,ReconnectionInterface ri) {
+        if (ri != null) {
+            // start a listener thread...
+            this.errorLogger().info("finishReconnection: connected to MQTT. Starting a new listener thread...");
+            ri.startListenerThread(ep_name, mqtt);
         }
     }
 }

@@ -22,6 +22,7 @@
  */
 package com.arm.connector.bridge.core;
 
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 
 /**
@@ -36,6 +37,7 @@ public abstract class Transport extends BaseClass {
     private final PreferenceManager m_preference_manager = null;
     protected Object m_endpoint = null;
     protected Transport.ReceiveListener m_listener = null;
+    protected ReconnectionInterface m_reconnector = null;
 
     // ReceiveListener class for Transport callback event processing
     public interface ReceiveListener {
@@ -54,10 +56,20 @@ public abstract class Transport extends BaseClass {
      *
      * @param error_logger
      * @param preference_manager
+     * @param reconnector
      */
-    public Transport(ErrorLogger error_logger, PreferenceManager preference_manager) {
+    public Transport(ErrorLogger error_logger, PreferenceManager preference_manager, ReconnectionInterface reconnector) {
         super(error_logger, preference_manager);
         this.m_connected = false;
+        this.setReconnectionProvider(reconnector);
+    }
+    
+    /**
+     * set the reconnection provider
+     * @param reconnector
+     */
+    public void setReconnectionProvider(ReconnectionInterface reconnector) {
+        this.m_reconnector = reconnector;
     }
 
     /**

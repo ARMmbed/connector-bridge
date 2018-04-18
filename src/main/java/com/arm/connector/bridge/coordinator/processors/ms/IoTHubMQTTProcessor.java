@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
@@ -43,7 +44,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements ReconnectionInterface, ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     private int m_num_coap_topics = 1;                                  // # of MQTT Topics for CoAP verbs in IoTHub implementation
     private String m_iot_hub_observe_notification_topic = null;
     private String m_iot_hub_coap_cmd_topic_base = null;
@@ -771,6 +772,26 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Connect
         return cust_topic;
     }
     
+    // start our listener thread
+    @Override
+    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
+        // IOTHUB DeviceID Prefix
+        String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+        
+        // ensure we only have 1 thread/endpoint
+        if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
+            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
+            listener.halt();
+            this.m_mqtt_thread_list.remove(iothub_ep_name);
+        }
+        
+        // create and start the listener
+        TransportReceiveThread listener = new TransportReceiveThread(mqtt);
+        listener.setOnReceiveListener(this);
+        this.m_mqtt_thread_list.put(iothub_ep_name, listener);
+        listener.start();
+    }
+    
     // IoTHub Specific: add a MQTT transport for a given endpoint - this is how MS IoTHub MQTT integration works... 
     @Override
     public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
@@ -781,63 +802,62 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Connect
 
         if (this.mqtt(iothub_ep_name) == null) {
             // create a new MQTT Transport instance
-            MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+            MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
+            if (mqtt != null) {
+                // set the additional endpoint details
+                mqtt.setEndpointDetails(ep_name, ep_type);
 
-            // MQTT username is based upon the device ID (endpoint_name)
-            String username = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_username", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name).replace("__EPNAME__", iothub_ep_name);
-            
-            // add a version tag per: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
-            username = username + "/" + this.m_iot_hub_version_tag;
-            
-            // set the creds for the IoTHub MQTT Transport instance
-            mqtt.setClientID(iothub_ep_name);
-            mqtt.setUsername(username);
-            mqtt.setPassword(this.m_iot_hub_device_manager.createMQTTPassword(iothub_ep_name));
+                // MQTT username is based upon the device ID (endpoint_name)
+                String username = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_username", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name).replace("__EPNAME__", iothub_ep_name);
 
-            // IoTHub only works with SSL... 
-            mqtt.useSSLConnection(true);
-            
-            // but DONT initialize the SSL context with self signed certs/keys
-            mqtt.noSelfSignedCertsOrKeys(true);
+                // add a version tag per: https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support
+                username = username + "/" + this.m_iot_hub_version_tag;
 
-            // add it to the list indexed by the endpoint name... not the clientID...
-            this.addMQTTTransport(iothub_ep_name, mqtt);
+                // set the creds for the IoTHub MQTT Transport instance
+                mqtt.setClientID(iothub_ep_name);
+                mqtt.setUsername(username);
+                mqtt.setPassword(this.m_iot_hub_device_manager.createMQTTPassword(iothub_ep_name));
 
-            // DEBUG
-            this.errorLogger().info("IoTHub: connecting to MQTT for endpoint: " + iothub_ep_name + " type: " + ep_type + "...");
+                // IoTHub only works with SSL... 
+                mqtt.useSSLConnection(true);
 
-            // connect and start listening... 
-            if (this.connect(iothub_ep_name) == true) {
+                // but DONT initialize the SSL context with self signed certs/keys
+                mqtt.noSelfSignedCertsOrKeys(true);
+
+                // add it to the list indexed by the endpoint name... not the clientID...
+                this.addMQTTTransport(iothub_ep_name, mqtt);
+
                 // DEBUG
-                this.errorLogger().info("IoTHub: connected to MQTT. Creating and registering listener Thread for endpoint: " + iothub_ep_name + " type: " + ep_type);
+                this.errorLogger().info("IoTHub: connecting to MQTT for endpoint: " + iothub_ep_name + " type: " + ep_type + "...");
 
-                // ensure we only have 1 thread/endpoint
-                if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
-                    TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
-                    listener.disconnect();
-                    this.m_mqtt_thread_list.remove(iothub_ep_name);
+                // connect and start listening... 
+                if (this.connect(iothub_ep_name) == true) {
+                    // DEBUG
+                    this.errorLogger().info("IoTHub: connected to MQTT. Creating and registering listener Thread for endpoint: " + iothub_ep_name + " type: " + ep_type);
+
+                    // start the listener thread
+                    this.startListenerThread(ep_name, mqtt);
+
+                    // we are connected
+                    connected = true;
                 }
+                else {
+                    // unable to connect!
+                    this.errorLogger().critical("IoTHub: Unable to connect to MQTT for endpoint: " + iothub_ep_name + " type: " + ep_type);
+                    this.remove(iothub_ep_name);
 
-                // create and start the listener
-                TransportReceiveThread listener = new TransportReceiveThread(mqtt);
-                listener.setOnReceiveListener(this);
-                this.m_mqtt_thread_list.put(iothub_ep_name, listener);
-                listener.start();
-                
-                // we are connected
-                connected = true;
+                    // ensure we only have 1 thread/endpoint
+                    if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
+                        TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
+                        listener.halt();
+                        this.m_mqtt_thread_list.remove(iothub_ep_name);
+                    }
+                }
             }
             else {
-                // unable to connect!
-                this.errorLogger().critical("IoTHub: Unable to connect to MQTT for endpoint: " + iothub_ep_name + " type: " + ep_type);
-                this.remove(iothub_ep_name);
-
-                // ensure we only have 1 thread/endpoint
-                if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
-                    TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
-                    listener.disconnect();
-                    this.m_mqtt_thread_list.remove(iothub_ep_name);
-                }
+                // unable to allocate MQTT transport
+                this.errorLogger().critical("IoTHub: CRITICAL: Unable to allocate MQTT transport... ERROR");
+                connected = false;
             }
         }
         else {

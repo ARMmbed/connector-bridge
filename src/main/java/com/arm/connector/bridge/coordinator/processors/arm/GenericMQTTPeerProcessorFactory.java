@@ -50,19 +50,22 @@ public class GenericMQTTPeerProcessorFactory extends BasePeerProcessorFactory im
             for (int i = 0; i < config.length; ++i) {
                 if (config[i].equalsIgnoreCase("std") == true) {
                     manager.errorLogger().info("Registering Generic MQTT processor...");
-                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, mqtt, "" + i, http);
                     me.addProcessor(p);
                 }
                 if (config[i].equalsIgnoreCase("std-d") == true) {
                     manager.errorLogger().info("Registering Generic MQTT processor (default)...");
-                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+                    GenericMQTTProcessor p = new GenericMQTTProcessor(manager, mqtt, "" + i, http);
                     me.addProcessor(p, true);
                 }
             }
         }
         else {
             manager.errorLogger().info("Registering Generic MQTT processor (singleton)...");
-            GenericMQTTProcessor p = new GenericMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
+            MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+            GenericMQTTProcessor p = new GenericMQTTProcessor(manager, mqtt, http);
             me.addProcessor(p);
         }
 

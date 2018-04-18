@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
@@ -64,7 +65,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements ReconnectionInterface, ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     // Google Cloud IoT notifications get published to this topic:  /devices/{deviceID}/events
     private static String GOOGLE_CLOUDIOT_EVENT_TAG = "events";
     
@@ -675,8 +676,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Co
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
                     
                     // create a new MQTT connection
-                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
                     if (mqtt != null) {
+                        // record the additional endpoint details
+                        mqtt.setEndpointDetails(ep_name, this.getEndpointTypeFromEndpointName(ep_name));
+                        
                         // add it to the list indexed by the endpoint name... not the clientID...
                         this.addMQTTTransport(ep_name, mqtt);
 
@@ -737,8 +741,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Co
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
                     
                     // create a new MQTT connection
-                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
                     if (mqtt != null) {
+                        // record the additional endpoint details
+                        mqtt.setEndpointDetails(ep_name, this.getEndpointTypeFromEndpointName(ep_name));
+                        
                         // add it to the list indexed by the endpoint name... not the clientID...
                         this.addMQTTTransport(ep_name, mqtt);
 
@@ -815,11 +822,12 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Co
     }
     
     // start our listener thread
-    private void startListenerThread(String ep_name,MQTTTransport mqtt) {
+    @Override
+    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
         // ensure we only have 1 thread/endpoint
         if (this.m_mqtt_thread_list.get(ep_name) != null) {
             TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-            listener.disconnect();
+            listener.halt();
             this.m_mqtt_thread_list.remove(ep_name);
         }
 
@@ -841,8 +849,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Co
                 HashMap<String, Serializable> ep = this.m_google_cloud_gw_device_manager.getEndpointDetails(ep_name);
                 if (ep != null) {
                     // create a new MQTT Transport instance for our endpoint
-                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
-                    if (mqtt != null) {                        
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
+                    if (mqtt != null) {
+                        // record the additional endpoint details
+                        mqtt.setEndpointDetails(ep_name, ep_type);
+                        
                         // ClientID creation for Google Cloud MQTT
                         String client_id = this.createGoogleCloudMQTTclientID(ep_name);
                         
@@ -877,7 +888,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Co
                             // ensure we only have 1 thread/endpoint
                             if (this.m_mqtt_thread_list.get(ep_name) != null) {
                                 TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                                listener.disconnect();
+                                listener.halt();
                                 this.m_mqtt_thread_list.remove(ep_name);
                             }
                         }

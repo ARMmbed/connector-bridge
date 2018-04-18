@@ -27,6 +27,7 @@ import com.arm.connector.bridge.coordinator.Orchestrator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
@@ -44,7 +45,7 @@ import org.fusesource.mqtt.client.Topic;
  *
  * @author Doug Anson
  */
-public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
+public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements ReconnectionInterface, ConnectionCreator, Transport.ReceiveListener, PeerInterface, AsyncResponseProcessor {
     private String m_aws_iot_observe_notification_topic = null;
     private String m_aws_iot_coap_cmd_topic_get = null;
     private String m_aws_iot_coap_cmd_topic_put = null;
@@ -436,6 +437,23 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Connect
         }
         return true;
     }
+    
+    // start our listener thread
+    @Override
+    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
+        // ensure we only have 1 thread/endpoint
+        if (this.m_mqtt_thread_list.get(ep_name) != null) {
+            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
+            listener.halt();
+            this.m_mqtt_thread_list.remove(ep_name);
+        }
+
+        // create and start the listener
+        TransportReceiveThread listener = new TransportReceiveThread(mqtt);
+        listener.setOnReceiveListener(this);
+        this.m_mqtt_thread_list.put(ep_name, listener);
+        listener.start();
+    }
 
     // add a MQTT transport for a given endpoint - this is how MS AWSIoT MQTT integration works... 
     @Override
@@ -448,8 +466,11 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Connect
                 HashMap<String, Serializable> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
                 if (ep != null) {
                     // create a new MQTT Transport instance for our endpoint
-                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences());
+                    MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
                     if (mqtt != null) {
+                        // record the additional endpoint details
+                        mqtt.setEndpointDetails(ep_name, ep_type);
+                        
                         // AWSIoT has X.509 Certs/Keys that we must pre-plumb
                         mqtt.prePlumbTLSCertsAndKeys((String)ep.get("PrivateKey"),(String)ep.get("PublicKey"),(String)ep.get("certificatePem"),(String)ep.get("thingName"));
 
@@ -470,18 +491,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Connect
                             // DEBUG
                             this.errorLogger().info("AWSIoT: connected to MQTT. Creating and registering listener Thread for endpoint: " + ep_name + " type: " + ep_type);
 
-                            // ensure we only have 1 thread/endpoint
-                            if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                                listener.disconnect();
-                                this.m_mqtt_thread_list.remove(ep_name);
-                            }
-
-                            // create and start the listener
-                            TransportReceiveThread listener = new TransportReceiveThread(mqtt);
-                            listener.setOnReceiveListener(this);
-                            this.m_mqtt_thread_list.put(ep_name, listener);
-                            listener.start();
+                            // start the listener thread
+                            this.startListenerThread(ep_name, mqtt);
                             
                             // we are connected
                             connected = true;
@@ -494,7 +505,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Connect
                             // ensure we only have 1 thread/endpoint
                             if (this.m_mqtt_thread_list.get(ep_name) != null) {
                                 TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                                listener.disconnect();
+                                listener.halt();
                                 this.m_mqtt_thread_list.remove(ep_name);
                             }
                         }

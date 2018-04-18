@@ -23,6 +23,7 @@
 package com.arm.connector.bridge.transport;
 
 import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
+import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
@@ -123,18 +124,23 @@ public class MQTTTransport extends Transport implements GenericSender {
     
     // Debug X.509 Auth Creds
     private boolean m_debug_creds = false;
+    
+    // connection details
+    private String m_ep_name = null;
+    private String m_ep_type = null;
 
     /**
      * Instance Factory
      *
      * @param error_logger
      * @param preference_manager
+     * @param reconnector
      * @return
      */
-    public static Transport getInstance(ErrorLogger error_logger, PreferenceManager preference_manager) {
+    public static Transport getInstance(ErrorLogger error_logger, PreferenceManager preference_manager,ReconnectionInterface reconnector) {
         if (MQTTTransport.m_self == null) // create our MQTT transport
         {
-            MQTTTransport.m_self = new MQTTTransport(error_logger, preference_manager);
+            MQTTTransport.m_self = new MQTTTransport(error_logger,preference_manager,reconnector);
         }
         return MQTTTransport.m_self;
     }
@@ -145,9 +151,10 @@ public class MQTTTransport extends Transport implements GenericSender {
      * @param error_logger
      * @param preference_manager
      * @param suffix
+     * @param reconnector
      */
-    public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager, String suffix) {
-        super(error_logger, preference_manager);
+    public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager, String suffix, ReconnectionInterface reconnector) {
+        super(error_logger, preference_manager,reconnector);
         this.m_use_x509_auth = false;
         this.m_use_ssl_connection = false;
         this.m_ssl_context = null;
@@ -190,9 +197,10 @@ public class MQTTTransport extends Transport implements GenericSender {
      *
      * @param error_logger
      * @param preference_manager
+     * @param reconnector
      */
-    public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager) {
-        super(error_logger, preference_manager);
+    public MQTTTransport(ErrorLogger error_logger, PreferenceManager preference_manager,ReconnectionInterface reconnector) {
+        super(error_logger, preference_manager,reconnector);
         this.m_use_x509_auth = false;
         this.m_use_ssl_connection = false;
         this.m_ssl_context = null;
@@ -228,6 +236,12 @@ public class MQTTTransport extends Transport implements GenericSender {
             // default the keystore pw
             this.m_keystore_pw = MQTTTransport.KEYSTORE_PW_DEFAULT;
         }
+    }
+    
+    // record additional endpoint details
+    public void setEndpointDetails(String ep_name,String ep_type) {
+        this.m_ep_name = ep_name;
+        this.m_ep_type = ep_type;
     }
 
     // disable/enable setting of MQTT version
@@ -599,7 +613,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                     // SSL Context for secured MQTT connections
                     if (this.m_ssl_context_initialized == true) {
                         // DEBUG
-                        this.errorLogger().info("MQTTTransport: SSL Used... setting SSL context...");
+                        this.errorLogger().warning("MQTTTransport: SSL Used... setting SSL context...");
 
                         // SSL Context should be set
                         endpoint.setSslContext(this.m_ssl_context);
@@ -726,7 +740,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                             
                             // DEBUG
                             if (this.m_connected == true) {
-                                this.errorLogger().info("MQTTTransport: Connection to: " + url + " successful");
+                                this.errorLogger().warning("MQTTTransport: Connection to: " + url + " successful");
                                 this.m_connect_host = host;
                                 this.m_connect_port = port;
                                 if (endpoint != null && endpoint.getClientId() != null) {
@@ -836,41 +850,69 @@ public class MQTTTransport extends Transport implements GenericSender {
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
         // disconnect()...
-        ++this.m_num_retries;
-        this.disconnect(false);
+        this.disconnect();
         
-        // sleep a bit...
-        try {
-            // sleep a bit
-            Thread.sleep(this.m_sleep_time);
-        }
-        catch(InterruptedException ex2) {
-            // silent
-        }
+        // start the reconnection sequence...
+        boolean connected = false;
         
-        // reconnect()...
-        if (this.reconnect() == true) {
-            // DEBUG
-            this.errorLogger().info("resetConnection: SUCCESS.");
-            
-            // reconnected OK...
-            this.m_num_retries = 0;
-            
-            // resubscribe
-            if (this.m_subscribe_topics != null) {
-                // DEBUG
-                this.errorLogger().info("resetConnection: SUCCESS. re-subscribing...");
-                this.subscribe(this.m_subscribe_topics);
+        // loop until we connect or exceed retries...
+        while(!connected && retriesExceeded() == false) {
+            // sleep a bit...
+            try {
+                // sleep a bit
+                Thread.sleep(this.m_sleep_time);
             }
-        }
-        else {
+            catch(InterruptedException ex2) {
+                // silent
+            }
+        
+            // increment # retries
+            ++this.m_num_retries;
+            
             // DEBUG
-            this.errorLogger().info("resetConnection: FAILURE num_tries = " + this.m_num_retries);
+            this.errorLogger().warning("resetConnection: Attempting to reconnect() MQTT... (" + this.m_num_retries + ")");
+            
+            // attempt connection
+            if (this.reconnect() == true) {
+                // DEBUG
+                this.errorLogger().warning("resetConnection: reconnect() SUCCESS!! Checking if we need to re-subscribe()...");
+
+                // resubscribe
+                if (this.m_subscribe_topics != null) {
+                    // DEBUG
+                    this.errorLogger().warning("resetConnection: SUCCESS. re-subscribe() to topics...");
+                    this.subscribe(this.m_subscribe_topics);
+
+                    // if resubscribed... let the peers finish any reconnection accounting
+                    if (this.m_reconnector != null) {
+                        // let the peer finish reconnection accounting
+                        this.errorLogger().warning("resetConnection: SUCCESS. Calling peer to finish reconnect()...");
+                        this.m_reconnector.finishReconnection(this.m_ep_name,this.m_ep_type,this,this.m_reconnector);
+
+                        // DEBUG
+                        this.errorLogger().warning("resetConnection: SUCCESS. Peer has finished reconnect(). SUCCESS");
+                    }
+                    else {
+                        // no reconnection needed
+                        this.errorLogger().warning("resetConnection: SUCCESS. No reconnector registered... OK.");
+                    }
+                }
+                
+                // reconnected OK...
+                this.m_num_retries = 0;
+                
+                // we are connected
+                connected = true;
+            }
+            else {
+                // DEBUG
+                this.errorLogger().warning("resetConnection: MQTT reconnect() FAILED.");
+            }
         }
     }
 
     // have we exceeded our retry count?
-    private Boolean retriesExceeded() {
+    private boolean retriesExceeded() {
         return (this.m_num_retries >= this.m_max_retries);
     }
 
@@ -978,7 +1020,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                     this.errorLogger().critical("sendMessage:Exception in sendMessage... resetting MQTT (final): " + message, ex);
                     
                     // disconnect
-                    this.disconnect(false);
+                    this.disconnect(true);
                 }
                 else {
                     // unable to send (EOF) - final
@@ -1157,7 +1199,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         }
         else {
             // no initial connect() has succeeded... so no cached creds available
-            this.errorLogger().info("reconnect: unable to reconnect() prior to initial connect() success...");
+            this.errorLogger().critical("MQTT: reconnect: unable to reconnect() prior to initial connect(). ERROR");
             return false;
         }
     }

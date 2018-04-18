@@ -52,12 +52,16 @@ public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory impl
             for (int i = 0; i < config.length; ++i) {
                 if (iotf_enabled == true && config[i].equalsIgnoreCase("iotf") == true) {
                     manager.errorLogger().info("Registering Watson IoT MQTT processor...");
-                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(),null);
+                    WatsonIoTMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, mqtt, "" + i, http);
+                    mqtt.setReconnectionProvider(p);
                     me.addProcessor(p);
                 }
                 if (iotf_enabled == true && config[i].equalsIgnoreCase("iotf-d") == true) {
                     manager.errorLogger().info("Registering Watson IoT MQTT processor (default)...");
-                    GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), "" + i, http);
+                    MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+                    WatsonIoTMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, mqtt, "" + i, http);
+                    mqtt.setReconnectionProvider(p);
                     me.addProcessor(p, true);
                 }
             }
@@ -66,7 +70,9 @@ public class WatsonIoTPeerProcessorFactory extends BasePeerProcessorFactory impl
         {
             if (iotf_enabled == true) {
                 manager.errorLogger().info("Registering Watson IoT MQTT processor (singleton)...");
-                GenericMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, new MQTTTransport(manager.errorLogger(), manager.preferences()), http);
+                MQTTTransport mqtt = new MQTTTransport(manager.errorLogger(), manager.preferences(), null);
+                WatsonIoTMQTTProcessor p = new WatsonIoTMQTTProcessor(manager, mqtt, http);
+                mqtt.setReconnectionProvider(p);
                 me.addProcessor(p);
             }
         }
