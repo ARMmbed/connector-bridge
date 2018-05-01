@@ -32,6 +32,7 @@ import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +64,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     private boolean m_watson_legacy_bridge = false;
 
     // WatsonIoT Device Manager
-    private WatsonIoTDeviceManager m_watson_iot_device_manager = null;
+    private WatsonIoTDeviceManager m_device_manager = null;
 
     // constructor (singleton)
     public WatsonIoTMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
@@ -137,12 +138,12 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         this.m_client_id = this.createWatsonIoTClientID(this.m_mds_domain);
 
         // Watson IoT Device Manager - will initialize and upsert our WatsonIoT bindings/metadata
-        this.m_watson_iot_device_manager = new WatsonIoTDeviceManager(this.orchestrator().errorLogger(),this.orchestrator().preferences(),this.m_suffix,http,this.orchestrator());
-        this.m_watson_iot_device_manager.updateWatsonIoTBindings(this.m_watson_iot_org_id, this.m_watson_iot_org_key);
-        this.m_watson_iot_api_key = this.m_watson_iot_device_manager.updateUsernameBinding(this.m_watson_iot_api_key);
-        this.m_watson_iot_auth_token = this.m_watson_iot_device_manager.updatePasswordBinding(this.m_watson_iot_auth_token);
-        this.m_client_id = this.m_watson_iot_device_manager.updateClientIDBinding(this.m_client_id);
-        this.m_mqtt_ip_address = this.m_watson_iot_device_manager.updateHostnameBinding(this.m_mqtt_ip_address);
+        this.m_device_manager = new WatsonIoTDeviceManager(this.orchestrator().errorLogger(),this.orchestrator().preferences(),this.m_suffix,http,this.orchestrator());
+        this.m_device_manager.updateWatsonIoTBindings(this.m_watson_iot_org_id, this.m_watson_iot_org_key);
+        this.m_watson_iot_api_key = this.m_device_manager.updateUsernameBinding(this.m_watson_iot_api_key);
+        this.m_watson_iot_auth_token = this.m_device_manager.updatePasswordBinding(this.m_watson_iot_auth_token);
+        this.m_client_id = this.m_device_manager.updateClientIDBinding(this.m_client_id);
+        this.m_mqtt_ip_address = this.m_device_manager.updateHostnameBinding(this.m_mqtt_ip_address);
 
         // RESET in case we want to just connect as an WatsonIoT Application
         if (this.orchestrator().preferences().booleanValueOf("iotf_force_app_binding", this.m_suffix) == true) {
@@ -302,7 +303,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
 
             // send to WatsonIoT...
             if (this.mqtt() != null) {
-                boolean status = this.mqtt().sendMessage(this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_watson_iot_device_manager.getDeviceType(ep_name)), iotf_coap_json, QoS.AT_MOST_ONCE);
+                boolean status = this.mqtt().sendMessage(this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_device_manager.getDeviceType(ep_name)), iotf_coap_json, QoS.AT_MOST_ONCE);
                 if (status == true) {
                     // not connected
                     this.errorLogger().info("Watson IoT: CoAP notification sent. SUCCESS");
@@ -329,7 +330,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     
     // ConnectionCreator
     @Override 
-    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type, Topic topics[]) {
         // Watson IoT uses a shared MQTT connection for all endpoints... its already setup... so just return true
         return true;
     }
@@ -551,7 +552,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
 
                 // send the observation (GET reply)...
                 if (this.mqtt() != null) {
-                    String reply_topic = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_watson_iot_device_manager.getDeviceType(ep_name));
+                    String reply_topic = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_device_manager.getDeviceType(ep_name));
                     reply_topic = reply_topic.replace(this.m_observation_key, this.m_cmd_response_key);
                     boolean status = this.mqtt().sendMessage(reply_topic, observation, QoS.AT_MOST_ONCE);
                     if (status == true) {
@@ -593,8 +594,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     // process new device registration
     @Override
     protected Boolean registerNewDevice(Map message) {
-        if (this.m_watson_iot_device_manager != null) {
-            return this.m_watson_iot_device_manager.registerNewDevice(message);
+        if (this.m_device_manager != null) {
+            return this.m_device_manager.registerNewDevice(message);
         }
         return false;
     }
@@ -602,8 +603,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     // process device de-registration
     @Override
     protected Boolean deregisterDevice(String device) {
-        if (this.m_watson_iot_device_manager != null) {
-            return this.m_watson_iot_device_manager.deregisterDevice(device);
+        if (this.m_device_manager != null) {
+            return this.m_device_manager.deregisterDevice(device);
         }
         return false;
     }
@@ -619,6 +620,36 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
 
         // return our processing status
         return true;
+    }
+    
+    // restart our device connection 
+    @Override
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
+        if (this.m_device_manager != null) {
+            // kill the old listener
+            this.stopListenerThread(ep_name);
+            
+            // clean up old MQTT connection
+            this.disconnect(ep_name);
+            
+            // Create a new device record
+            HashMap<String,Serializable> ep = new HashMap<>();
+            ep.put("ep",ep_name);
+            ep.put("ept", ep_type);
+            
+            // DEBUG
+            this.errorLogger().info("startReconnection: EP: " + ep);
+            
+            // deregister the old device (it may be gone already...)
+            this.m_device_manager.deregisterDevice(ep_name);
+            
+            // now create a new device
+            this.completeNewDeviceRegistration(ep);
+            
+            // create a new MQTT connection
+            return this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
+        }
+        return false;
     }
 
     // complete processing of adding the new device
@@ -658,11 +689,5 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     public String getCoAPVerbFromTopic(String topic) {
         // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
         return this.getTopicElement(topic, 6);
-    }
-
-    // ReconnectionInterface
-    @Override
-    public void startListenerThread(String ep_name, MQTTTransport mqtt) {
-        // listener threads not used for Watson IoT
     }
 }

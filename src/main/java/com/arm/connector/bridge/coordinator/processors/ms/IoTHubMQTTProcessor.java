@@ -33,6 +33,7 @@ import com.arm.connector.bridge.transport.HttpTransport;
 import com.arm.connector.bridge.transport.MQTTTransport;
 import com.arm.connector.bridge.core.Transport;
 import com.arm.connector.bridge.core.TransportReceiveThread;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     private String m_iot_hub_coap_cmd_topic_base = null;
     private String m_iot_hub_name = null;
     private String m_iot_hub_password_template = null;
-    private IoTHubDeviceManager m_iot_hub_device_manager = null;
+    private IoTHubDeviceManager m_device_manager = null;
     private boolean m_iot_event_hub_enable_device_id_prefix = false;
     private String m_iot_event_hub_device_id_prefix = null;
     private String m_iot_hub_version_tag = null;
@@ -81,7 +82,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         this.m_iot_hub_coap_cmd_topic_base = this.orchestrator().preferences().valueOf("iot_event_hub_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "#");
 
         // IoTHub Device Manager - will initialize and upsert our IoTHub bindings/metadata
-        this.m_iot_hub_device_manager = new IoTHubDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
+        this.m_device_manager = new IoTHubDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
 
         // set the MQTT password template
         this.m_iot_hub_password_template = this.orchestrator().preferences().valueOf("iot_event_hub_mqtt_password", this.m_suffix).replace("__IOT_EVENT_HUB__", this.m_iot_hub_name);
@@ -296,7 +297,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         // IOTHUB Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
-        if (iothub_ep_name != null && this.validateMQTTConnection(cc, iothub_ep_name, ep_type)) {
+        if (iothub_ep_name != null && this.validateMQTTConnection(cc, iothub_ep_name, ep_type, null)) {
             // DEBUG
             this.orchestrator().errorLogger().info("IoTHub: Subscribing to CoAP command topics for endpoint: " + ep_name);
             try {
@@ -607,16 +608,16 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // IoTHub Specific: process new device registration
     @Override
     protected synchronized Boolean registerNewDevice(Map message) {
-        if (this.m_iot_hub_device_manager != null) {
+        if (this.m_device_manager != null) {
             // create the device in IoTHub
-            Boolean success = this.m_iot_hub_device_manager.registerNewDevice(message);
+            Boolean success = this.m_device_manager.registerNewDevice(message);
 
             // IOTHUB DeviceID Prefix
             String iothub_ep_name = this.addDeviceIDPrefix((String) message.get("ep"));
 
             // if successful, validate (i.e. add...) an MQTT Connection
             if (success == true) {
-                this.validateMQTTConnection(this,iothub_ep_name, (String) message.get("ept"));
+                this.validateMQTTConnection(this,iothub_ep_name, (String) message.get("ept"), null);
             }
 
             // return status
@@ -628,7 +629,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // IoTHub Specific: process device de-registration
     @Override
     protected synchronized Boolean deregisterDevice(String ep_name) {
-        if (this.m_iot_hub_device_manager != null) {
+        if (this.m_device_manager != null) {
             // IOTHUB DeviceID Prefix
             String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
@@ -651,7 +652,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.disconnect(iothub_ep_name);
 
             // remove the device from IoTHub
-            if (this.m_iot_hub_device_manager.deregisterDevice(iothub_ep_name) == false) {
+            if (this.m_device_manager.deregisterDevice(iothub_ep_name) == false) {
                 this.errorLogger().warning("deregisterDevice(IoTHub): unable to de-register device from IoTHub...");
             }
         }
@@ -661,11 +662,50 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // IoTHub Specific: AsyncResponse response processor
     @Override
     public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Watson IoT
+        // with the attributes added, we finally create the device in MS IoTHub
         this.completeNewDeviceRegistration(endpoint);
 
         // return our processing status
         return true;
+    }
+    
+    // IOTHUB Specific: restart our device connection 
+    @Override
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
+        if (this.m_device_manager != null) {
+            // IOTHUB DeviceID Prefix
+            String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
+            
+            // kill the old listener
+            this.stopListenerThread(iothub_ep_name);
+            
+            // clean up old MQTT connection
+            this.disconnect(iothub_ep_name);
+            
+            // Create a new device record
+            HashMap<String,Serializable> ep = new HashMap<>();
+            ep.put("ep",ep_name);
+            ep.put("ept", ep_type);
+            
+            // DEBUG
+            this.errorLogger().info("startReconnection: EP: " + ep);            
+            
+            // deregister the old device (it may be gone already...)
+            this.m_device_manager.deregisterDevice(iothub_ep_name);
+            
+            // now create a new device
+            this.completeNewDeviceRegistration(ep);
+            
+            // create a new MQTT connection
+            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
+            if (connected) {
+                // let the peer finish reconnection accounting
+                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
+                this.startListenerThread(ep_name, this.mqtt(iothub_ep_name));
+            }
+            return connected;
+        }
+        return false;
     }
 
     // IoTHub Specific: complete processing of adding the new device
@@ -772,18 +812,30 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         return cust_topic;
     }
     
-    // start our listener thread
+    // OVERRIDE stop the listener thread
     @Override
-    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
+    protected void stopListenerThread(String iothub_ep_name) {
+        try {
+            // ensure we only have 1 thread/endpoint
+            if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
+                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
+                listener.halt();
+                this.m_mqtt_thread_list.remove(iothub_ep_name);
+                listener.join();
+            }
+        }
+        catch (InterruptedException ex) {
+            // silent
+        }
+    }
+    
+    // start our listener thread
+    private void startListenerThread(String ep_name,MQTTTransport mqtt) {
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
         
         // ensure we only have 1 thread/endpoint
-        if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
-            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
-            listener.halt();
-            this.m_mqtt_thread_list.remove(iothub_ep_name);
-        }
+        this.stopListenerThread(iothub_ep_name);
         
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -794,7 +846,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     
     // IoTHub Specific: add a MQTT transport for a given endpoint - this is how MS IoTHub MQTT integration works... 
     @Override
-    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type, Topic topics[]) {
         boolean connected = false; 
         
         // IOTHUB DeviceID Prefix
@@ -816,7 +868,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
                 // set the creds for the IoTHub MQTT Transport instance
                 mqtt.setClientID(iothub_ep_name);
                 mqtt.setUsername(username);
-                mqtt.setPassword(this.m_iot_hub_device_manager.createMQTTPassword(iothub_ep_name));
+                mqtt.setPassword(this.m_device_manager.createMQTTPassword(iothub_ep_name));
 
                 // IoTHub only works with SSL... 
                 mqtt.useSSLConnection(true);
@@ -837,6 +889,15 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
                     // start the listener thread
                     this.startListenerThread(ep_name, mqtt);
+                    
+                    // if we have topics in our param list, lets go ahead and subscribe
+                    if (topics != null) {
+                        // DEBUG
+                        this.errorLogger().info("IoTHub: re-subscribing to topics...");
+
+                        // re-subscribe
+                        this.mqtt(iothub_ep_name).subscribe(topics);
+                    }
 
                     // we are connected
                     connected = true;
@@ -872,14 +933,14 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
     // IoTHub Specific: validate the MQTT Connection
     @Override
-    protected synchronized boolean validateMQTTConnection(ConnectionCreator cc,String ep_name, String ep_type) {
+    protected synchronized boolean validateMQTTConnection(ConnectionCreator cc,String ep_name, String ep_type, Topic topics[]) {
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
         // see if we already have a connection for this endpoint...
         if (this.mqtt(iothub_ep_name) == null) {
             // create a MQTT connection for this endpoint... 
-            cc.createAndStartMQTTForEndpoint(iothub_ep_name, ep_type);
+            cc.createAndStartMQTTForEndpoint(iothub_ep_name, ep_type, null);
         }
 
         // return our connection status

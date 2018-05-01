@@ -28,6 +28,7 @@ import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import com.arm.connector.bridge.transport.HttpTransport;
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -279,6 +280,11 @@ public class WatsonIoTDeviceManager extends DeviceManager {
 
         // return our status
         return status;
+    }
+    
+    // get our endpoint details
+    public HashMap<String, Serializable> getEndpointDetails(String ep_name) {
+        return this.m_endpoint_details.get(ep_name);
     }
 
     // build the REST URI for device management

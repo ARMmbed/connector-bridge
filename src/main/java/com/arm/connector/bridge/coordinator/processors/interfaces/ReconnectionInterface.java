@@ -16,15 +16,13 @@
 package com.arm.connector.bridge.coordinator.processors.interfaces;
 
 import com.arm.connector.bridge.transport.MQTTTransport;
+import org.fusesource.mqtt.client.Topic;
 
 /**
  * Interface to undergo a network re-connection cycle
  * @author Doug Anson
  */
 public interface ReconnectionInterface {
-    // start the listener Thread for the MQTT connection handler
-    public void startListenerThread(String ep_name,MQTTTransport mqtt);
-    
-    // finish a reconnection sequence/cycle
-    public void finishReconnection(String ep_name,String ep_type,MQTTTransport mqtt,ReconnectionInterface ri);
+    // restart our connection for the given device via MQTT
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]);
 }

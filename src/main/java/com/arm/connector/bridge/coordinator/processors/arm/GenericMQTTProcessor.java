@@ -38,7 +38,6 @@ import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
-import com.arm.connector.bridge.coordinator.processors.interfaces.ReconnectionInterface;
 
 /**
  * Generic MQTT peer processor
@@ -301,7 +300,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     
     // register topics for CoAP commands
     protected void subscribe(String ep_name, String ep_type,HashMap<String, Object> topic_data,ConnectionCreator cc) {
-        if (ep_name != null && this.validateMQTTConnection(cc, ep_name, ep_type)) {
+        if (ep_name != null && this.validateMQTTConnection(cc, ep_name, ep_type, null)) {
             // DEBUG
             this.orchestrator().errorLogger().info("MQTT: Subscribing to CoAP command topics for endpoint: " + ep_name + " type: " + ep_type);
             try {
@@ -332,10 +331,10 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     }
     
     // validate the MQTT Connection
-    protected synchronized boolean validateMQTTConnection(ConnectionCreator cc,String ep_name, String ep_type) {
+    protected synchronized boolean validateMQTTConnection(ConnectionCreator cc,String ep_name, String ep_type, Topic topics[]) {
         if (cc != null) {
             // create a MQTT connection via the connector validator
-            return cc.createAndStartMQTTForEndpoint(ep_name, ep_type);
+            return cc.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
         }
         else {
             // invalid params
@@ -533,13 +532,20 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
             }
         }
     }
-
-    // ReconnectionInterface: reconnection sequence requested
-    public void finishReconnection(String ep_name,String ep_type,MQTTTransport mqtt,ReconnectionInterface ri) {
-        if (ri != null) {
-            // start a listener thread...
-            this.errorLogger().info("finishReconnection: connected to MQTT. Starting a new listener thread...");
-            ri.startListenerThread(ep_name, mqtt);
+    
+    // stop the listener thread
+    protected void stopListenerThread(String ep_name) {
+        try {
+            // ensure we only have 1 thread/endpoint
+            if (this.m_mqtt_thread_list.get(ep_name) != null) {
+                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
+                listener.halt();
+                this.m_mqtt_thread_list.remove(ep_name);
+                listener.join();
+            }
+        }
+        catch (InterruptedException ex) {
+            // silent
         }
     }
 }

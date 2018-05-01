@@ -92,8 +92,6 @@ public class MQTTTransport extends Transport implements GenericSender {
     private boolean m_connect_clean_session = false;
     private String m_connect_id = null;
 
-    private int m_num_retries = 0;
-    private int m_max_retries = 10;
     private boolean m_set_mqtt_version = true;
     private Topic[] m_subscribe_topics = null;
     private String[] m_unsubscribe_topics = null;
@@ -170,7 +168,6 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
-        this.m_max_retries = this.preferences().intValueOf("mqtt_connect_retries", this.m_suffix);
         this.m_sleep_time = ((this.preferences().intValueOf("mqtt_receive_loop_sleep", this.m_suffix)) * 1000);
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
@@ -216,7 +213,6 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.setMQTTVersion(this.prefValue("mqtt_version", this.m_suffix));
         this.setUsername(this.prefValue("mqtt_username", this.m_suffix));
         this.setPassword(this.prefValue("mqtt_password", this.m_suffix));
-        this.m_max_retries = this.preferences().intValueOf("mqtt_connect_retries", this.m_suffix);
         this.m_sleep_time = ((this.preferences().intValueOf("mqtt_receive_loop_sleep", this.m_suffix)) * 1000);
         this.m_keystore_pw = this.preferences().valueOf("mqtt_keystore_pw", this.m_suffix);
         this.m_base_dir = this.preferences().valueOf("mqtt_keystore_basedir", this.m_suffix);
@@ -581,7 +577,6 @@ public class MQTTTransport extends Transport implements GenericSender {
      * @return
      */
     public boolean connect(String host, int port, String clientID, boolean clean_session, String id) {
-        int sleep_time = this.prefIntValue("mqtt_retry_sleep", this.m_suffix);
         int num_tries = this.prefIntValue("mqtt_connect_retries", this.m_suffix);
         
         // build out the URL connection string
@@ -726,7 +721,7 @@ public class MQTTTransport extends Transport implements GenericSender {
 
                             // sleep for a short bit...
                             try {
-                                Thread.sleep(sleep_time);
+                                Thread.sleep(1000);
                             }
                             catch (InterruptedException ex) {
                                 this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex);
@@ -786,7 +781,7 @@ public class MQTTTransport extends Transport implements GenericSender {
 
                         // sleep for a short bit...
                         try {
-                            Thread.sleep(sleep_time);
+                            Thread.sleep(1000);
                         }
                         catch (InterruptedException ex2) {
                             this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex2);
@@ -802,16 +797,6 @@ public class MQTTTransport extends Transport implements GenericSender {
             catch (URISyntaxException ex) {
                 this.errorLogger().critical("MQTTTransport(connect): URI Syntax exception occured", ex);
                 this.m_connected = false;
-            }
-
-            // if we have not yet connected... sleep a bit more and retry...
-            if (this.m_connected == false) {
-                try {
-                    Thread.sleep(sleep_time);
-                }
-                catch (InterruptedException ex) {
-                    this.errorLogger().critical("MQTTTransport(retry): sleep interrupted", ex);
-                }
             }
         }
 
@@ -846,74 +831,38 @@ public class MQTTTransport extends Transport implements GenericSender {
             return true;
         }
     }
+    
+    // resubscribe to topics...
+    public void resetSubscriptions(Topic[] topics) {
+        // DEBUG
+        this.errorLogger().warning("resetSubscriptions: re-subscribe() to topics...");
+        this.m_subscribe_topics = topics;
+        this.subscribe(this.m_subscribe_topics);
+
+    }
 
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
         // disconnect()...
         this.disconnect();
         
-        // start the reconnection sequence...
-        boolean connected = false;
-        
-        // loop until we connect or exceed retries...
-        while(!connected && retriesExceeded() == false) {
-            // sleep a bit...
-            try {
-                // sleep a bit
-                Thread.sleep(this.m_sleep_time);
-            }
-            catch(InterruptedException ex2) {
-                // silent
-            }
-        
-            // increment # retries
-            ++this.m_num_retries;
-            
+        // DEBUG
+        this.errorLogger().warning("resetConnection: Attempting to start reconnection for MQTT...");
+
+        // ensure that we have a shadow device to reconnect to...
+        if (this.m_reconnector != null) {
             // DEBUG
-            this.errorLogger().warning("resetConnection: Attempting to reconnect() MQTT... (" + this.m_num_retries + ")");
+            this.errorLogger().info("startReconnection: restarting MQTT connection for device: " + this.m_ep_name);
             
-            // attempt connection
-            if (this.reconnect() == true) {
-                // DEBUG
-                this.errorLogger().warning("resetConnection: reconnect() SUCCESS!! Checking if we need to re-subscribe()...");
-
-                // resubscribe
-                if (this.m_subscribe_topics != null) {
-                    // DEBUG
-                    this.errorLogger().warning("resetConnection: SUCCESS. re-subscribe() to topics...");
-                    this.subscribe(this.m_subscribe_topics);
-
-                    // if resubscribed... let the peers finish any reconnection accounting
-                    if (this.m_reconnector != null) {
-                        // let the peer finish reconnection accounting
-                        this.errorLogger().warning("resetConnection: SUCCESS. Calling peer to finish reconnect()...");
-                        this.m_reconnector.finishReconnection(this.m_ep_name,this.m_ep_type,this,this.m_reconnector);
-
-                        // DEBUG
-                        this.errorLogger().warning("resetConnection: SUCCESS. Peer has finished reconnect(). SUCCESS");
-                    }
-                    else {
-                        // no reconnection needed
-                        this.errorLogger().warning("resetConnection: SUCCESS. No reconnector registered... OK.");
-                    }
-                }
-                
-                // reconnected OK...
-                this.m_num_retries = 0;
-                
-                // we are connected
-                connected = true;
-            }
-            else {
-                // DEBUG
-                this.errorLogger().warning("resetConnection: MQTT reconnect() FAILED.");
-            }
+            // end us, restart with a new connection... so adios... 
+            this.m_reconnector.startReconnection(this.m_ep_name,this.m_ep_type,this.m_subscribe_topics);
+            
+            // nothing more to do... we are being terminated.
         }
-    }
-
-    // have we exceeded our retry count?
-    private boolean retriesExceeded() {
-        return (this.m_num_retries >= this.m_max_retries);
+        else {
+            // unable to re-validate shadow device
+            this.errorLogger().info("resetConnection: unable to restart MQTT connection for device: " + this.m_ep_name);
+        }
     }
 
     // subscribe to specific topics 
@@ -932,17 +881,11 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.errorLogger().info("MQTTTransport: Subscribed to  " + list.length + " SUCCESSFULLY");
             }
             catch (Exception ex) {
-                if (this.retriesExceeded()) {
-                    // unable to subscribe to topic (final)
-                    this.errorLogger().critical("MQTTTransport: unable to subscribe to topic (final)", ex);
-                }
-                else {
-                    // unable to subscribe to topic
-                    this.errorLogger().warning("MQTTTransport: unable to subscribe to topic (" + this.m_num_retries + " of " + this.m_max_retries + ")", ex);
+                // unable to subscribe to topic
+                this.errorLogger().warning("MQTTTransport: unable to subscribe to topic...", ex);
 
-                    // attempt reset
-                    this.resetConnection();
-                }
+                // attempt reset
+                this.resetConnection();
             }
         }
         else {
@@ -961,20 +904,11 @@ public class MQTTTransport extends Transport implements GenericSender {
                 //this.errorLogger().info("MQTTTransport: Unsubscribed from TOPIC(s): " + list.length);
             }
             catch (Exception ex) {
-                if (this.retriesExceeded()) {
-                    // unable to unsubscribe from topic (final)
-                    this.errorLogger().info("MQTTTransport: unable to unsubscribe from topic (final)", ex);
-                }
-                else {
-                    // unable to subscribe to topic
-                    this.errorLogger().info("MQTTTransport: unable to unsubscribe to topic (" + this.m_num_retries + " of " + this.m_max_retries + ")", ex);
+                // unable to subscribe to topic
+                this.errorLogger().info("MQTTTransport: unable to unsubscribe to topic...", ex);
 
-                    // attempt reset
-                    this.resetConnection();
-
-                    // recall
-                    this.unsubscribe(list);
-                }
+                // attempt reset
+                this.resetConnection();
             }
         }
         else {
@@ -1015,30 +949,11 @@ public class MQTTTransport extends Transport implements GenericSender {
                 sent = true;
             }
             catch (Exception ex) {
-                if (this.retriesExceeded()) {
-                    // unable to send (EOF) - final
-                    this.errorLogger().critical("sendMessage:Exception in sendMessage... resetting MQTT (final): " + message, ex);
-                    
-                    // disconnect
-                    this.disconnect(true);
-                }
-                else {
-                    // unable to send (EOF) - final
-                    this.errorLogger().warning("sendMessage:Exception in sendMessage... resetting MQTT (" + this.m_num_retries + " of " + this.m_max_retries + "): " + message, ex);
+                // unable to send (EOF) - final
+                this.errorLogger().warning("sendMessage:Exception in sendMessage... resetting connection. message: " + message, ex);
 
-                    // reset the connection
-                    this.resetConnection();
-
-                    // resend
-                    if (this.m_connection.isConnected() == true) {
-                        this.errorLogger().info("sendMessage: retrying send() afterreconnect....");
-                        sent = this.sendMessage(topic, message, qos);
-                    }
-                    else {
-                        // unable to send (not connected)
-                        this.errorLogger().warning("sendMessage: NOT CONNECTED after reconnect. Unable to send message: " + message);
-                    }
-                }
+                // reset the connection
+                this.resetConnection();
             }
         }
         else if (this.m_connection != null && message != null) {
@@ -1047,16 +962,6 @@ public class MQTTTransport extends Transport implements GenericSender {
 
             // reset the connection
             this.resetConnection();
-
-            // resend
-            if (this.m_connection != null && this.m_connection.isConnected() == true) {
-                this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
-                sent = this.sendMessage(topic, message, qos);
-            }
-            else {
-                // unable to send (not connected)
-                this.errorLogger().warning("sendMessage: NOT CONNECTED after EOF/reconnect. Unable to send message: " + message);
-            }
         }
         else if (message != null) {
             // unable to send (not connected)
@@ -1064,16 +969,6 @@ public class MQTTTransport extends Transport implements GenericSender {
 
             // reset the connection
             this.resetConnection();
-
-            // resend
-            if (this.m_connection != null && this.m_connection.isConnected() == true) {
-                this.errorLogger().info("sendMessage: retrying send() after EOF/reconnect....");
-                sent = this.sendMessage(topic, message, qos);
-            }
-            else {
-                // unable to send (not connected)
-                this.errorLogger().warning("sendMessage: NOT CONNECTED (no handle) after EOF/reconnect. Unable to send message: " + message);
-            }
         }
         else {
             // unable to send (empty message)
@@ -1126,23 +1021,11 @@ public class MQTTTransport extends Transport implements GenericSender {
             }
         }
         catch (Exception ex) {
-            if (this.retriesExceeded()) {
-                // unable to receiveMessage - final
-                this.errorLogger().warning("receiveMessage: unable to receive message (final)", ex);
-            }
-            else {
-                // unable to receiveMessage - final
-                this.errorLogger().warning("receiveMessage: unable to receive message (" + this.m_num_retries + " of " + this.m_max_retries + "): " + ex.getMessage(), ex);
+            // unable to receiveMessage - final
+            this.errorLogger().warning("receiveMessage: unable to receive message... resetting connection. Exception: " + ex.getMessage(), ex);
 
-                // reset the connection
-                this.resetConnection();
-
-                // re-receive
-                if (this.isConnected()) {
-                    this.errorLogger().info("receiveMessage: retrying receive() after EOF/reconnect...");
-                    this.receiveAndProcessMessage();
-                }
-            }
+            // reset the connection
+            this.resetConnection();
         }
         return message;
     }
@@ -1152,7 +1035,8 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     @Override
     public void disconnect() {
-        this.disconnect(true);
+        // non-destructive disconnect()...
+        this.disconnect(false);
     }
 
     // Disconnect from MQTT broker
@@ -1181,26 +1065,17 @@ public class MQTTTransport extends Transport implements GenericSender {
 
         // clear the cached creds 
         if (clear_creds == true) {
+            this.errorLogger().info("MQTT: disconnected (clean-up). Removing MQTT credentials...");
             this.m_connect_host = null;
             this.m_connect_port = 0;
             this.m_connect_id = null;
             this.m_connect_client_id = null;
             if (this.m_use_x509_auth == true && this.m_keystore_filename != null) {
+                // DEBUG
+                this.errorLogger().info("MQTT: disconnected (clean-up). Removing keystore...");
                 Utils.deleteKeystore(this.errorLogger(), this.m_keystore_filename, this.m_keystore_basename);
             }
             this.m_keystore_filename = null;
-        }
-    }
-
-    private boolean reconnect() {
-        if (this.m_connect_host != null) {
-            // attempt reconnect with cached creds...
-            return this.connect(this.m_connect_host, this.m_connect_port, this.m_connect_client_id, this.m_connect_clean_session,this.m_connect_id);
-        }
-        else {
-            // no initial connect() has succeeded... so no cached creds available
-            this.errorLogger().critical("MQTT: reconnect: unable to reconnect() prior to initial connect(). ERROR");
-            return false;
         }
     }
 

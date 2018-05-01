@@ -89,7 +89,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     private String m_keystore_rootdir = null;
 
     // GoogleCloud Device Manager
-    private GoogleCloudDeviceManager m_google_cloud_gw_device_manager = null;
+    private GoogleCloudDeviceManager m_device_manager = null;
     
     // Client ID Template
     private String m_google_cloud_client_id_template = null;
@@ -228,7 +228,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         this.m_pub_sub = this.createPubSubInstance();
         
         // GoogleCloud Device Manager - will initialize and upsert our GoogleCloud bindings/metadata
-        this.m_google_cloud_gw_device_manager = new GoogleCloudDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator(), this.m_google_cloud_project_id, this.m_google_cloud_region, this.m_cloud_iot,this.m_pub_sub,this.m_observation_key,this.m_cmd_response_key,this.subscriptionsManager());
+        this.m_device_manager = new GoogleCloudDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator(), this.m_google_cloud_project_id, this.m_google_cloud_region, this.m_cloud_iot,this.m_pub_sub,this.m_observation_key,this.m_cmd_response_key,this.subscriptionsManager());
 
         // initialize our MQTT transport list
         this.initMQTTTransportList();
@@ -548,14 +548,14 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
 
     // final customization of our MQTT Topic...
     private String customizeTopic(String topic, String ep_name) {
-        String cust_topic = topic.replace("__EPNAME__",this.m_google_cloud_gw_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
+        String cust_topic = topic.replace("__EPNAME__",this.m_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
         return cust_topic;
     }
 
     // process new device registration
     @Override
     protected synchronized Boolean registerNewDevice(Map message) {
-        if (this.m_google_cloud_gw_device_manager != null) {
+        if (this.m_device_manager != null) {
             // DEBUG
             this.errorLogger().info("GoogleCloud: Registering new device: " + (String) message.get("ep") + " type: " + (String) message.get("ept"));
             
@@ -563,11 +563,11 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             this.setEndpointTypeFromEndpointName((String)message.get("ep"),(String)message.get("ept"));
 
             // create the device in GoogleCloud
-            Boolean success = this.m_google_cloud_gw_device_manager.registerNewDevice(message);
+            Boolean success = this.m_device_manager.registerNewDevice(message);
 
             // if successful, validate (i.e. add...) an MQTT Connection
             if (success == true) {
-                this.validateMQTTConnection(this, (String) message.get("ep"), (String) message.get("ept"));
+                this.validateMQTTConnection(this, (String) message.get("ep"), (String) message.get("ept"), null);
             }
 
             // return status
@@ -579,7 +579,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // process device de-registration
     @Override
     protected synchronized Boolean deregisterDevice(String device) {
-        if (this.m_google_cloud_gw_device_manager != null) {
+        if (this.m_device_manager != null) {
             // DEBUG
             this.errorLogger().info("deregisterDevice(GoogleCloud): deregistering device: " + device);
 
@@ -603,7 +603,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             this.disconnect(device);
 
             // remove the device from GoogleCloud
-            if (this.m_google_cloud_gw_device_manager.deregisterDevice(device) == false) {
+            if (this.m_device_manager.deregisterDevice(device) == false) {
                 this.errorLogger().warning("deregisterDevice(GoogleCloud): unable to de-register device from GoogleCloud...");
             }
         }
@@ -818,18 +818,13 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                 .replace("__PROJECT_ID__", this.m_google_cloud_project_id)
                 .replace("__CLOUD_REGION__", this.m_google_cloud_region)
                 .replace("__REGISTRY_NAME__", this.m_google_cloud_registry_name)
-                .replace("__EPNAME__",this.m_google_cloud_gw_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
+                .replace("__EPNAME__",this.m_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name));
     }
     
     // start our listener thread
-    @Override
-    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
-        // ensure we only have 1 thread/endpoint
-        if (this.m_mqtt_thread_list.get(ep_name) != null) {
-            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-            listener.halt();
-            this.m_mqtt_thread_list.remove(ep_name);
-        }
+    private void startListenerThread(String ep_name,MQTTTransport mqtt) {
+        // stop any existing listener thread
+        this.stopListenerThread(ep_name);
 
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -840,13 +835,13 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
 
     // add a MQTT transport for a given endpoint - this is how MS GoogleCloud MQTT integration works... 
     @Override
-    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type, Topic topics[]) {
         boolean connected = false;
         try {
             // we may already have a connection established for this endpoint... if so, we just ignore...
             if (this.mqtt(ep_name) == null) {
                 // no connection exists already... so... go get our endpoint details
-                HashMap<String, Serializable> ep = this.m_google_cloud_gw_device_manager.getEndpointDetails(ep_name);
+                HashMap<String, Serializable> ep = this.m_device_manager.getEndpointDetails(ep_name);
                 if (ep != null) {
                     // create a new MQTT Transport instance for our endpoint
                     MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
@@ -876,6 +871,15 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                             GoogleJwTRefresherThread jwt_refresher = new GoogleJwTRefresherThread(this,ep_name);
                             this.m_jwt_refesher_thread_list.put(ep_name,jwt_refresher);
                             jwt_refresher.start();
+                            
+                            // if we have topics in our param list, lets go ahead and subscribe
+                            if (topics != null) {
+                                // DEBUG
+                                this.errorLogger().info("GoogleCloud: re-subscribing to topics...");
+                                
+                                // re-subscribe
+                                this.mqtt(ep_name).subscribe(topics);
+                            }
                             
                             // we are connected
                             connected = true;
@@ -927,7 +931,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // AsyncResponse response processor
     @Override
     public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Watson IoT
+        // with the attributes added, we finally create the device in Google CloudIoT
         this.completeNewDeviceRegistration(endpoint);
 
         // return our processing status
@@ -977,7 +981,43 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
 
         return ep_type;
     }
-
+    
+    // restart our device connection 
+    @Override
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
+        if (this.m_device_manager != null) {
+            // kill the old listener
+            this.stopListenerThread(ep_name);
+            
+            // clean up old MQTT connection
+            this.disconnect(ep_name);
+            
+            // Create a new device record
+            HashMap<String,Serializable> ep = new HashMap<>();
+            ep.put("ep",ep_name);
+            ep.put("ept", ep_type);
+            
+            // DEBUG
+            this.errorLogger().info("startReconnection: EP: " + ep);
+            
+            // deregister the old device (it may be gone already...)
+            this.m_device_manager.deregisterDevice(ep_name);
+            
+            // now create a new device
+            this.completeNewDeviceRegistration(ep);
+            
+            // create a new MQTT connection
+            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
+            if (connected) {
+                // let the peer finish reconnection accounting
+                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
+                this.startListenerThread(ep_name, this.mqtt(ep_name));
+            }
+            return connected;
+        }
+        return false;
+    }
+    
     // complete processing of adding the new device
     private void completeNewDeviceRegistration(Map endpoint) {
         try {

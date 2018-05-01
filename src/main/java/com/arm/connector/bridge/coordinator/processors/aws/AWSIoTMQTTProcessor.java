@@ -53,7 +53,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     private String m_aws_iot_coap_cmd_topic_delete = null;
 
     // AWSIoT Device Manager
-    private AWSIoTDeviceManager m_aws_iot_gw_device_manager = null;
+    private AWSIoTDeviceManager m_device_manager = null;
     
     // AWSIoT Cleanup Thread
     private Thread m_aws_cleanup_thread = null;
@@ -88,13 +88,13 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
         this.m_aws_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("aws_iot_coap_cmd_topic", this.m_suffix).replace("__TOPIC_ROOT__", this.getTopicRoot()).replace("__COMMAND_TYPE__", "delete");
 
         // AWSIoT Device Manager - will initialize and upsert our AWSIoT bindings/metadata
-        this.m_aws_iot_gw_device_manager = new AWSIoTDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
+        this.m_device_manager = new AWSIoTDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
 
         // initialize our MQTT transport list
         this.initMQTTTransportList();
         
         // lastly, we setup our cleanup thread to fire off in the background
-        this.m_aws_cleanup_thread = new Thread(this.m_aws_iot_gw_device_manager);
+        this.m_aws_cleanup_thread = new Thread(this.m_device_manager);
         this.m_aws_cleanup_thread.start();
     }
     
@@ -387,7 +387,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // process new device registration
     @Override
     protected synchronized Boolean registerNewDevice(Map message) {
-        if (this.m_aws_iot_gw_device_manager != null) {
+        if (this.m_device_manager != null) {
             // DEBUG
             this.errorLogger().info("AWSIoT: Registering new device: " + (String) message.get("ep") + " type: " + (String) message.get("ept"));
             
@@ -395,11 +395,11 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.setEndpointTypeFromEndpointName((String)message.get("ep"),(String)message.get("ept"));
 
             // create the device in AWSIoT
-            Boolean success = this.m_aws_iot_gw_device_manager.registerNewDevice(message);
+            Boolean success = this.m_device_manager.registerNewDevice(message);
 
             // if successful, validate (i.e. add...) an MQTT Connection
             if (success == true) {
-                this.validateMQTTConnection(this,(String) message.get("ep"), (String) message.get("ept"));
+                this.validateMQTTConnection(this,(String) message.get("ep"), (String) message.get("ept"), null);
             }
 
             // return status
@@ -411,7 +411,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // process device de-registration
     @Override
     protected synchronized Boolean deregisterDevice(String device) {
-        if (this.m_aws_iot_gw_device_manager != null) {
+        if (this.m_device_manager != null) {
             // DEBUG
             this.errorLogger().info("deregisterDevice(AWSIoT): deregistering device: " + device);
 
@@ -431,7 +431,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.disconnect(device);
 
             // remove the device from AWSIoT
-            if (this.m_aws_iot_gw_device_manager.deregisterDevice(device) == false) {
+            if (this.m_device_manager.deregisterDevice(device) == false) {
                 this.errorLogger().warning("deregisterDevice(AWSIoT): unable to de-register device from AWSIoT...");
             }
         }
@@ -439,14 +439,9 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     }
     
     // start our listener thread
-    @Override
-    public void startListenerThread(String ep_name,MQTTTransport mqtt) {
+    private void startListenerThread(String ep_name,MQTTTransport mqtt) {
         // ensure we only have 1 thread/endpoint
-        if (this.m_mqtt_thread_list.get(ep_name) != null) {
-            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-            listener.halt();
-            this.m_mqtt_thread_list.remove(ep_name);
-        }
+        this.stopListenerThread(ep_name);
 
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -457,13 +452,13 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
     // add a MQTT transport for a given endpoint - this is how MS AWSIoT MQTT integration works... 
     @Override
-    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type) {
+    public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type, Topic topics[]) {
         boolean connected = false;
         try {
             // we may already have a connection established for this endpoint... if so, we just ignore...
             if (this.mqtt(ep_name) == null) {
                 // no connection exists already... so... go get our endpoint details
-                HashMap<String, Serializable> ep = this.m_aws_iot_gw_device_manager.getEndpointDetails(ep_name);
+                HashMap<String, Serializable> ep = this.m_device_manager.getEndpointDetails(ep_name);
                 if (ep != null) {
                     // create a new MQTT Transport instance for our endpoint
                     MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(), this);
@@ -493,6 +488,15 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
                             // start the listener thread
                             this.startListenerThread(ep_name, mqtt);
+                            
+                            // if we have topics in our param list, lets go ahead and subscribe
+                            if (topics != null) {
+                                // DEBUG
+                                this.errorLogger().info("AWSIoT: re-subscribing to topics...");
+                                
+                                // re-subscribe
+                                this.mqtt(ep_name).subscribe(topics);
+                            }
                             
                             // we are connected
                             connected = true;
@@ -538,7 +542,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // AsyncResponse response processor
     @Override
     public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Watson IoT
+        // with the attributes added, we finally create the device in AWS IOT
         this.completeNewDeviceRegistration(endpoint);
 
         // return our processing status
@@ -581,6 +585,42 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
         }
 
         return ep_type;
+    }
+    
+    // restart our device connection 
+    @Override
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
+        if (this.m_device_manager != null) {
+            // kill the old listener
+            this.stopListenerThread(ep_name);
+            
+            // clean up old MQTT connection
+            this.disconnect(ep_name);
+            
+            // Create a new device record
+            HashMap<String,Serializable> ep = new HashMap<>();
+            ep.put("ep",ep_name);
+            ep.put("ept", ep_type);
+            
+            // DEBUG
+            this.errorLogger().info("startReconnection: EP: " + ep);
+            
+            // deregister the old device (it may be gone already...)
+            this.m_device_manager.deregisterDevice(ep_name);
+            
+            // now create a new device
+            this.completeNewDeviceRegistration(ep);
+            
+            // create a new MQTT connection
+            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
+            if (connected) {
+                // let the peer finish reconnection accounting
+                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
+                this.startListenerThread(ep_name, this.mqtt(ep_name));
+            }
+            return connected;
+        }
+        return false;
     }
 
     // complete processing of adding the new device
