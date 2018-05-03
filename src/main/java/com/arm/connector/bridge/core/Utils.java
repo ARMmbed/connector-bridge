@@ -1034,4 +1034,16 @@ public class Utils {
         }
         return value;
     }
+    
+    // wait a bit
+    public static void waitForABit(ErrorLogger logger, int wait_time_ms) {
+        try {
+            Thread.sleep(wait_time_ms);
+        }
+        catch (InterruptedException ex) {
+            if (logger != null) {
+                logger.info("waitForABit: sleep interrupted: " + ex.getMessage() + " callstack: ",ex);
+            }
+        }
+    }
 }

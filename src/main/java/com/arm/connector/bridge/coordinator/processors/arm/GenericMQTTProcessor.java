@@ -48,6 +48,9 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     // default generic MQTT thread key
     private static String DEFAULT_GENERIC_RT_KEY = "__generic__";
     
+    // default wait time
+    private static int DEFAULT_RECONNNECT_SLEEP_TIME_MS = 15000;      // 15 seconds   
+    
     protected String m_mqtt_host = null;
     protected int m_mqtt_port = 0;
     protected String m_client_id = null;
@@ -55,6 +58,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     protected boolean m_use_clean_session = false;
     private String m_device_data_key = null;
     private String m_default_tr_key = null;
+    protected int m_reconnect_sleep_time_ms = DEFAULT_RECONNNECT_SLEEP_TIME_MS;  
     
     private HashMap<String, MQTTTransport> m_mqtt = null;
     protected SerializableHashMap m_endpoints = null;
@@ -87,6 +91,13 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         
         // initialize the listener thread map
         this.m_mqtt_thread_list = new HashMap<>();
+        
+        // get the overriden default wait time
+        this.m_reconnect_sleep_time_ms = orchestrator.preferences().intValueOf("mqtt_reconnect_sleep_time_ms",this.m_suffix);
+        if (this.m_reconnect_sleep_time_ms <= 0) {
+            this.m_reconnect_sleep_time_ms = DEFAULT_RECONNNECT_SLEEP_TIME_MS;
+        }
+        this.errorLogger().warning("MQTT: Reconnect sleep time: " + this.m_reconnect_sleep_time_ms + "ms...");
         
         // get the default generic name 
         this.m_default_tr_key = orchestrator.preferences().valueOf("mqtt_default_rt_key",this.m_suffix);

@@ -720,12 +720,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                             this.m_connection.connect();
 
                             // sleep for a short bit...
-                            try {
-                                Thread.sleep(1000);
-                            }
-                            catch (InterruptedException ex) {
-                                this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex);
-                            }
+                            Utils.waitForABit(this.errorLogger(),this.m_sleep_time);
 
                             // check our connection status
                             this.m_connected = false;
@@ -780,12 +775,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                         }
 
                         // sleep for a short bit...
-                        try {
-                            Thread.sleep(1000);
-                        }
-                        catch (InterruptedException ex2) {
-                            this.errorLogger().critical("MQTTTransport(connect): sleep interrupted", ex2);
-                        }
+                        Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
                     }
                 }
                 else {
@@ -844,7 +834,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
         // disconnect()...
-        this.disconnect();
+        this.disconnect(true);
         
         // DEBUG
         this.errorLogger().warning("resetConnection: Attempting to start reconnection for MQTT...");
@@ -1035,8 +1025,8 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     @Override
     public void disconnect() {
-        // non-destructive disconnect()...
-        this.disconnect(false);
+        // disconnect will either be a close-down or resetConnection()... either way we clear all...
+        this.disconnect(true);
     }
 
     // Disconnect from MQTT broker

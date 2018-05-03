@@ -693,8 +693,14 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             // deregister the old device (it may be gone already...)
             this.m_device_manager.deregisterDevice(iothub_ep_name);
             
+            // sleep for abit
+            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
+            
             // now create a new device
             this.completeNewDeviceRegistration(ep);
+            
+            // sleep for abit
+            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
             
             // create a new MQTT connection
             boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);

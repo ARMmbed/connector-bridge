@@ -73,6 +73,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
         if (this.m_transport != null && this.m_transport.isConnected() == true) {
             this.m_transport.disconnect();
         }
+        this.m_transport = null;
     }
     
     /**
@@ -98,18 +99,16 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      */
     @SuppressWarnings("empty-statement")
     private void listenerThreadLoop() {
-        while (this.m_running && this.m_transport.isConnected() == true) {
-            // receive and process...
-            this.m_transport.receiveAndProcess();
+        while (this.m_running == true) {
+            if (this.m_transport != null) {
+                if (this.m_transport.isConnected() == true) {
+                    // receive and process...
+                    this.m_transport.receiveAndProcess();
+                }
+            }
 
             // sleep for a bit...
-            try {
-                Thread.sleep(this.m_sleep_time_ms);
-            }
-            catch (InterruptedException ex) {
-                // silent
-                ;
-            }
+            Utils.waitForABit(null, this.m_sleep_time_ms);
         }
     }
 
@@ -130,7 +129,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      */
     @Override
     public void onMessageReceive(String topic, String message) {
-        if (this.m_listener != null) {
+        if (this.m_listener != null && topic != null && message != null) {
             this.m_listener.onMessageReceive(topic, message);
         }
     }
