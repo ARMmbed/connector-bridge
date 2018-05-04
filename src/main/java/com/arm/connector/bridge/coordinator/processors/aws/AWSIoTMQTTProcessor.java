@@ -416,16 +416,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.errorLogger().info("deregisterDevice(AWSIoT): deregistering device: " + device);
 
             // disconnect, remove the threaded listener... 
-            if (this.m_mqtt_thread_list.get(device) != null) {
-                try {
-                    this.m_mqtt_thread_list.get(device).disconnect();
-                }
-                catch (Exception ex) {
-                    // note but continue...
-                    this.errorLogger().warning("deregisterDevice(AWSIoT): exception during deregistration", ex);
-                }
-                this.m_mqtt_thread_list.remove(device);
-            }
+            this.stopListenerThread(device);
 
             // also remove MQTT Transport instance too...
             this.disconnect(device);
@@ -441,7 +432,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // start our listener thread
     private void startListenerThread(String ep_name,MQTTTransport mqtt) {
         // ensure we only have 1 thread/endpoint
-        this.stopListenerThread(ep_name);
+        this.m_mqtt_thread_list.remove(ep_name);
 
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -507,11 +498,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
                             this.remove(ep_name);
 
                             // ensure we only have 1 thread/endpoint
-                            if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                                listener.halt();
-                                this.m_mqtt_thread_list.remove(ep_name);
-                            }
+                            this.stopListenerThread(ep_name);
                         }
                     }
                     else {
@@ -591,10 +578,10 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     @Override
     public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
         if (this.m_device_manager != null) {
-            // kill the old listener
+            // stop the current listener thread
             this.stopListenerThread(ep_name);
             
-            // clean up old MQTT connection
+            // clean up old MQTT connection (will remove as well...)
             this.disconnect(ep_name);
             
             // Create a new device record
@@ -617,14 +604,8 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             // sleep for abit
             Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
             
-            // create a new MQTT connection
-            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
-            if (connected) {
-                // let the peer finish reconnection accounting
-                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
-                this.startListenerThread(ep_name, this.mqtt(ep_name));
-            }
-            return connected;
+            // create a new MQTT connection (will re-subscribe and start listener threads...)
+            return this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
         }
         return false;
     }

@@ -752,7 +752,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                         }
                     }
                     catch (Exception ex) {
-                        this.errorLogger().warning("MQTTTransport: Exception during connect()", ex);
+                        this.errorLogger().warning("MQTTTransport: Exception during connect(): " + ex.getMessage());
 
                         // DEBUG
                         this.errorLogger().warning("MQTT: URL: " + url);
@@ -806,61 +806,63 @@ public class MQTTTransport extends Transport implements GenericSender {
         if (this.isConnected()) {
             try {
                 // receive the MQTT message and process it...
-                //this.errorLogger().info("MQTTTransport: in receiveAndProcess(). Calling receiveAndProcessMessage()...");
+                this.errorLogger().info("receiveAndProcess(MQTT). Calling receiveAndProcessMessage()...");
                 this.receiveAndProcessMessage();
             }
             catch (Exception ex) {
                 // note
-                this.errorLogger().info("MQTTTransport: caught Exception in recieveAndProcess(): " + ex.getMessage());
+                this.errorLogger().info("receiveAndProcess(MQTT): caught Exception caught: " + ex.getMessage(),ex);
                 return false;
             }
             return true;
         }
         else {
-            this.errorLogger().info("MQTTTransport: not connected (OK)");
+            this.errorLogger().info("receiveAndProcess(MQTT): not connected (OK)");
             return true;
         }
-    }
-    
-    // resubscribe to topics...
-    public void resetSubscriptions(Topic[] topics) {
-        // DEBUG
-        this.errorLogger().warning("resetSubscriptions: re-subscribe() to topics...");
-        this.m_subscribe_topics = topics;
-        this.subscribe(this.m_subscribe_topics);
-
     }
 
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
-        // disconnect()...
-        this.disconnect(true);
-        
-        // DEBUG
-        this.errorLogger().warning("resetConnection: Attempting to start reconnection for MQTT...");
+        if (this.m_connection != null) {
+            // disconnect()...
+            this.disconnect(true);
 
-        // ensure that we have a shadow device to reconnect to...
-        if (this.m_reconnector != null) {
             // DEBUG
-            this.errorLogger().info("startReconnection: restarting MQTT connection for device: " + this.m_ep_name);
-            
-            // end us, restart with a new connection... so adios... 
-            this.m_reconnector.startReconnection(this.m_ep_name,this.m_ep_type,this.m_subscribe_topics);
-            
-            // nothing more to do... we are being terminated.
+            this.errorLogger().warning("resetConnection(MQTT): Attempting to start reconnection for MQTT...");
+
+            // ensure that we have a shadow device to reconnect to...
+            if (this.m_reconnector != null) {
+                // DEBUG
+                this.errorLogger().info("resetConnection(MQTT): restarting MQTT connection for device: " + this.m_ep_name);
+
+                // end us, restart with a new connection... so adios... 
+                this.m_reconnector.startReconnection(this.m_ep_name,this.m_ep_type,this.m_subscribe_topics);
+
+                // nothing more to do... we are being terminated.
+            }
+            else {
+                // unable to re-validate shadow device
+                this.errorLogger().info("resetConnection(MQTT): unable to restart MQTT connection for device: " + this.m_ep_name);
+            }
         }
         else {
-            // unable to re-validate shadow device
-            this.errorLogger().info("resetConnection: unable to restart MQTT connection for device: " + this.m_ep_name);
+            // already removed connection...
+            this.errorLogger().warning("resetConnection(MQTT): Already removed connection (OK)");
         }
     }
 
     // subscribe to specific topics 
     public void subscribe(Topic[] list) {
-        if (this.m_connection != null) {
+        if (this.m_connection != null && this.m_connection.isConnected() == true) {
             try {
                 // DEBUG
                 this.errorLogger().info("MQTTTransport: Subscribing to " + list.length + " topics...");
+                
+                // DEBUG
+                for(int i=0;i<list.length;++i) {
+                    this.errorLogger().info("MQTTTransport: Subscribing to Topic[" + i + "]: " + list[i].toString());
+                }
 
                 // subscribe
                 this.m_subscribe_topics = list;
@@ -878,20 +880,29 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.resetConnection();
             }
         }
+        else if (this.m_connection != null) {
+            // unable to subscribe - not connected... 
+            this.errorLogger().info("MQTTTransport: unable to subscribe. Not connected yet.");
+        }
         else {
             // unable to subscribe - not connected... 
-            this.errorLogger().info("MQTTTransport: unable to subscribe. Connection is missing and/or NULL");
+            this.errorLogger().info("MQTTTransport: unable to subscribe. Connection handle is NULL");
+            
+            // attempt reset
+            this.resetConnection();
         }
     }
 
     // unsubscribe from specific topics
     public void unsubscribe(String[] list) {
-        if (this.m_connection != null) {
+        if (this.m_connection != null && this.m_connection.isConnected() == true) {
             try {
                 this.m_subscribe_topics = null;
                 this.m_unsubscribe_topics = list;
                 this.m_connection.unsubscribe(list);
-                //this.errorLogger().info("MQTTTransport: Unsubscribed from TOPIC(s): " + list.length);
+                
+                // DEBUG
+                this.errorLogger().info("MQTTTransport: Unsubscribed from TOPIC(s): " + list.length);
             }
             catch (Exception ex) {
                 // unable to subscribe to topic
@@ -901,9 +912,16 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.resetConnection();
             }
         }
+        else if (this.m_connection != null) {
+            // unable to subscribe - not connected... 
+            this.errorLogger().info("MQTTTransport: unable to unsubscribe. Not connected yet.");
+        }
         else {
             // unable to subscribe - not connected... 
-            this.errorLogger().info("MQTTTransport: unable to unsubscribe. Connection is missing and/or NULL");
+            this.errorLogger().info("MQTTTransport: unable to unsubscribe. Connection is NULL");
+            
+            // attempt reset
+            this.resetConnection();
         }
     }
 
@@ -947,9 +965,9 @@ public class MQTTTransport extends Transport implements GenericSender {
             }
         }
         else if (this.m_connection != null && message != null) {
-            // unable to send (not connected)
+            // unable to send (not connected yet)
             this.errorLogger().warning("sendMessage: NOT CONNECTED. Unable to send message: " + message);
-
+            
             // reset the connection
             this.resetConnection();
         }
@@ -962,7 +980,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         }
         else {
             // unable to send (empty message)
-            this.errorLogger().warning("sendMessage: EMPTY MESSAGE. Not sent (OK)");
+            this.errorLogger().info("sendMessage: EMPTY MESSAGE. Not sent (OK)");
             sent = true;
         }
 
@@ -972,16 +990,21 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     // get the next MQTT message
     private MQTTMessage getNextMessage() throws Exception {
-        if (this.m_connection != null) {
+        if (this.m_connection != null && this.m_connection.isConnected() == true) {
             MQTTMessage message = new MQTTMessage(this.m_connection.receive());
             if (message != null) {
                 message.ack();
             }
             return message;
         }
+        else if (this.m_connection != null) {
+            // not connected yet... so just ignored
+        }
         else {
+            // no handle. throw exception 
             throw new Exception();
         }
+        return null;
     }
 
     /**
@@ -993,27 +1016,29 @@ public class MQTTTransport extends Transport implements GenericSender {
         MQTTMessage message = null;
         try {
             // DEBUG
-            //this.errorLogger().info("receiveMessage: getting next MQTT message...");
+            this.errorLogger().info("receiveMessage: getting next MQTT message...");
             message = this.getNextMessage();
             if (this.m_listener != null && message != null) {
                 // call the registered listener to process the received message
-                this.errorLogger().info("receiveMessage: processing message: " + message);
-                //this.errorLogger().info("receiveAndProcessMessage(MQTT Transport): Topic: " + message.getTopic() + " message: " + message.getMessage());
+                this.errorLogger().info("receiveAndProcessMessage(MQTT): processing new message: Topic:  " + message.getTopic() + " Mesage: " + message.getMessage());
                 this.m_listener.onMessageReceive(message.getTopic(), message.getMessage());
             }
-            else if (this.m_listener != null) {
+            else if (message != null) {
                 // no listener
-                this.errorLogger().warning("receiveMessage: Not processing message: " + message + ". Listener is NULL");
+                this.errorLogger().warning("receiveAndProcessMessage(MQTT): Not processing new message: Topic:  " + message.getTopic() + " Mesage: " + message.getMessage() + ". Listener is NULL");
             }
             else {
                 // no message - just skip
-                this.errorLogger().info("receiveMessage: Not processing NULL message");
+                this.errorLogger().info("receiveAndProcessMessage(MQTT): Not processing NULL message");
             }
         }
         catch (Exception ex) {
             // unable to receiveMessage - final
-            this.errorLogger().warning("receiveMessage: unable to receive message... resetting connection. Exception: " + ex.getMessage(), ex);
-
+            this.errorLogger().warning("receiveAndProcessMessage(MQTT): Exception caught: " + ex.getMessage(),ex);
+            
+            // reset the connection
+            this.errorLogger().warning("receiveAndProcessMessage(MQTT): resetting connection");
+            
             // reset the connection
             this.resetConnection();
         }
@@ -1030,42 +1055,48 @@ public class MQTTTransport extends Transport implements GenericSender {
     }
 
     // Disconnect from MQTT broker
-    public void disconnect(boolean clear_creds) {
-        // DEBUG
-        this.errorLogger().info("MQTT: disconnecting from MQTT Broker.. ");
+    public void disconnect(boolean clear_all) {
+        if (this.m_connection != null) {
+            // DEBUG
+            this.errorLogger().info("MQTT: disconnecting from MQTT Broker.. ");
 
-        // disconnect... 
-        try {
-            if (this.m_connection != null) {
+            // disconnect... 
+            try {
                 this.m_connection.disconnect();
             }
-        }
-        catch (Exception ex) {
-            // unable to send
-            this.errorLogger().warning("MQTT: exception during disconnect(). ", ex);
-        }
-
-        // DEBUG
-        this.errorLogger().info("MQTT: disconnected. Cleaning up...");
-
-        // clean up...
-        super.disconnect();
-        this.m_endpoint = null;
-        this.m_connection = null;
-
-        // clear the cached creds 
-        if (clear_creds == true) {
-            this.errorLogger().info("MQTT: disconnected (clean-up). Removing MQTT credentials...");
-            this.m_connect_host = null;
-            this.m_connect_port = 0;
-            this.m_connect_id = null;
-            this.m_connect_client_id = null;
-            if (this.m_use_x509_auth == true && this.m_keystore_filename != null) {
-                // DEBUG
-                this.errorLogger().info("MQTT: disconnected (clean-up). Removing keystore...");
-                Utils.deleteKeystore(this.errorLogger(), this.m_keystore_filename, this.m_keystore_basename);
+            catch (Exception ex) {
+                // unable to send
+                this.errorLogger().warning("MQTT: exception during disconnect(). ", ex);
             }
-            this.m_keystore_filename = null;
+
+            // DEBUG
+            this.errorLogger().info("MQTT: disconnected. Cleaning up...");
+
+            // clean up...
+            super.disconnect();
+            this.m_connection = null;
+
+            // clear the cached values 
+            if (clear_all == true) {
+                this.errorLogger().info("MQTT: disconnected (clean-up). Removing MQTT credentials/settings...");
+                this.m_connect_host = null;
+                this.m_connect_port = 0;
+                this.m_connect_id = null;
+                this.m_password = null;
+                this.m_username = null;
+                this.m_endpoint = null;
+                this.m_connect_client_id = null;
+                if (this.m_use_x509_auth == true && this.m_keystore_filename != null) {
+                    // DEBUG
+                    this.errorLogger().info("MQTT: disconnected (clean-up). Removing keystore...");
+                    Utils.deleteKeystore(this.errorLogger(), this.m_keystore_filename, this.m_keystore_basename);
+                }
+                this.m_keystore_filename = null;
+            }
+        }
+        else {
+            // already removed connection...
+            this.errorLogger().info("MQTT: already disconnected (OK)");
         }
     }
 

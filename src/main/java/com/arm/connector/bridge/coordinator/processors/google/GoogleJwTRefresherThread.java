@@ -23,6 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.google;
 
 import com.arm.connector.bridge.core.ErrorLogger;
+import com.arm.connector.bridge.core.Utils;
 
 /**
  *
@@ -84,12 +85,7 @@ public class GoogleJwTRefresherThread extends Thread {
                 // wait until the processor is idle
                 while(this.m_processor.operationStart() == false) {
                     // continue sleeping until we have a lock on the processor
-                    try {
-                        Thread.sleep(this.m_wait_for_lock);
-                    }
-                    catch(InterruptedException ex) {
-                        // silent
-                    }
+                    Utils.waitForABit(this.errorLogger(), this.m_wait_for_lock);
                 }
                 
                 // DEBUG

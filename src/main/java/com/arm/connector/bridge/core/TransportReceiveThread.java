@@ -32,6 +32,7 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
     private boolean m_running = false;
     private Transport m_transport = null;
     private int m_sleep_time_ms = 0;
+    private ErrorLogger m_error_logger = null;
     private Transport.ReceiveListener m_listener = null;
 
     /**
@@ -40,11 +41,41 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      * @param transport
      */
     public TransportReceiveThread(Transport transport) {
-        this.m_transport = transport;
-        this.m_transport.setOnReceiveListener(this);
+        if (transport != null) {
+            this.m_error_logger = transport.errorLogger();
+        }
+        this.setTransport(transport);
         this.m_running = false;
         this.m_listener = null;
         this.m_sleep_time_ms = this.m_transport.preferences().intValueOf("mqtt_receive_loop_sleep") * 1000;
+    }
+    
+    /**
+     * Set the Transport
+     * 
+     * @param transport
+     */
+    public void setTransport(Transport transport) {
+        this.m_transport = transport;
+        if (this.m_transport != null) {
+            this.m_transport.setOnReceiveListener(this);
+        }
+    }
+    
+    /** 
+     * Clear the Transport
+     */
+    public void clearTransport() {
+        this.m_transport = null;
+    }
+    
+    /**
+     * set the receive listener
+     *
+     * @param listener
+     */
+    public void setOnReceiveListener(Transport.ReceiveListener listener) {
+        this.m_listener = listener;
     }
 
     /**
@@ -62,14 +93,16 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      * @return
      */
     public boolean isConnected() {
-        return this.m_transport.isConnected();
+        if (this.m_transport != null) {
+            return this.m_transport.isConnected();
+        }
+        return false;
     }
 
     /**
      * disconnect
      */
     public void disconnect() {
-        this.halt();
         if (this.m_transport != null && this.m_transport.isConnected() == true) {
             this.m_transport.disconnect();
         }
@@ -100,26 +133,32 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
     @SuppressWarnings("empty-statement")
     private void listenerThreadLoop() {
         while (this.m_running == true) {
+            // DEBUG
+            this.errorLogger().info("TransportReceiveThread: Event Loop Tick....");
+            
+            // config check
             if (this.m_transport != null) {
                 if (this.m_transport.isConnected() == true) {
                     // receive and process...
+                    this.errorLogger().info("TransportReceiveThread: calling Transport::receiveAndProcess()...");
                     this.m_transport.receiveAndProcess();
                 }
+                else {
+                    // not connected
+                    this.errorLogger().info("TransportReceiveThread: NOT CONNECTED...");
+                }
+            }
+            else {
+                // no handle
+                this.errorLogger().info("TransportReceiveThread: NULL TRANSPORT...");
             }
 
             // sleep for a bit...
-            Utils.waitForABit(null, this.m_sleep_time_ms);
+            Utils.waitForABit(null,this.m_sleep_time_ms);
         }
-    }
-
-    /**
-     * set the receive listener
-     *
-     * @param listener
-     */
-    public void setOnReceiveListener(Transport.ReceiveListener listener) {
-        this.m_listener = listener;
-        this.m_transport.setOnReceiveListener(this);
+        
+        // exited event loop
+        this.errorLogger().info("TransportReceiveThread: EXITED ListenerEventLoop!...");
     }
 
     /**
@@ -129,8 +168,14 @@ public class TransportReceiveThread extends Thread implements Transport.ReceiveL
      */
     @Override
     public void onMessageReceive(String topic, String message) {
-        if (this.m_listener != null && topic != null && message != null) {
+        if (this.m_listener != null) {
+            this.errorLogger().info("TransportReceiveThread: dispatching to m_listener::onMessageReceive()...");
             this.m_listener.onMessageReceive(topic, message);
         }
+    }
+    
+    // error logger
+    private ErrorLogger errorLogger() {
+        return this.m_error_logger;
     }
 }

@@ -676,10 +676,10 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             // IOTHUB DeviceID Prefix
             String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
             
-            // kill the old listener
+            // stop the current listener thread
             this.stopListenerThread(iothub_ep_name);
             
-            // clean up old MQTT connection
+            // clean up old MQTT connection (will remove as well...)
             this.disconnect(iothub_ep_name);
             
             // Create a new device record
@@ -702,14 +702,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             // sleep for abit
             Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
             
-            // create a new MQTT connection
-            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
-            if (connected) {
-                // let the peer finish reconnection accounting
-                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
-                this.startListenerThread(ep_name, this.mqtt(iothub_ep_name));
-            }
-            return connected;
+            // create a new MQTT connection (will re-subscribe and start listener threads...)
+            return this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
         }
         return false;
     }
@@ -821,17 +815,11 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // OVERRIDE stop the listener thread
     @Override
     protected void stopListenerThread(String iothub_ep_name) {
-        try {
-            // ensure we only have 1 thread/endpoint
-            if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
-                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
-                listener.halt();
-                this.m_mqtt_thread_list.remove(iothub_ep_name);
-                listener.join();
-            }
-        }
-        catch (InterruptedException ex) {
-            // silent
+        // ensure we only have 1 thread/endpoint
+        if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
+            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
+            this.m_mqtt_thread_list.remove(iothub_ep_name);
+            listener.halt();
         }
     }
     
@@ -841,7 +829,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
         
         // ensure we only have 1 thread/endpoint
-        this.stopListenerThread(iothub_ep_name);
+        this.m_mqtt_thread_list.remove(iothub_ep_name);
         
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -914,11 +902,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
                     this.remove(iothub_ep_name);
 
                     // ensure we only have 1 thread/endpoint
-                    if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
-                        TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(iothub_ep_name);
-                        listener.halt();
-                        this.m_mqtt_thread_list.remove(iothub_ep_name);
-                    }
+                    this.stopListenerThread(iothub_ep_name);
                 }
             }
             else {

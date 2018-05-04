@@ -284,7 +284,10 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     
     // subscribe MQTT Topics
     protected void subscribe_to_topics(String ep_name, Topic topics[]) {
-        this.mqtt(ep_name).subscribe(topics);
+        if (this.mqtt(ep_name) != null) {
+            this.errorLogger().info("subscribe_to_topics(MQTT): subscribing to topics...");
+            this.mqtt(ep_name).subscribe(topics);
+        }
     }
 
     // does this endpoint already have registered subscriptions?
@@ -546,17 +549,11 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     
     // stop the listener thread
     protected void stopListenerThread(String ep_name) {
-        try {
-            // ensure we only have 1 thread/endpoint
-            if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                listener.halt();
-                this.m_mqtt_thread_list.remove(ep_name);
-                listener.join();
-            }
-        }
-        catch (InterruptedException ex) {
-            // silent
+        // ensure we only have 1 thread/endpoint
+        if (this.m_mqtt_thread_list.get(ep_name) != null) {
+            TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
+            this.m_mqtt_thread_list.remove(ep_name);
+            listener.halt();
         }
     }
 }

@@ -1036,7 +1036,7 @@ public class Utils {
     }
     
     // wait a bit
-    public static void waitForABit(ErrorLogger logger, int wait_time_ms) {
+    public static void waitForABit(ErrorLogger logger, long wait_time_ms) {
         try {
             Thread.sleep(wait_time_ms);
         }

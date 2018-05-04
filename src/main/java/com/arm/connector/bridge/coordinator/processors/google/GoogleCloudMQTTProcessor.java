@@ -47,7 +47,6 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.Serializable;
-import static java.lang.Thread.sleep;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -76,7 +75,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     private static QoS GOOGLE_QoS = QoS.AT_LEAST_ONCE;
     
     // Lock Wait time in MS
-    private long m_lock_wait_ms = 3500;       // 3.5 seconds
+    private long m_lock_wait_ms = 2500;       // 2.5 seconds
     
     // SUBSCRIBE to these topics
     private String m_google_cloud_coap_config_topic = null;
@@ -113,7 +112,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     private int m_max_retries = 0;
     
     // number of ms to wait prior to reconnect from JwT refresh
-    private int m_jwt_refresh_wait_ms = 30000;          // 30 seconds
+    private int m_jwt_refresh_wait_ms = 15000;          // 15 seconds
     
     // Google Cloud Credential
     private GoogleCredential m_credential = null;
@@ -395,6 +394,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                 // do not use subdirectories for the topic... no "path" at the end...
                 String topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic,ep_name);
                 
+                // DEBUG
+                this.errorLogger().info("GoogleCloud: CoAP notification: SENDING Topic: " + topic + " Message: " + google_cloud_gw_coap_json);
+                
                 // send the observation...
                 boolean status = this.mqtt(ep_name).sendMessage(topic, google_cloud_gw_coap_json, GoogleCloudMQTTProcessor.GOOGLE_QoS);
                 if (status == true) {
@@ -403,7 +405,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                 }
                 else {
                     // send failed
-                    this.errorLogger().warning("GoogleCloud: CoAP notification not sent. SEND FAILED");
+                    this.errorLogger().warning("GoogleCloud: CoAP notification not sent. SEND FAILED.");
                 }
             }
             else {
@@ -417,7 +419,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     @Override
     public void onMessageReceive(String topic, String message) {
         // DEBUG
-        this.errorLogger().info("GoogleCloud(CoAP Command): Topic: " + topic + " message: " + message);
+        this.errorLogger().info("onMessageReceive(GoogleCloud): CoAP Command message to process: Topic: " + topic + " message: " + message);
         
         // parse the topic to get the endpoint
         // format: mbed/__DEVICE_TYPE__/__EPNAME__/coap/__COMMAND_TYPE__/#
@@ -458,12 +460,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         
         // wait until we have a LOCK
         while(this.operationStart() == false) {
-            try {
-                Thread.sleep(this.m_lock_wait_ms);
-            }
-            catch(InterruptedException ex) {
-                // silent
-            }
+            Utils.waitForABit(this.errorLogger(),this.m_lock_wait_ms);
         }
         
         // DEBUG
@@ -583,24 +580,15 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             // DEBUG
             this.errorLogger().info("deregisterDevice(GoogleCloud): deregistering device: " + device);
 
-            // disconnect, remove the threaded listener... 
-            if (this.m_mqtt_thread_list.get(device) != null) {
-                try {
-                    // stop the refresher list
-                    this.stopJwTRefresherThread(device);
+            // stop the refresher list
+            this.stopJwTRefresherThread(device);
                     
-                    // disconnect
-                    this.m_mqtt_thread_list.get(device).disconnect();
-                }
-                catch (Exception ex) {
-                    // note but continue...
-                    this.errorLogger().warning("deregisterDevice(GoogleCloud): exception during deregistration", ex);
-                }
-                this.m_mqtt_thread_list.remove(device);
-            }
+            // disconnect, remove the threaded listener... 
+            this.stopListenerThread(device);
 
             // also remove MQTT Transport instance too...
             this.disconnect(device);
+            this.remove(device);
 
             // remove the device from GoogleCloud
             if (this.m_device_manager.deregisterDevice(device) == false) {
@@ -641,6 +629,33 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         return null;
     }
     
+    // restart our device connection 
+    @Override
+    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
+        // create the endpoint shadow
+        if (this.m_device_manager != null) {
+            // re-register the device
+            this.errorLogger().info("startReconnection(GoogleCloud): Re-registering device shadow...");
+            HashMap<String,Serializable> ep = new HashMap<>();
+            ep.put("ep",ep_name);
+            ep.put("ept", ep_type);
+            boolean registered = this.m_device_manager.registerNewDevice(ep);
+            if (registered) {
+                // refresh the JwT... that will reset the MQTT connection
+                this.errorLogger().info("startReconnection(GoogleCloud): Refreshing JwT (MQTT restart)...");
+                
+                // simply refresh the JwT... that will rebuild our connection...
+                this.refreshJwTForEndpoint(ep_name);
+                
+                // DEBUG
+                this.errorLogger().info("startReconnection(GoogleCloud): startReconnection: re-connected SUCCESS!");
+            }
+        }
+        
+        // return the connection status
+        return this.isConnected();
+    }
+    
     // Refresh the JwT for a given endpoint
     public void refreshJwTForEndpoint(String ep_name) {
         try {
@@ -649,7 +664,10 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                 // DEBUG
                 this.errorLogger().info("refreshJwTForEndpoint: Disconnecting MQTT... JwT refresh starting...");
                 
-                // disconnect MQTT
+                // disconnect the MATT transport from the listener thread
+                this.stopListenerThread(ep_name);
+                
+                // disconnect MQTT (will remove it as well...)
                 this.disconnect(ep_name);
                 
                 // create a new JwT
@@ -665,12 +683,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...waiting a bit...");
                     
                     // Sleep a bit
-                    try {
-                        sleep(this.m_jwt_refresh_wait_ms);    // retry
-                    }
-                    catch(InterruptedException ex) {
-                        // silent
-                    }
+                    Utils.waitForABit(this.errorLogger(), this.m_jwt_refresh_wait_ms);
                         
                     // DEBUG
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
@@ -680,30 +693,30 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                     if (mqtt != null) {
                         // record the additional endpoint details
                         mqtt.setEndpointDetails(ep_name, this.getEndpointTypeFromEndpointName(ep_name));
-                        
+
                         // add it to the list indexed by the endpoint name... not the clientID...
                         this.addMQTTTransport(ep_name, mqtt);
-
+                            
                         // re-connect
                         connected = this.connect(ep_name,client_id,jwt);
                         if (connected == true) {
                             // success! new JwT active...
                             this.errorLogger().info("refreshJwTForEndpoint: reconnected with new JwT (SUCCESS)");
-                            
+                                                        
                             // re-subscribe to topics
                             this.errorLogger().info("refreshJwTForEndpoint: connected to MQTT. Re-subscribing to Google topics...");
-                            this.subscribeToGoogleTopics(ep_name,this.getEndpointTypeFromEndpointName(ep_name));
+                            this.subscribeToGoogleTopics(ep_name,this.getEndpointTypeFromEndpointName(ep_name));     
                             
-                            // start a listener thread...
-                            this.errorLogger().info("refreshJwTForEndpoint: connected to MQTT. Starting new listener thread...");
-                            this.startListenerThread(ep_name, mqtt);
+                            // update the listener thread with the new mqtt transport
+                            this.errorLogger().info("refreshJwTForEndpoint: connected to MQTT. re-connecting to the listener thread...");
+                            this.startListenerThread(ep_name,mqtt);
                         }
                         else if (i < (this.m_max_retries -1)) {
                             // failure to reconnect
                             this.errorLogger().warning("refreshJwTForEndpoint: FAILED to reconnect with new JwT!! Retrying (" + (i+1) + " of " + this.m_max_retries + ")...");
 
                             // remove from the list...
-                            this.remove(ep_name);
+                            this.disconnect(ep_name);
                         }
                         else {
                             // failure to reconnect
@@ -730,12 +743,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...waiting a bit...");
                     
                     // Sleep a bit
-                    try {
-                        sleep(this.m_jwt_refresh_wait_ms);    // retry
-                    }
-                    catch(InterruptedException ex) {
-                        // silent
-                    }
+                    Utils.waitForABit(this.errorLogger(),this.m_jwt_refresh_wait_ms);
                         
                     // DEBUG
                     this.errorLogger().info("refreshJwTForEndpoint: Creating new MQTT Connection with new JwT...connecting...");
@@ -788,6 +796,17 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         }
     }
     
+    // Start the JwT refresher thread
+    private void startJwTRefresherThread(String ep_name) {
+        // make sure we only have 1 refresher thread...
+        this.stopJwTRefresherThread(ep_name);
+        
+        // start a JwT refresher thread...
+        GoogleJwTRefresherThread jwt_refresher = new GoogleJwTRefresherThread(this,ep_name);
+        this.m_jwt_refesher_thread_list.put(ep_name,jwt_refresher);
+        jwt_refresher.start();
+    }
+    
     // End the JwT refresher thread
     public void stopJwTRefresherThread(String ep_name) {
         GoogleJwTRefresherThread doomed = this.m_jwt_refesher_thread_list.get(ep_name);
@@ -824,7 +843,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // start our listener thread
     private void startListenerThread(String ep_name,MQTTTransport mqtt) {
         // stop any existing listener thread
-        this.stopListenerThread(ep_name);
+        this.m_mqtt_thread_list.remove(ep_name);
 
         // create and start the listener
         TransportReceiveThread listener = new TransportReceiveThread(mqtt);
@@ -859,23 +878,25 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                         this.addMQTTTransport(ep_name, mqtt);
 
                         // DEBUG
-                        this.errorLogger().info("GoogleCloud: connecting to MQTT for endpoint: " + ep_name + " type: " + ep_type + "...");
+                        this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): connecting to MQTT for endpoint: " + ep_name + " type: " + ep_type + "...");
 
                         // connect and start listening... 
                         if (this.connect(ep_name, client_id, jwt) == true) {
                             // DEBUG
-                            this.errorLogger().info("GoogleCloud: connected to MQTT. Creating and registering listener Thread for endpoint: " + ep_name + " type: " + ep_type);
+                            this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): connected to MQTT...");
+                            
+                            // start a listener thread...
+                            this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): Creating and registering listener Thread for endpoint: " + ep_name + " type: " + ep_type);
                             this.startListenerThread(ep_name, mqtt);
                             
-                            // Also start a JwT refresher
-                            GoogleJwTRefresherThread jwt_refresher = new GoogleJwTRefresherThread(this,ep_name);
-                            this.m_jwt_refesher_thread_list.put(ep_name,jwt_refresher);
-                            jwt_refresher.start();
+                            // start the JwT  refresher thread
+                            this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): Starting JwT refresher thread");
+                            this.startJwTRefresherThread(ep_name);
                             
                             // if we have topics in our param list, lets go ahead and subscribe
                             if (topics != null) {
                                 // DEBUG
-                                this.errorLogger().info("GoogleCloud: re-subscribing to topics...");
+                                this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): re-subscribing to topics...");
                                 
                                 // re-subscribe
                                 this.mqtt(ep_name).subscribe(topics);
@@ -886,36 +907,37 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
                         }
                         else {
                             // unable to connect!
-                            this.errorLogger().critical("GoogleCloud: Unable to connect to MQTT for endpoint: " + ep_name + " type: " + ep_type);
+                            this.errorLogger().critical("createAndStartMQTTForEndpoint(GoogleCloud): Unable to connect to MQTT for endpoint: " + ep_name + " type: " + ep_type);
+                            
+                            // remove the MQTT transport
                             this.remove(ep_name);
-
-                            // ensure we only have 1 thread/endpoint
-                            if (this.m_mqtt_thread_list.get(ep_name) != null) {
-                                TransportReceiveThread listener = (TransportReceiveThread) this.m_mqtt_thread_list.get(ep_name);
-                                listener.halt();
-                                this.m_mqtt_thread_list.remove(ep_name);
-                            }
+                            
+                            // Clear out any old JwT refreshers
+                            this.stopJwTRefresherThread(ep_name);
+                            
+                            // remove any listeners
+                            this.stopListenerThread(ep_name);
                         }
                     }
                     else {
                         // unable to allocate MQTT connection for our endpoint
-                        this.errorLogger().critical("GoogleCloud: ERROR. Unable to allocate MQTT connection for: " + ep_name);
+                        this.errorLogger().critical("createAndStartMQTTForEndpoint(GoogleCloud): ERROR. Unable to allocate MQTT connection for: " + ep_name);
                     }
                 }
                 else {
                     // unable to find endpoint details
-                    this.errorLogger().warning("GoogleCloud: unable to find endpoint details for: " + ep_name + "... ignoring...");
+                    this.errorLogger().warning("createAndStartMQTTForEndpoint(GoogleCloud): unable to find endpoint details for: " + ep_name + "... ignoring...");
                 }
             }
             else {
                 // already connected... just ignore
-                this.errorLogger().info("GoogleCloud: already have connection for " + ep_name + " (OK)");
+                this.errorLogger().info("createAndStartMQTTForEndpoint(GoogleCloud): already have connection for " + ep_name + " (OK)");
                 connected = true;
             }
         }
         catch (IOException ex) {
             // exception caught... capture and note the stack trace
-            this.errorLogger().critical("GoogleCloud: createAndStartMQTTForEndpoint(): exception: " + ex.getMessage() + " endpoint: " + ep_name, ex);
+            this.errorLogger().critical("createAndStartMQTTForEndpoint(GoogleCloud): EXCEPTION caught: " + ex.getMessage() + " endpoint: " + ep_name, ex);
         }
         
         // return the connected status
@@ -982,48 +1004,6 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         return ep_type;
     }
     
-    // restart our device connection 
-    @Override
-    public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
-        if (this.m_device_manager != null) {
-            // kill the old listener
-            this.stopListenerThread(ep_name);
-            
-            // clean up old MQTT connection
-            this.disconnect(ep_name);
-            
-            // Create a new device record
-            HashMap<String,Serializable> ep = new HashMap<>();
-            ep.put("ep",ep_name);
-            ep.put("ept", ep_type);
-            
-            // DEBUG
-            this.errorLogger().info("startReconnection: EP: " + ep);
-            
-            // deregister the old device (it may be gone already...)
-            this.m_device_manager.deregisterDevice(ep_name);
-            
-            // sleep for abit
-            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
-            
-            // now create a new device
-            this.completeNewDeviceRegistration(ep);
-            
-            // sleep for abit
-            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
-            
-            // create a new MQTT connection
-            boolean connected = this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
-            if (connected) {
-                // let the peer finish reconnection accounting
-                this.errorLogger().warning("startReconnection: SUCCESS. re-starting listener threads...");
-                this.startListenerThread(ep_name, this.mqtt(ep_name));
-            }
-            return connected;
-        }
-        return false;
-    }
-    
     // complete processing of adding the new device
     private void completeNewDeviceRegistration(Map endpoint) {
         try {
@@ -1055,7 +1035,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // Connection to GoogleCloud MQTT vs. generic MQTT...
     private boolean connect(String ep_name, String client_id, String jwt) {
         // if not connected attempt
-        if (!this.isConnected(ep_name)) {
+        if (this.isConnected(ep_name) == false) {
             // Set our Username and PW for Google Cloud MQTT
             this.mqtt(ep_name).setUsername("ignored");      // unused
             this.mqtt(ep_name).setPassword(jwt);            // JWT in string form
@@ -1068,16 +1048,23 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             
             // Connect to the Google MQTT Service
             if (this.mqtt(ep_name).connect(this.m_google_cloud_mqtt_host,this.m_google_cloud_mqtt_port,client_id,this.m_use_clean_session,ep_name)) {
+                // set the command listener...
                 this.orchestrator().errorLogger().info("GoogleCloud: Setting CoAP command listener...");
                 this.mqtt(ep_name).setOnReceiveListener(this);
+        
+                // connection success
                 this.orchestrator().errorLogger().info("GoogleCloud: connection completed successfully");
+            }
+            else {
+                // connection failure
+                this.orchestrator().errorLogger().info("GoogleCloud: connection FAILED");
             }
         }
         else {
             // already connected
             this.orchestrator().errorLogger().info("GoogleCloud: Already connected (OK)...");
         }
-
+            
         // return our connection status
         this.orchestrator().errorLogger().info("GoogleCloud: Connection status: " + this.isConnected(ep_name));
         return this.isConnected(ep_name);
