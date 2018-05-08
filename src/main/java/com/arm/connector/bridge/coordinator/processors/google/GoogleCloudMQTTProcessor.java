@@ -1177,7 +1177,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         
         try {
             // announce login
-            this.errorLogger().warning("googleCloudLogin(): logging into project_id: " + project_id + "...");
+            this.errorLogger().info("googleCloudLogin(): logging into project_id: " + project_id + "...");
             
             // remove \\00A0 as it can be copied during config setting of the auth json by the configurator...
             // hex(A0) = dec(160)... just replace with an ordinary space... that will make Google's JSON parser happy...

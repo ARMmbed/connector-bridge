@@ -362,7 +362,7 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         }
         
         // DEBUG
-        this.errorLogger().warning("METADATA: " + metadata);
+        this.errorLogger().info("METADATA(GoogleCloud): " + metadata);
         
         return metadata;
     }

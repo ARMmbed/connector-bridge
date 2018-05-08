@@ -608,7 +608,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                     // SSL Context for secured MQTT connections
                     if (this.m_ssl_context_initialized == true) {
                         // DEBUG
-                        this.errorLogger().warning("MQTTTransport: SSL Used... setting SSL context...");
+                        this.errorLogger().info("MQTTTransport: SSL Used... setting SSL context...");
 
                         // SSL Context should be set
                         endpoint.setSslContext(this.m_ssl_context);

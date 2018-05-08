@@ -97,7 +97,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         if (this.m_reconnect_sleep_time_ms <= 0) {
             this.m_reconnect_sleep_time_ms = DEFAULT_RECONNNECT_SLEEP_TIME_MS;
         }
-        this.errorLogger().warning("MQTT: Reconnect sleep time: " + this.m_reconnect_sleep_time_ms + "ms...");
+        this.errorLogger().info("MQTT: Reconnect sleep time: " + this.m_reconnect_sleep_time_ms + "ms...");
         
         // get the default generic name 
         this.m_default_tr_key = orchestrator.preferences().valueOf("mqtt_default_rt_key",this.m_suffix);

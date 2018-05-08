@@ -1097,7 +1097,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
             }
         }
         else {
-            this.errorLogger().warning("processEndpointResourceOperation: ERROR: CoAP Verb is NULL. Not processing: ep: " + ep_name + " uri: " + uri + " value: " + value);
+            this.errorLogger().info("processEndpointResourceOperation: ERROR: CoAP Verb is NULL. Not processing: ep: " + ep_name + " uri: " + uri + " value: " + value);
             json = null;
         }
 
