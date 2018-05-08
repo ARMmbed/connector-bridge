@@ -141,8 +141,8 @@ public class BasePeerProcessorFactory extends PeerProcessor implements Transport
     }
 
     @Override
-    public void processRegistrationsExpired(Map message) {
-        this.processDeregistrations(message);
+    public String[] processRegistrationsExpired(Map message) {
+        return this.processDeregistrations(message);
     }
 
     @Override

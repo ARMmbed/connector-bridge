@@ -39,8 +39,14 @@ public interface mbedDeviceServerInterface {
     // perform endpoint get/put/post/delete operations on endpoint resources
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options);
 
+    // process endpoint deletions from device server
+    public void processDeviceDeletions(String[] endpoints);
+    
     // process endpoint de-registrations from device server
-    public void processDeregistrations(String[] deregistrations);
+    public void processDeregistrations(String[] endpoints);
+    
+    // process endpoint registrations-expired from device server
+    public void processRegistrationsExpired(String[] endpoints);
 
     // process resource subscription request
     public String subscribeToEndpointResource(String uri, Map options, Boolean init_webhook);
@@ -71,6 +77,6 @@ public interface mbedDeviceServerInterface {
     // using mbed cloud integration
     public boolean usingMbedCloud();
     
-    // // device removal on deregistration?
+    // device removal on deregistration?
     public boolean deviceRemovedOnDeRegistration();
 }

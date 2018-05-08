@@ -244,8 +244,8 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         }
     }
 
-    // process device de-registration
-    public boolean deregisterDevice(String device) {
+    // process device deletion
+    public boolean deleteDevice(String device) {
         // first we unlink the certificate and deactivate it
         this.removeCertificate(device);
 
@@ -254,7 +254,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         String result = Utils.awsCLI(this.errorLogger(), args);
 
         // DEBUG
-        this.errorLogger().info("AWS: deregisterDevice: device: " + device + " deletion RESULT: " + result);
+        this.errorLogger().info("AWS: deleteDevice: device: " + device + " deletion RESULT: " + result);
 
         // remove the endpoint details
         this.m_endpoint_details.remove(device);

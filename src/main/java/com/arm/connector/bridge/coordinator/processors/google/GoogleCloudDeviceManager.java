@@ -452,8 +452,8 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         return created;
     }
 
-    // process device de-registration
-    public boolean deregisterDevice(String ep_name) {
+    // process device deletion
+    public boolean deleteDevice(String ep_name) {
         try {
             // remove the device from Google
             String device_path = this.buildDevicePath(this.mbedDeviceIDToGoogleDeviceID(ep_name));
@@ -463,14 +463,14 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
             this.m_endpoint_details.remove(ep_name);
             
             // DEBUG
-            this.errorLogger().info("Google: deregisterDevice: device: " + ep_name + " deletion SUCCESSFUL");
+            this.errorLogger().info("Google: deleteDevice: device: " + ep_name + " deletion SUCCESSFUL");
             
             // success
             return true;
         }
         catch (IOException ex) {
             // unable to delete the device
-            this.errorLogger().warning("Google: deregisterDevice: WARNING:  Unable to delete device: " + ep_name + " Error: " + ex.getMessage());
+            this.errorLogger().warning("Google: deleteDevice: WARNING:  Unable to delete device: " + ep_name + " Error: " + ex.getMessage(),ex);
         }
         
         // error

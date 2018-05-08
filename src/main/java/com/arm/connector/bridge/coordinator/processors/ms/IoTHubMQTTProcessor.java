@@ -166,24 +166,53 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         }
     }
 
-    // OVERRIDE: handle de-registrations for IoTHub
+    // OVERRIDE: process a deregistration (deletion TEST)
     @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
+    public String[] processDeregistrations(Map parsed) {        
+        // TEST: We can actually DELETE the device on deregistration to test device-delete before the device-delete message goes live
+        if (this.orchestrator().deviceRemovedOnDeRegistration() == true) {
+            // processing deregistration as device deletion
+            this.errorLogger().info("processDeregistrations(IoTHub): processing de-registration as device deletion (OK).");
+            this.processDeviceDeletions(parsed, true);
+        }
+        else {
+            // not processing deregistration as a deletion
+            this.errorLogger().info("processDeregistrations(IoTHub): Not processing de-registration as device deletion (OK).");
+        }
+        
+        // always by default...
+        return super.processDeregistrations(parsed);
+    }
+    
+    // OVERRIDE: handle device deletions IoTHub
+    @Override
+    public String[] processDeviceDeletions(Map parsed) {
+        return this.processDeviceDeletions(parsed,false);
+    }
+    
+    // handle device deletions IoTHub
+    private String[] processDeviceDeletions(Map parsed,boolean use_deregistration) {
+        String[] deletions = null;
+        if (use_deregistration == true) {
+            deletions = super.processDeregistrations(parsed);
+        }
+        else {
+            deletions = super.processDeviceDeletions(parsed);
+        }
+        for (int i = 0; deletions != null && i < deletions.length; ++i) {
             // DEBUG
-            this.errorLogger().info("IoTHub : CoAP de-registration: " + deregistration[i]);
+            this.errorLogger().info("IoTHub : processing device deletion for device: " + deletions[i]);
 
             // IOTHUB Prefix
-            String iothub_ep_name = this.addDeviceIDPrefix(deregistration[i]);
+            String iothub_ep_name = this.addDeviceIDPrefix(deletions[i]);
 
             // IoTHub add-on... 
             this.unsubscribe(iothub_ep_name);
 
             // Remove from IoTHub
-            this.deregisterDevice(iothub_ep_name);
+            this.deleteDevice(iothub_ep_name);
         }
-        return deregistration;
+        return deletions;
     }
     
     // OVERRIDE: process a mDS notification for IoTHub
@@ -626,15 +655,15 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         return false;
     }
 
-    // IoTHub Specific: process device de-registration
+    // IoTHub Specific: process device deletion
     @Override
-    protected synchronized Boolean deregisterDevice(String ep_name) {
+    protected synchronized Boolean deleteDevice(String ep_name) {
         if (this.m_device_manager != null) {
             // IOTHUB DeviceID Prefix
             String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
             // DEBUG
-            this.errorLogger().info("deregisterDevice(IoTHub): deregistering device: " + iothub_ep_name);
+            this.errorLogger().info("deleteDevice(IoTHub): deleting device device: " + iothub_ep_name);
 
             // disconnect, remove the threaded listener... 
             if (this.m_mqtt_thread_list.get(iothub_ep_name) != null) {
@@ -643,7 +672,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
                 }
                 catch (Exception ex) {
                     // note but continue...
-                    this.errorLogger().warning("deregisterDevice(IoTHub): exception during deregistration", ex);
+                    this.errorLogger().warning("deleteDevice(IoTHub): exception during device deletion", ex);
                 }
                 this.m_mqtt_thread_list.remove(iothub_ep_name);
             }
@@ -652,8 +681,8 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.disconnect(iothub_ep_name);
 
             // remove the device from IoTHub
-            if (this.m_device_manager.deregisterDevice(iothub_ep_name) == false) {
-                this.errorLogger().warning("deregisterDevice(IoTHub): unable to de-register device from IoTHub...");
+            if (this.m_device_manager.deleteDevice(iothub_ep_name) == false) {
+                this.errorLogger().warning("deleteDevice(IoTHub): unable to de-register device from IoTHub...");
             }
         }
         return true;
@@ -691,7 +720,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.errorLogger().info("startReconnection: EP: " + ep);            
             
             // deregister the old device (it may be gone already...)
-            this.m_device_manager.deregisterDevice(iothub_ep_name);
+            this.m_device_manager.deleteDevice(iothub_ep_name);
             
             // sleep for abit
             Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);

@@ -531,8 +531,8 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         return status;
     }
 
-    // process device de-registration
-    public Boolean deregisterDevice(String device) {
+    // process device deletion
+    public Boolean deleteDevice(String device) {
         String device_type = (String)this.m_device_types.get(device);
 
         // create the URL
@@ -542,7 +542,7 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         url += "/devices/" + device;
 
         // DEBUG
-        this.errorLogger().info("Watson IoT: deregisterDevice: URL: " + url + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
+        this.errorLogger().info("Watson IoT: deleteDevice: URL: " + url + " USER: " + this.m_watson_iot_api_key + " PW: " + this.m_watson_iot_auth_token);
 
         // dispatch and look for the result.
         String result = this.gwdelete(url);
@@ -551,15 +551,15 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         int http_code = this.m_http.getLastResponseCode();
         if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
-            this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS. RESULT: " + result);
+            this.errorLogger().info("Watson IoT: deleteDevice: SUCCESS. RESULT: " + result);
         }
         else if (http_code == 404) {
             // DEBUG
-            this.errorLogger().info("Watson IoT: deregisterDevice: SUCCESS");
+            this.errorLogger().info("Watson IoT: deleteDevice: SUCCESS");
         }
         else {
             // DEBUG
-            this.errorLogger().warning("Watson IoT: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+            this.errorLogger().warning("Watson IoT: deleteDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
         }
 
         // remove our device if successful

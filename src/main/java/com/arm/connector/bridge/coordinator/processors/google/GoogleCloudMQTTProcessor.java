@@ -321,22 +321,54 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             }
         }
     }
-
-    // OVERRIDE: handle de-registrations for GoogleCloud
+    
+    // OVERRIDE: process a deregistration (deletion TEST)
     @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("GoogleCloud : CoAP de-registration: " + deregistration[i]);
-
-            // GoogleCloud add-on... 
-            this.unsubscribe(deregistration[i]);
-
-            // Remove from GoogleCloud
-            this.deregisterDevice(deregistration[i]);
+    public String[] processDeregistrations(Map parsed) {        
+        // always by default... if we delete the device, we also kill our thread... so do this one first...
+        String[] list = super.processDeregistrations(parsed);
+        
+        // TEST: We can actually DELETE the device on deregistration to test device-delete before the device-delete message goes live
+        if (this.orchestrator().deviceRemovedOnDeRegistration() == true) {
+            // processing deregistration as device deletion
+            this.errorLogger().info("processDeregistrations(Google): processing de-registration as device deletion (OK).");
+            this.processDeviceDeletions(parsed, true);
         }
-        return deregistration;
+        else {
+            // not processing deregistration as a deletion
+            this.errorLogger().info("processDeregistrations(Google): Not processing de-registration as device deletion (OK).");
+        }
+        
+        // return the list
+        return list;
+    }
+    
+    // OVERRIDE: handle device deletions Google Cloud
+    @Override
+    public String[] processDeviceDeletions(Map parsed) {
+        return this.processDeviceDeletions(parsed,false);
+    }
+    
+    // handle device deletions Google Cloud
+    private String[] processDeviceDeletions(Map parsed,boolean use_deregistration) {
+        String[] deletions = null;
+        if (use_deregistration == true) {
+            deletions = super.processDeregistrations(parsed);
+        }
+        else {
+            deletions = super.processDeviceDeletions(parsed);
+        }
+        for (int i = 0; deletions != null && i < deletions.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("GoogleCloud : processing device deletion for device: " + deletions[i]);
+            
+            // GoogleCloud add-on... 
+            this.unsubscribe(deletions[i]);
+            
+            // Remove from GoogleCloud
+            this.deleteDevice(deletions[i]);
+        }
+        return deletions;
     }
     
     // OVERRIDE: process a notification/observation in GoogleCloud
@@ -573,27 +605,24 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         return false;
     }
 
-    // process device de-registration
+    /**
+     * process device deletion
+     * @param device
+     * @return
+     */
     @Override
-    protected synchronized Boolean deregisterDevice(String device) {
+    protected synchronized Boolean deleteDevice(String device) {
         if (this.m_device_manager != null) {
             // DEBUG
-            this.errorLogger().info("deregisterDevice(GoogleCloud): deregistering device: " + device);
-
-            // stop the refresher list
-            this.stopJwTRefresherThread(device);
-                    
-            // disconnect, remove the threaded listener... 
-            this.stopListenerThread(device);
-
-            // also remove MQTT Transport instance too...
-            this.disconnect(device);
-            this.remove(device);
+            this.errorLogger().info("deleteDevice(GoogleCloud): deleting device: " + device);
 
             // remove the device from GoogleCloud
-            if (this.m_device_manager.deregisterDevice(device) == false) {
-                this.errorLogger().warning("deregisterDevice(GoogleCloud): unable to de-register device from GoogleCloud...");
+            if (this.m_device_manager.deleteDevice(device) == false) {
+                this.errorLogger().warning("deleteDevice(GoogleCloud): unable to delete device from GoogleCloud...");
             }
+            
+            // stop the refresher thread - this will kill the listener and MQTT connection
+            this.stopJwTRefresherThread(device);
         }
         return true;
     }

@@ -188,6 +188,19 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         }
     }
     
+    // process a device deletion
+    public String[] processDeviceDeletions(Map parsed) {
+        String[] device_deletions = this.parseDeviceDeletionsBody(parsed);
+        this.orchestrator().processDeviceDeletions(device_deletions);
+        for (int i = 0; i < device_deletions.length; ++i) {
+            this.subscriptionsManager().removeEndpointSubscriptions(device_deletions[i]);
+        }
+        for (int i = 0; i < device_deletions.length; ++i) {
+            this.m_endpoint_type_list.remove(device_deletions[i]);
+        }
+        return device_deletions;
+    }
+    
     // process a deregistration
     public String[] processDeregistrations(Map parsed) {
         String[] deregistrations = this.parseDeRegistrationBody(parsed);
@@ -199,6 +212,19 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             this.m_endpoint_type_list.remove(deregistrations[i]);
         }
         return deregistrations;
+    }
+    
+    // process a registrations-expired
+    public String[] processRegistrationsExpired(Map parsed) {
+        String[] regs_expired = this.parseRegistrationsExpiredBody(parsed);
+        this.orchestrator().processRegistrationsExpired(regs_expired);
+        for (int i = 0; i < regs_expired.length; ++i) {
+            this.subscriptionsManager().removeEndpointSubscriptions(regs_expired[i]);
+        }
+        for (int i = 0; i < regs_expired.length; ++i) {
+            this.m_endpoint_type_list.remove(regs_expired[i]);
+        }
+        return regs_expired;
     }
     
     // process an observation
@@ -672,13 +698,30 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         return (obs_str != null && obs_str.equalsIgnoreCase("true"));
     }
 
+    // parse the device-deletions body
+    protected String[] parseDeviceDeletionsBody(Map body) {
+        // explicit device-deletions
+        List list = (List) body.get("device-deletions");
+        if (list != null && list.size() > 0) {
+            return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
+        }
+        return new String[0];
+    }
+    
     // parse the de-registration body
     protected String[] parseDeRegistrationBody(Map body) {
+        // explicit de-registrations
         List list = (List) body.get("de-registrations");
         if (list != null && list.size() > 0) {
             return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
         }
-        list = (List) body.get("registrations-expired");
+        return new String[0];
+    }
+    
+    // parse the registrations-expired body
+    protected String[] parseRegistrationsExpiredBody(Map body) {
+        // registrations-expired (implicit de-registration)
+        List list = (List) body.get("registrations-expired");
         if (list != null && list.size() > 0) {
             return list.toString().replace("[", "").replace("]", "").replace(",", " ").split(" ");
         }
@@ -1023,11 +1066,6 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         this.processRegistration(data,"registrations");
     }
     
-    // OVERRIDE: process mds registrations-expired messages 
-    public void processRegistrationsExpired(Map parsed) {
-        this.processDeregistrations(parsed);
-    }
-    
     // record an async response to process later (default)
     public void recordAsyncResponse(String response, String uri, Map ep, AsyncResponseProcessor processor) {
         if (this.asyncResponseManager() != null) {
@@ -1079,25 +1117,25 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     
     // process new device registration
     protected Boolean registerNewDevice(Map message) {
-        // XXX to do
+        // nothing to do in base class
         return false;
     }
 
     // process device re-registration
     protected Boolean reregisterDevice(Map message) {
-        // XXX to do
+        // nothing to do in base class
         return false;
     }
-
-    // process device de-registration
-    protected Boolean deregisterDevice(String device) {
-        // XXX to do
+    
+    // process device deletion
+    protected Boolean deleteDevice(String device) {
+        // nothing to do in base class
         return false;
     }
 
     // process device registration expired
     protected Boolean expireDeviceRegistration(String device) {
-        // XXX to do
+        // nothing to do in base class
         return false;
     }
 }

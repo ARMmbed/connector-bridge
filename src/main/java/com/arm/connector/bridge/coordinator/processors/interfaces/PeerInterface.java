@@ -40,11 +40,14 @@ public interface PeerInterface {
     // process an endpoint re-registration message from mDS
     public void processReRegistration(Map message);
 
+    // process an endpoint device deletions message from mDS
+    public String[] processDeviceDeletions(Map message);
+    
     // process an endpoint de-registration message from mDS
     public String[] processDeregistrations(Map message);
 
     // process an endpoint registrations-expired message from mDS
-    public void processRegistrationsExpired(Map message);
+    public String[] processRegistrationsExpired(Map message);
 
     // process an endpoint async response result from mDS
     public void processAsyncResponses(Map message);

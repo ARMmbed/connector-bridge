@@ -329,22 +329,28 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         return null;
     }
 
-    // mbedDeviceServerInterface Orchestration
+    // Message: notifications
     @Override
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {
         this.device_server_processor().processNotificationMessage(request, response);
     }
-
+    
+    // Message: device-deletions (mbed Cloud)
     @Override
-    public void processDeregistrations(String[] deregistrations) {
-        // only if devices are removed on de-regsistration 
-        if (this.deviceRemovedOnDeRegistration() == true) {
-            this.device_server_processor().processDeregistrations(deregistrations);
-        }
-        else {
-            // not processing de-registrations
-            this.errorLogger().info("Orchestrator: device server not processing endpoint de-registration (OK).");
-        }
+    public void processDeviceDeletions(String[] endpoints) {
+        this.device_server_processor().processDeviceDeletions(endpoints);
+    }
+
+    // Message: de-registrations
+    @Override
+    public void processDeregistrations(String[] endpoints) {
+        this.device_server_processor().processDeregistrations(endpoints);
+    }
+    
+    // Message: registrations-expired
+    @Override
+    public void processRegistrationsExpired(String[] endpoints) {
+        this.device_server_processor().processRegistrationsExpired(endpoints);
     }
 
     @Override
@@ -409,6 +415,7 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         }
     }
 
+    // Message: registration
     @Override
     public void processNewRegistration(Map message) {
         for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
@@ -416,47 +423,62 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         }
     }
 
+    // Message: reg-updates
     @Override
     public void processReRegistration(Map message) {
         for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
             this.peerProcessor(i).processReRegistration(message);
         }
     }
+    
+    // Message: device-deletions (mbed Cloud)
+    @Override
+    public String[] processDeviceDeletions(Map message) {
+        ArrayList<String> deletions = new ArrayList<>();
+        
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            String[] ith_deletions = this.peerProcessor(i).processDeviceDeletions(message);
+            for (int j = 0; ith_deletions != null && j < ith_deletions.length; ++j) {
+                boolean add = deletions.add(ith_deletions[j]);
+            }
+        }
+        
+        String[] deletion_str_array = new String[deletions.size()];
+        return deletions.toArray(deletion_str_array);
+    }
 
+    // Message: de-registrations
     @Override
     public String[] processDeregistrations(Map message) {
         ArrayList<String> deregistrations = new ArrayList<>();
-        
-        // only if devices are removed on de-regsistration 
-        if (this.deviceRemovedOnDeRegistration() == true) {
-            for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
-                String[] ith_deregistrations = this.peerProcessor(i).processDeregistrations(message);
-                for (int j = 0; ith_deregistrations != null && j < ith_deregistrations.length; ++j) {
-                    boolean add = deregistrations.add(ith_deregistrations[j]);
-                }
+            
+        // loop through the list and process the de-registrations
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            String[] ith_deregistrations = this.peerProcessor(i).processDeregistrations(message);
+            for (int j = 0; ith_deregistrations != null && j < ith_deregistrations.length; ++j) {
+                boolean add = deregistrations.add(ith_deregistrations[j]);
             }
-        }
-        else {
-            // not processing de-registrations
-            this.errorLogger().info("Orchestrator: peers not processing endpoint de-registration (OK).");
         }
         
         String[] dereg_str_array = new String[deregistrations.size()];
         return deregistrations.toArray(dereg_str_array);
     }
 
+    // Message: registrations-expired
     @Override
-    public void processRegistrationsExpired(Map message) {
+    public String[] processRegistrationsExpired(Map message) {
+        ArrayList<String> registrations_expired = new ArrayList<>();
+        
         // only if devices are removed on de-regsistration 
-        if (this.deviceRemovedOnDeRegistration() == true) {
-            for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
-                this.peerProcessor(i).processRegistrationsExpired(message);
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            String[] ith_reg_expired = this.peerProcessor(i).processRegistrationsExpired(message);
+            for (int j = 0; ith_reg_expired != null && j < ith_reg_expired.length; ++j) {
+                boolean add = registrations_expired.add(ith_reg_expired[j]);
             }
         }
-        else {
-            // not processing de-registrations
-            this.errorLogger().info("Orchestrator: peer not processing endpoint expired registrations (OK).");
-        }
+        
+        String[] regexpired_str_array = new String[registrations_expired.size()];
+        return registrations_expired.toArray(regexpired_str_array);
     }
 
     @Override
@@ -503,8 +525,8 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
             return this.device_server_processor().deviceRemovedOnDeRegistration();
         }
         
-        // default is true
-        return true;
+        // default is false
+        return false;
     }
     
     @Override

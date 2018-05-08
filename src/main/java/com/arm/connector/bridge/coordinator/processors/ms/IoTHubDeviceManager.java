@@ -206,8 +206,8 @@ public class IoTHubDeviceManager extends DeviceManager {
         return status;
     }
 
-    // process device de-registration
-    public Boolean deregisterDevice(String ep_name) {
+    // process device deletion
+    public Boolean deleteDevice(String ep_name) {
         // IOTHUB DeviceID Prefix
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
 
@@ -218,7 +218,7 @@ public class IoTHubDeviceManager extends DeviceManager {
         String etag = this.getETagForDevice(iothub_ep_name);
 
         // DEBUG
-        this.errorLogger().info("IoTHub: deregisterDevice: URL: " + url);
+        this.errorLogger().info("IoTHub: deleteDevice: URL: " + url);
 
         // dispatch and look for the result
         String result = this.delete(url, etag);
@@ -227,15 +227,15 @@ public class IoTHubDeviceManager extends DeviceManager {
         int http_code = this.m_http.getLastResponseCode();
         if (Utils.httpResponseCodeOK(http_code)) {
             // DEBUG
-            this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS. RESULT: " + result);
+            this.errorLogger().info("IoTHub: deleteDevice: SUCCESS. RESULT: " + result);
         }
         else if (http_code == 404) {
             // DEBUG
-            this.errorLogger().info("IoTHub: deregisterDevice: SUCCESS");
+            this.errorLogger().info("IoTHub: deleteDevice: SUCCESS");
         }
         else {
             // DEBUG
-            this.errorLogger().warning("IoTHub: deregisterDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+            this.errorLogger().warning("IoTHub: deleteDevice: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
         }
 
         // remove the endpoint details

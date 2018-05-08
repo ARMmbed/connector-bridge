@@ -230,21 +230,50 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         }
     }
 
-    // OVERRIDE: handle de-registrations for WatsonIoT
+    // OVERRIDE: process a deregistration (deletion TEST)
     @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("Watson IoT : CoAP de-registration: " + deregistration[i]);
-
-            // WatsonIoT add-on... 
-            this.unsubscribe(deregistration[i]);
-
-            // Remove from WatsonIoT
-            this.deregisterDevice(deregistration[i]);
+    public String[] processDeregistrations(Map parsed) {        
+        // TEST: We can actually DELETE the device on deregistration to test device-delete before the device-delete message goes live
+        if (this.orchestrator().deviceRemovedOnDeRegistration() == true) {
+            // processing deregistration as device deletion
+            this.errorLogger().info("processDeregistrations(Watson): processing de-registration as device deletion (OK).");
+            this.processDeviceDeletions(parsed, true);
         }
-        return deregistration;
+        else {
+            // not processing deregistration as a deletion
+            this.errorLogger().info("processDeregistrations(Watson): Not processing de-registration as device deletion (OK).");
+        }
+        
+        // always by default...
+        return super.processDeregistrations(parsed);
+    }
+    
+    // OVERRIDE: handle device deletions Watson IoT
+    @Override
+    public String[] processDeviceDeletions(Map parsed) {
+        return this.processDeviceDeletions(parsed,false);
+    }
+    
+    // handle device deletions Watson IoT
+    private String[] processDeviceDeletions(Map parsed,boolean use_deregistration) {
+        String[] deletions = null;
+        if (use_deregistration == true) {
+            deletions = super.processDeregistrations(parsed);
+        }
+        else {
+            deletions = super.processDeviceDeletions(parsed);
+        }
+        for (int i = 0; deletions != null && i < deletions.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("Watson IoT : processing device deletion for device: " + deletions[i]);
+
+            // Watson IoT add-on... 
+            this.unsubscribe(deletions[i]);
+
+            // Remove from Watson IoT
+            this.deleteDevice(deletions[i]);
+        }
+        return deletions;
     }
 
     // OVERRIDE: process a mDS notification for WatsonIoT
@@ -602,9 +631,9 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
 
     // process device de-registration
     @Override
-    protected Boolean deregisterDevice(String device) {
+    protected Boolean deleteDevice(String device) {
         if (this.m_device_manager != null) {
-            return this.m_device_manager.deregisterDevice(device);
+            return this.m_device_manager.deleteDevice(device);
         }
         return false;
     }
@@ -641,7 +670,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
             this.errorLogger().info("startReconnection: EP: " + ep);
             
             // deregister the old device (it may be gone already...)
-            this.m_device_manager.deregisterDevice(ep_name);
+            this.m_device_manager.deleteDevice(ep_name);
             
             // sleep for abit
             Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);

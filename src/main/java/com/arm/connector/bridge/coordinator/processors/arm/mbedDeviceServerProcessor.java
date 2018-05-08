@@ -90,8 +90,8 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private String m_mds_long_poll_url = null;
     private LongPollProcessor m_long_poll_processor = null;
     
-    // Config: remove a device if it deregisters (default TRUE)
-    private boolean m_mds_remove_on_deregistration = true;
+    // Config: remove a device if it deregisters (default FALSE)
+    private boolean m_mds_remove_on_deregistration = false;
     
     // Integrating with mbed Cloud? (default FALSE)
     private boolean m_mbed_cloud_integration = false;
@@ -119,7 +119,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         if (this.m_use_api_token == true) {
             this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         }
-        this.m_mds_remove_on_deregistration = this.prefBoolValue("mds_remove_on_deregistration");
         
         // adjust mds_username
         try {
@@ -164,7 +163,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         // OVEERRIDE - long polling vs. Webhook
         this.longPollOverrideSetup();
 
-        // if using webhooks, we can optionally validate the webhook setting...
+        // if using webhooks, we can optionally validate the webhook setting periodically in case it gets reset to nothing...
         if (this.m_webhook_validator_enable == true) {
             // enabling webhook/subscription validation
             this.m_webhook_validator_poll_ms = orchestrator.preferences().intValueOf("mds_webhook_validator_poll_ms");
@@ -172,10 +171,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
             // DEBUG
             orchestrator.errorLogger().warning("mbedDeviceServerProcessor: webhook/subscription validator ENABLED (interval: " + this.m_webhook_validator_poll_ms + "ms)");
-        }
-        else {
-            // disabling webhook/subscription validation
-            orchestrator.errorLogger().warning("mbedDeviceServerProcessor: webhook/subscription validator DISABLED");
         }
 
         // Announce version supported
@@ -212,10 +207,10 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
             
             // adjust
             this.m_mbed_cloud_integration = true;
-            this.m_mds_remove_on_deregistration = false;
         }
         
-        // announce deregistration behavior
+        // configuration for allowing de-registration messages to remove device shadows...or not.
+        this.m_mds_remove_on_deregistration = this.prefBoolValue("mds_remove_on_deregistration");
         if (this.m_mds_remove_on_deregistration == true) {
             orchestrator.errorLogger().warning("mbedDeviceServerProcessor: device removal on deregistration ENABLED");
         }
@@ -705,22 +700,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
     }
 
-    // de-register endpoints
-    @Override
-    public void processDeregistrations(String[] endpoints) {
-        for (int i = 0; i < endpoints.length; ++i) {
-            // create the endpoint subscription URL...
-            String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
-            this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
-            this.httpDelete(url);
-
-            // remove from the validator too
-            if (this.m_webhook_validator != null) {
-                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
-            }
-        }
-    }
-
     // create the Endpoint Subscription Notification URL
     private String createEndpointResourceSubscriptionURL(String uri, Map options) {
         // build out the URL for mDS Endpoint notification subscriptions...
@@ -857,6 +836,39 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         //this.errorLogger().info("createEndpointDiscoveryURL: " + url);
         // return the discovery URL
         return url;
+    }
+    
+    // process device-deletions of endpoints (mbed Cloud only)
+    @Override
+    public void processDeviceDeletions(String[] endpoints) {
+        for (int i = 0; i < endpoints.length; ++i) {
+            // remove from the validator - bookkeeping
+            if (this.m_webhook_validator != null) {
+                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+            }
+        }
+    }
+    
+    // process de-registeration of endpoints
+    @Override
+    public void processDeregistrations(String[] endpoints) {
+        for (int i = 0; i < endpoints.length; ++i) {
+            // create the endpoint subscription removal URL...
+            String url = this.createBaseURL() + this.getDomain() + "/endpoints/" + endpoints[i];
+            this.errorLogger().info("processDeregistrations: sending endpoint subscription removal request: " + url);
+            this.httpDelete(url);
+
+            // remove from the validator - bookkeeping
+            if (this.m_webhook_validator != null) {
+                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+            }
+        }
+    }
+    
+    // process registerations-expired of endpoints
+    @Override
+    public void processRegistrationsExpired(String[] endpoints) {
+        // nothing to process for device server
     }
     
     // process the notification

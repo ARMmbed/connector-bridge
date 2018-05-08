@@ -159,22 +159,51 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             }
         }
     }
-
-    // OVERRIDE: handle de-registrations for AWSIoT
+    
+    // OVERRIDE: process a deregistration (deletion TEST)
     @Override
-    public String[] processDeregistrations(Map parsed) {
-        String[] deregistration = super.processDeregistrations(parsed);
-        for (int i = 0; deregistration != null && i < deregistration.length; ++i) {
-            // DEBUG
-            this.errorLogger().info("AWSIoT : CoAP de-registration: " + deregistration[i]);
-
-            // AWSIoT add-on... 
-            this.unsubscribe(deregistration[i]);
-
-            // Remove from AWSIoT
-            this.deregisterDevice(deregistration[i]);
+    public String[] processDeregistrations(Map parsed) {        
+        // TEST: We can actually DELETE the device on deregistration to test device-delete before the device-delete message goes live
+        if (this.orchestrator().deviceRemovedOnDeRegistration() == true) {
+            // processing deregistration as device deletion
+            this.errorLogger().info("processDeregistrations(AWSIOT): processing de-registration as device deletion (OK).");
+            this.processDeviceDeletions(parsed,true);
         }
-        return deregistration;
+        else {
+            // not processing deregistration as a deletion
+            this.errorLogger().info("processDeregistrations(AWSIOT): Not processing de-registration as device deletion (OK).");
+        }
+        
+        // always by default...
+        return super.processDeregistrations(parsed);
+    }
+    
+    // OVERRIDE: handle device deletions AWSIOT
+    @Override
+    public String[] processDeviceDeletions(Map parsed) {
+        return this.processDeviceDeletions(parsed,false);
+    }
+    
+    // handle device deletions AWSIOT
+    private String[] processDeviceDeletions(Map parsed,boolean use_deregistration) {
+        String[] deletions = null;
+        if (use_deregistration == true) {
+            deletions = super.processDeregistrations(parsed);
+        }
+        else {
+            deletions = super.processDeviceDeletions(parsed);
+        }
+        for (int i = 0; deletions != null && i < deletions.length; ++i) {
+            // DEBUG
+            this.errorLogger().info("AWSIOT : processing device deletion for device: " + deletions[i]);
+
+            // AWSIOT add-on... 
+            this.unsubscribe(deletions[i]);
+
+            // Remove from AWSIOT
+            this.deleteDevice(deletions[i]);
+        }
+        return deletions;
     }
     
     // OVERRIDE: process a notification/observation in AWSIoT
@@ -410,7 +439,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
     // process device de-registration
     @Override
-    protected synchronized Boolean deregisterDevice(String device) {
+    protected synchronized Boolean deleteDevice(String device) {
         if (this.m_device_manager != null) {
             // DEBUG
             this.errorLogger().info("deregisterDevice(AWSIoT): deregistering device: " + device);
@@ -422,7 +451,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.disconnect(device);
 
             // remove the device from AWSIoT
-            if (this.m_device_manager.deregisterDevice(device) == false) {
+            if (this.m_device_manager.deleteDevice(device) == false) {
                 this.errorLogger().warning("deregisterDevice(AWSIoT): unable to de-register device from AWSIoT...");
             }
         }
@@ -593,7 +622,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             this.errorLogger().info("startReconnection: EP: " + ep);
             
             // deregister the old device (it may be gone already...)
-            this.m_device_manager.deregisterDevice(ep_name);
+            this.m_device_manager.deleteDevice(ep_name);
             
             // sleep for abit
             Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
