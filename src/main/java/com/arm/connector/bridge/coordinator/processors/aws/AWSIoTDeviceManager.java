@@ -608,16 +608,11 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
     @Override
     public void run() {
         while (true) {
-            try {
-                // sleep for N seconds
-                Thread.sleep(this.m_cleanup_thread_sleeptime_ms);
-
-                // clear orphaned keys and certs
-                this.clearOrhpanedKeysAndCerts();
-            }
-            catch (InterruptedException ex) {
-                // silent
-            }
+            // wait for a bit...
+            Utils.waitForABit(this.errorLogger(),this.m_cleanup_thread_sleeptime_ms);
+            
+            // clear orphaned keys and certs
+            this.clearOrhpanedKeysAndCerts();
         }
     }
 }
