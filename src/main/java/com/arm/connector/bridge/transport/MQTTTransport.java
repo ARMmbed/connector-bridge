@@ -801,8 +801,6 @@ public class MQTTTransport extends Transport implements GenericSender {
      */
     @Override
     public boolean receiveAndProcess() {
-        // DEBUG
-        //this.errorLogger().info("MQTTTransport: in receiveAndProcess()...");
         if (this.isConnected()) {
             try {
                 // receive the MQTT message and process it...
@@ -810,8 +808,8 @@ public class MQTTTransport extends Transport implements GenericSender {
                 this.receiveAndProcessMessage();
             }
             catch (Exception ex) {
-                // note
-                this.errorLogger().info("receiveAndProcess(MQTT): caught Exception caught: " + ex.getMessage(),ex);
+                // caught exception while connected... something is wrong.
+                this.errorLogger().info("receiveAndProcess(MQTT): Exception caught while connected: " + ex.getMessage());
                 return false;
             }
             return true;
@@ -824,12 +822,14 @@ public class MQTTTransport extends Transport implements GenericSender {
 
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
+        // DEBUG
+        this.errorLogger().warning("resetConnection(MQTT): resetting connection...");
+        
+        // reset the connection
         if (this.m_connection != null) {
             // disconnect()...
+            this.errorLogger().warning("resetConnection(MQTT): disconnecting (clear_creds = true)...");
             this.disconnect(true);
-
-            // DEBUG
-            this.errorLogger().warning("resetConnection(MQTT): Attempting to start reconnection for MQTT...");
 
             // ensure that we have a shadow device to reconnect to...
             if (this.m_reconnector != null) {
@@ -1034,10 +1034,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         }
         catch (Exception ex) {
             // unable to receiveMessage - final
-            this.errorLogger().warning("receiveAndProcessMessage(MQTT): Exception caught: " + ex.getMessage(),ex);
-            
-            // reset the connection
-            this.errorLogger().warning("receiveAndProcessMessage(MQTT): resetting connection");
+            this.errorLogger().warning("receiveAndProcessMessage(MQTT): Exception caught while connected: " + ex.getMessage());
             
             // reset the connection
             this.resetConnection();
