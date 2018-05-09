@@ -75,6 +75,10 @@ import org.fusesource.mqtt.client.Topic;
 public class MQTTTransport extends Transport implements GenericSender {
     // should never be used 
     private static final String KEYSTORE_PW_DEFAULT = "Ub12u&hF83hf&t121dfjKr0";
+    
+    // number of connection attempts before giving up...
+    private static final int DEFAULT_NUM_CONNECT_TRIES = 5;
+    
     private static volatile MQTTTransport m_self = null;
     private BlockingConnection m_connection = null;
     private byte[] m_qoses = null;
@@ -98,6 +102,8 @@ public class MQTTTransport extends Transport implements GenericSender {
     
     private boolean m_mqtt_import_keystore = false;
     private boolean m_mqtt_no_client_creds = false;
+    
+    private int m_max_connect_tries = DEFAULT_NUM_CONNECT_TRIES;
     
     // SSL Switches/Context
     private boolean m_use_ssl_connection = false;
@@ -126,6 +132,9 @@ public class MQTTTransport extends Transport implements GenericSender {
     // connection details
     private String m_ep_name = null;
     private String m_ep_type = null;
+    
+    // initial connection indicator
+    private boolean m_has_connected = false;
 
     /**
      * Instance Factory
@@ -160,6 +169,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_suffix = suffix;
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
+        this.m_has_connected = false;
         
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -205,6 +215,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_suffix = null;
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
+        this.m_has_connected = false;
 
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -592,7 +603,9 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.errorLogger().info("MQTTTransport: Connection URL: [" + url + "]");
         
         // loop until connected
-        for (int i = 0; i < num_tries && !this.m_connected; ++i) {
+        for (int i = 0; i < num_tries && this.m_connected == false; ++i) {
+            // DEBUG
+            this.errorLogger().info("MQTTTransport: Connection attempt: " + (i+1) + " of " + num_tries + "...");
             try {
                 // MQTT endpoint 
                 MQTT endpoint = new MQTT();
@@ -712,25 +725,23 @@ public class MQTTTransport extends Transport implements GenericSender {
 
                     // OK... now lets try to connect to the broker...
                     try {
-                        // connecting...
+                        // wait a bit
+                        Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
+                            
+                        // attempt connection...record our connection status
+                        this.m_connected = false;
                         this.m_endpoint = endpoint;
+                        this.errorLogger().info("MQTTTransport: acquiring blocking connection handle...");
                         this.m_connection = endpoint.blockingConnection();
                         if (this.m_connection != null) {
-                            // attempt connection (if we have a failure, this.m_connection will go NULL)
-                            this.m_connection.connect();
-
-                            // sleep for a short bit...
-                            Utils.waitForABit(this.errorLogger(),this.m_sleep_time);
-
-                            // check our connection status
-                            this.m_connected = false;
-                            if (this.m_connection != null) {
-                                this.m_connected = this.m_connection.isConnected();
-                            }
-                            
-                            // DEBUG
+                            this.errorLogger().info("MQTTTransport: acquiring blocking connection handle acquired!  Connecting...");
+                            this.attemptConnection();
+                            this.errorLogger().info("MQTTTransport: connection handshake completed. Getting connection status...");
+                            this.m_connected = this.m_connection.isConnected();
                             if (this.m_connected == true) {
-                                this.errorLogger().warning("MQTTTransport: Connection to: " + url + " successful");
+                                // CONNECTED!  succesful... record and go...
+                                this.m_has_connected = true;
+                                this.errorLogger().warning("MQTTTransport: Connection to: " + url + " SUCCESSFUL");
                                 this.m_connect_host = host;
                                 this.m_connect_port = port;
                                 if (endpoint != null && endpoint.getClientId() != null) {
@@ -745,10 +756,17 @@ public class MQTTTransport extends Transport implements GenericSender {
                             }
                             else {
                                 this.errorLogger().warning("MQTTTransport: Connection to: " + url + " FAILED");
+                                
+                                // sleep for a short bit...
+                                Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
                             }
                         }
                         else {
-                            this.errorLogger().warning("WARNING: MQTT connection instance is NULL. connect() failed");
+                            // unable to connect... 
+                            this.errorLogger().warning("MQTTTransport: MQTT connection instance is NULL. connect() FAILED");
+                            
+                            // sleep for a short bit...
+                            Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
                         }
                     }
                     catch (Exception ex) {
@@ -782,11 +800,24 @@ public class MQTTTransport extends Transport implements GenericSender {
                     // cannot create an instance of the MQTT client
                     this.errorLogger().warning("MQTTTransport(connect): unable to create instance of MQTT client");
                     this.m_connected = false;
+                    
+                    // sleep for a short bit...
+                    Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
                 }
             }
             catch (URISyntaxException ex) {
                 this.errorLogger().critical("MQTTTransport(connect): URI Syntax exception occured", ex);
                 this.m_connected = false;
+                
+                // sleep for a short bit...
+                Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
+            }
+            catch (Exception ex) {
+                this.errorLogger().critical("MQTTTransport(connect): general exception occured", ex);
+                this.m_connected = false;
+                
+                // sleep for a short bit...
+                Utils.waitForABit(this.errorLogger(), this.m_sleep_time);
             }
         }
 
@@ -810,6 +841,11 @@ public class MQTTTransport extends Transport implements GenericSender {
             catch (Exception ex) {
                 // caught exception while connected... something is wrong.
                 this.errorLogger().info("receiveAndProcess(MQTT): Exception caught while connected: " + ex.getMessage());
+                
+                // reset the connection
+                this.resetConnection();
+                
+                // return (dont-care)
                 return false;
             }
             return true;
@@ -819,16 +855,44 @@ public class MQTTTransport extends Transport implements GenericSender {
             return true;
         }
     }
+    
+    // attempt a connection
+    private void attemptConnection() throws Exception {
+        this.m_connected = false;
+        
+        for(int i=0;i<this.m_max_connect_tries && this.m_connected == false;++i) {
+            // attempt connection
+            this.m_connection.connect();
+                            
+            // wait a bit (2x)
+            Utils.waitForABit(this.errorLogger(), 2*(this.m_sleep_time));
+            
+            // get the connection status
+            this.m_connected = this.m_connection.isConnected();
+            
+            // wait once more if not connected
+            if (!this.m_connected) {
+                // wait a bit (2x)
+                Utils.waitForABit(this.errorLogger(), 2*(this.m_sleep_time));
+            }
+        }
+    }
 
     // reset our MQTT connection... sometimes it goes wonky...
     private void resetConnection() {
+        // if we have never connected before, just return
+        if (this.m_has_connected == false) {
+            // we've NEVER connected before... so just ignore... we may be in the middle of our first connection attempt...
+            return;
+        }
+        
         // DEBUG
-        this.errorLogger().warning("resetConnection(MQTT): resetting connection...");
+        this.errorLogger().warning("resetConnection(MQTT): resetting MQTT connection (was previously connected)...");
         
         // reset the connection
         if (this.m_connection != null) {
             // disconnect()...
-            this.errorLogger().warning("resetConnection(MQTT): disconnecting (clear_creds = true)...");
+            this.errorLogger().warning("resetConnection(MQTT): disconnecting (clear_creds=true)...");
             this.disconnect(true);
 
             // ensure that we have a shadow device to reconnect to...
@@ -839,7 +903,7 @@ public class MQTTTransport extends Transport implements GenericSender {
                 // end us, restart with a new connection... so adios... 
                 this.m_reconnector.startReconnection(this.m_ep_name,this.m_ep_type,this.m_subscribe_topics);
 
-                // nothing more to do... we are being terminated.
+                // nothing more to do... we will be terminated as a thread...
             }
             else {
                 // unable to re-validate shadow device
@@ -968,15 +1032,12 @@ public class MQTTTransport extends Transport implements GenericSender {
             // unable to send (not connected yet)
             this.errorLogger().warning("sendMessage: NOT CONNECTED. Unable to send message: " + message);
             
-            // reset the connection
+            // attempt reset (guarded by initial_connect vs. subsquent connect)
             this.resetConnection();
         }
         else if (message != null) {
             // unable to send (not connected)
-            this.errorLogger().warning("sendMessage: NOT CONNECTED (no handle). Unable to send message: " + message);
-
-            // reset the connection
-            this.resetConnection();
+            this.errorLogger().warning("sendMessage: NOT CONNECTED(no handle). Unable to send message: " + message);
         }
         else {
             // unable to send (empty message)
@@ -998,7 +1059,8 @@ public class MQTTTransport extends Transport implements GenericSender {
             return message;
         }
         else if (this.m_connection != null) {
-            // not connected yet... so just ignored
+            // attempt reset (guarded by initial_connect vs. subsquent connect)
+            this.resetConnection();
         }
         else {
             // no handle. throw exception 
@@ -1072,6 +1134,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             // clean up...
             super.disconnect();
             this.m_connection = null;
+            this.m_has_connected = false;
 
             // clear the cached values 
             if (clear_all == true) {

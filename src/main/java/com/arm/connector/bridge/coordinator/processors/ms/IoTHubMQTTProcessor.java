@@ -279,7 +279,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
             }
             else {
                 // not connected
-                this.errorLogger().warning("IoTHub: CoAP notification not sent. NOT CONNECTED");
+                this.errorLogger().info("IoTHub: CoAP notification not sent. NOT CONNECTED");
             }
         }
     }

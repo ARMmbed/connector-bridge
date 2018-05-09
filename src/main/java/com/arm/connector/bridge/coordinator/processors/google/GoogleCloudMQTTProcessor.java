@@ -442,7 +442,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             }
             else {
                 // not connected
-                this.errorLogger().warning("GoogleCloud: CoAP notification not sent. NOT CONNECTED");
+                this.errorLogger().info("GoogleCloud: CoAP notification not sent. NOT CONNECTED");
             }
         }
     }

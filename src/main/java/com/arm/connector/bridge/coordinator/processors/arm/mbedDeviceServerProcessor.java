@@ -45,6 +45,12 @@ import com.mbed.lwm2m.LWM2MResource;
  * @author Doug Anson
  */
 public class mbedDeviceServerProcessor extends Processor implements mbedDeviceServerInterface, AsyncResponseProcessor {
+    // defaulted number of webhook retries
+    private static final int MDS_WEBHOOK_RETRIES = 10;
+    
+    // webhook retry wait time in ms..
+    private static final int MDS_WEBHOOK_RETRY_WAIT_MS = 2500;
+    
     private HttpTransport m_http = null;
     private String m_mds_host = null;
     private int m_mds_port = 0;
@@ -90,6 +96,12 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private String m_mds_long_poll_url = null;
     private LongPollProcessor m_long_poll_processor = null;
     
+    // Webhook establishment retries
+    private int m_webook_num_retries = MDS_WEBHOOK_RETRIES;
+    
+    // Webhook establishment retry wait time in ms
+    private int m_webhook_retry_wait_ms = MDS_WEBHOOK_RETRY_WAIT_MS;
+    
     // Config: remove a device if it deregisters (default FALSE)
     private boolean m_mds_remove_on_deregistration = false;
     
@@ -109,6 +121,10 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         this.m_content_type = orchestrator.preferences().valueOf("mds_content_type");
         this.m_mds_gw_callback = orchestrator.preferences().valueOf("mds_gw_callback");
         this.m_use_https_dispatch = this.prefBoolValue("mds_use_https_dispatch");
+        this.m_webook_num_retries = orchestrator.preferences().intValueOf("mds_webhook_num_retries");
+        if (this.m_webook_num_retries <= 0) {
+            this.m_webook_num_retries = MDS_WEBHOOK_RETRIES;
+        }
         this.m_mds_version = this.prefValue("mds_version");
         this.m_mds_gw_use_ssl = this.prefBoolValue("mds_gw_use_ssl");
         this.m_use_api_token = this.prefBoolValue("mds_use_api_token");
@@ -119,6 +135,9 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         if (this.m_use_api_token == true) {
             this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
         }
+        
+        // display number of webhook setup retries allowed
+        this.errorLogger().warning("mbedDeviceServerProcessor: Number of webhook retries set at: " + this.m_webook_num_retries);
         
         // adjust mds_username
         try {
@@ -466,7 +485,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         return this.createBaseURL() + this.getDomain() + "/notification/" + this.m_mds_gw_callback;
     }
 
-    // get the currently configured callback URL
+    // get the currently configured callback URL (public, used by webhook validator)
     public String getWebhook() {
         String url = null;
         String headers = null;
@@ -584,13 +603,30 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     // set our mDS Notification Callback URL
     @Override
     public void setWebhook() {
+        boolean ok = false;
         if (this.longPollEnabled() == false) {
-            String target_url = this.createWebhookURL();
-            this.setWebhook(target_url);
-            
-            // EXPERIMENTAL - test for bulk subscriptions setting
-            if (this.m_enable_bulk_subscriptions == true) {
-                this.setupBulkSubscriptions();
+            for(int i=0;i<this.m_webook_num_retries && ok == false;++i) {
+                this.errorLogger().warning("mbedDeviceServerProcessor: Setting up webhook to mDS...");
+                String target_url = this.createWebhookURL();
+                ok = this.setWebhook(target_url);
+
+                // EXPERIMENTAL - test for bulk subscriptions setting
+                if (ok && this.m_enable_bulk_subscriptions == true) {
+                    // bulk subscriptions enabled
+                    this.errorLogger().warning("mbedDeviceServerProcessor: Webhook to mDS set. Now setting up bulk subscriptions...");
+                    this.setupBulkSubscriptions();
+                }
+                else if (ok) {
+                    // webhook set but not using bulk subscriptions
+                    this.errorLogger().warning("mbedDeviceServerProcessor: Webhook to mDS set (SUCCESS).");
+                }
+                
+                // wait a bit if we have failed
+                if (!ok) {
+                    // log and wait
+                    this.errorLogger().warning("mbedDeviceServerProcessor: Waiting a bit... then retry establishing webhook to mDS...");
+                    Utils.waitForABit(this.errorLogger(), this.m_webhook_retry_wait_ms);
+                }
             }
         }
     }
@@ -618,22 +654,22 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     }
 
     // set our mDS Notification Callback URL
-    private void setWebhook(String target_url) {
-        this.setWebhook(target_url, true); // default is to check if the URL is already set... 
+    private boolean setWebhook(String target_url) {
+        return this.setWebhook(target_url, true); // default is to check if the URL is already set... 
     }
 
     // set our mDS Notification Callback URL
-    private void setWebhook(String target_url, boolean check_url_set) {
-        boolean callback_url_already_set = false; // assume default is that the URL is NOT set... 
+    private boolean setWebhook(String target_url, boolean check_url_set) {
+        boolean webhook_set_ok = false; // assume default is that the URL is NOT set... 
 
         // we must check to see if we want to check that the URL is already set...
         if (check_url_set == true) {
             // go see if the URL is already set.. 
-            callback_url_already_set = this.webhookSet(target_url);
+            webhook_set_ok = this.webhookSet(target_url);
         }
 
         // proceed to set the URL if its not already set.. 
-        if (!callback_url_already_set) {
+        if (!webhook_set_ok) {
             String dispatch_url = this.createWebhookDispatchURL();
             String auth_header_json = this.createWebhookHeaderAuthJSON();
             String json = null;
@@ -678,6 +714,9 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 if (this.m_webhook_validator != null) {
                     this.m_webhook_validator.resetWebhook();
                 }
+                
+                // not set...
+                webhook_set_ok = false;
             }
             else {
                 // DEBUG
@@ -698,6 +737,9 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
                 this.m_webhook_validator.setWebhook(target_url);
             }
         }
+        
+        // return our status
+        return webhook_set_ok;
     }
 
     // create the Endpoint Subscription Notification URL

@@ -172,12 +172,12 @@ public class AsyncResponseManager {
                 }
                 else {
                     // WARNING: no async-response-id found in this message... so ignore it.
-                    this.errorLogger().warning("recordAsyncResponse: No async-response-id found in JSON: " + response + "... Ignoring message...");
+                    this.errorLogger().info("recordAsyncResponse: No async-response-id found in JSON: " + response + "... Ignoring message...");
                 }
             }
             else {
                 // WARNING: NO Response provided... so ignore
-                this.errorLogger().warning("recordAsyncResponse: response is NULL. ignoring...");
+                this.errorLogger().info("recordAsyncResponse: response is NULL. ignoring...");
             }
         }
         catch (Exception ex) {

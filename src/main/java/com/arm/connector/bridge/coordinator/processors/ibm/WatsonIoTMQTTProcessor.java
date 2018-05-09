@@ -595,7 +595,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
                 }
                 else {
                     // not connected
-                    this.errorLogger().warning("Watson IoT(CoAP Command): CoAP observation(get) not sent. NOT CONNECTED");
+                    this.errorLogger().info("Watson IoT(CoAP Command): CoAP observation(get) not sent. NOT CONNECTED");
                 }
             }
         }
@@ -654,35 +654,20 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     // restart our device connection 
     @Override
     public boolean startReconnection(String ep_name,String ep_type,Topic topics[]) {
-        if (this.m_device_manager != null) {
-            // kill the old listener
-            this.stopListenerThread(ep_name);
-            
-            // clean up old MQTT connection
-            this.disconnect(ep_name);
-            
-            // Create a new device record
-            HashMap<String,Serializable> ep = new HashMap<>();
-            ep.put("ep",ep_name);
-            ep.put("ept", ep_type);
-            
-            // DEBUG
-            this.errorLogger().info("startReconnection: EP: " + ep);
-            
-            // deregister the old device (it may be gone already...)
-            this.m_device_manager.deleteDevice(ep_name);
-            
-            // sleep for abit
-            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
-            
-            // now create a new device
-            this.completeNewDeviceRegistration(ep);
-            
-            // sleep for abit
-            Utils.waitForABit(this.errorLogger(), this.m_reconnect_sleep_time_ms);
-            
-            // create a new MQTT connection
-            return this.createAndStartMQTTForEndpoint(ep_name, ep_type, topics);
+        // stop our listener thread
+        this.stopListenerThread();
+        
+        // reset our default MQTT connection
+        this.mqtt().disconnect();
+        
+        // create a new MQTT instance
+        MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(),null);
+        this.setupDefaultMQTTTransport(mqtt);
+        
+        // just reconnect...
+        if (this.connectMQTT() == true) {
+            this.subscribe(ep_name,ep_type,this.createEndpointTopicData(ep_name, ep_type),this);
+            return true;
         }
         return false;
     }

@@ -121,17 +121,23 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         // clean session
         this.m_use_clean_session = this.orchestrator().preferences().booleanValueOf("mqtt_clean_session", this.m_suffix);
 
-        // assign our MQTT transport if we have one...
-        if (mqtt != null) {
-            this.m_client_id = mqtt.getClientID();
-            this.addMQTTTransport(this.m_client_id, mqtt);
-        }
-
         // auto-subscribe behavior
         this.initAutoSubscribe("mqtt_obs_auto_subscribe");
 
-        // setup our MQTT listener if we have one...
+        // setup our defaulted MQTT transport if given one
+        this.setupDefaultMQTTTransport(mqtt);
+    }
+    
+    // default MQTT Thread listener setup
+    protected void setupDefaultMQTTTransport(MQTTTransport mqtt) {
         if (mqtt != null) {
+            // clear our single list
+            this.initMQTTTransportList();
+            
+            // assign our MQTT transport if we have one...
+            this.m_client_id = mqtt.getClientID();
+            this.addMQTTTransport(this.m_client_id, mqtt);
+            
             // MQTT PeerProcessor listener thread setup
             TransportReceiveThread rt = new TransportReceiveThread(this.mqtt());
             rt.setOnReceiveListener(this);
@@ -545,6 +551,11 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
                 // silent
             }
         }
+    }
+    
+    // stop the defaulted listener thread
+    protected void stopListenerThread() {
+        this.stopListenerThread(this.m_default_tr_key);
     }
     
     // stop the listener thread

@@ -100,21 +100,21 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         // see if we already have a device...
         HashMap<String, Serializable> ep = this.getDeviceDetails(device);
         if (ep != null) {
-            // DEBUG
-            this.errorLogger().info("AWSIoT: registerNewDevice: device details: " + ep);
-
             // complete the details
             this.completeDeviceDetails(ep);
 
             // save off this device 
             this.saveDeviceDetails(device, ep);
+            
+            // DEBUG
+            this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + ep);
 
             // we are good
             status = true;
         }
         else {
             // DEBUG
-            this.errorLogger().info("AWSIoT: registerNewDevice: no device details found... creating/registering some. message: " + message);
+            this.errorLogger().info("AWSIoT: registerNewDevice: no device shadow found. Creating device shadow: " + message);
 
             // device is not registered... so create/register it
             status = this.createAndRegisterNewDevice(message);
@@ -219,7 +219,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         return index;
     }
 
-    // unlink a certificate from the policy and thing record, then deactivate it
+    // unlink a certificate from the policy and thing record, deactivate it, then delete it
     private void removeCertificate(String device) {
         // Get our record 
         HashMap<String, Serializable> ep = this.getEndpointDetails(device);
@@ -230,7 +230,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
             // unlink the certificate from the thing record
             this.unlinkCertificateFromPolicy(ep);
 
-            // inactivate the certificate
+            // deactivate the certificate
             this.inactivateCertificate(ep);
 
             // delete the certificate
@@ -246,29 +246,36 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
 
     // process device deletion
     public boolean deleteDevice(String device) {
-        // first we unlink the certificate and deactivate it
+         // first, unlink the certificate and deactivate it/remove it
         this.removeCertificate(device);
-
-        // invoke AWS CLI to create a new device
+        
+        // invoke AWS CLI to delete the current device shadow thing
         String args = "iot delete-thing --thing-name=" + device;
         String result = Utils.awsCLI(this.errorLogger(), args);
+        
+        // remove the endpoint details
+        this.m_endpoint_details.remove(device);
 
         // DEBUG
         this.errorLogger().info("AWS: deleteDevice: device: " + device + " deletion RESULT: " + result);
 
-        // remove the endpoint details
-        this.m_endpoint_details.remove(device);
-
-        // return our status
-        boolean status = true;
-        return status;
+        // return status
+        return true;
     }
 
     // complete the device details
     private void completeDeviceDetails(HashMap<String, Serializable> ep) {
+        // DEBUG
+        this.errorLogger().info("completeDeviceDetails(AWSIOT): EP: " + ep);
+        
         // add the endpoint address details
         if (ep.get("endpointAddress") == null) {
             this.captureEndpointAddress(ep);
+        }
+        
+        // get thing details
+        if (ep.get("thingId") == null) {
+            this.captureThingDetails(ep);
         }
 
         // add the policy details
@@ -277,9 +284,9 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
             this.capturePolicyDetails(ep);
         }
 
-        // create and add the certificate details
+        // get the certificate details
         if (ep.get("certificateId") == null) {
-            this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
+            this.captureCertificateDetails(ep);
         }
     }
 
@@ -339,6 +346,9 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
                     ep.put("thingName", (String) parsed.get("thingName"));
                     ep.put("defaultClientId", (String) parsed.get("defaultClientId"));
                     ep.put("attributes", (String) parsed.get("thingName"));
+                    ep.put("thingArn",(String) parsed.get("thingArn"));
+                    ep.put("thingId", (String) parsed.get("thingId"));
+                    ep.put("thingTypeName", (String) parsed.get("thingTypeName"));
                     ep.put("ep_name", device);
                     ep.put("ep_type", device_type);
 
@@ -456,7 +466,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
 
     // capture the endpoint address
     private void captureEndpointAddress(HashMap<String, Serializable> ep) {
-        // AWS CLI invocation - link policy to certficate ARN
+        // AWS CLI invocation - get endpoint details
         String args = "iot describe-endpoint";
         String json = Utils.awsCLI(this.errorLogger(), args);
         if (json != null && json.length() > 0) {
@@ -464,7 +474,38 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
             ep.put("endpointAddress", (String) parsed.get("endpointAddress"));
         }
     }
-
+    
+    // capture the thing details
+    private void captureThingDetails(HashMap<String, Serializable> ep) {
+        // AWS CLI invocation - get thing details
+        String args = "iot describe-thing --thing-name=" + (String)ep.get("thingName");
+        String json = Utils.awsCLI(this.errorLogger(), args);
+        if (json != null && json.length() > 0) {
+            Map parsed = this.m_orchestrator.getJSONParser().parseJson(this.helpJSONParser(json));
+            ep.put("defaultClientId", (String) parsed.get("defaultClientId"));
+        }
+    }
+    
+    // capture the thing's certificate details
+    private void captureCertificateDetails(HashMap<String, Serializable> ep) {
+        // AWS CLI invocation - get thing's certificate details
+        String args = "iot list-thing-principals --thing-name=" + (String)ep.get("thingName");
+        String json = Utils.awsCLI(this.errorLogger(), args);
+        if (json != null && json.length() > 0) {
+            Map parsed = this.m_orchestrator.getJSONParser().parseJson(this.helpJSONParser(json));
+            List principals = (List)parsed.get("principals");
+            for (int i=0;principals != null && i<principals.size();++i) {
+                // pull the certificate ID for this thing
+                ep.put("certificateId_" + i,Utils.pullCertificateIdFromAWSPrincipal((String)principals.get(i)));
+            }
+            
+            // set the default first certificate to the current one
+            if (principals != null && principals.size() > 0) {
+                ep.put("certificateId",(String)ep.get("certificateId_0"));
+            }
+        }
+    }
+   
     // capture the policy details
     private void capturePolicyDetails(HashMap<String, Serializable> ep) {
         String json = this.getDefaultPolicy();
@@ -495,7 +536,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
 
             // capture the endpoint address
             this.captureEndpointAddress(ep);
-
+            
             // save off the details
             this.saveDeviceDetails(device, ep);
         }

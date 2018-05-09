@@ -271,7 +271,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
             }
             else {
                 // not connected
-                this.errorLogger().warning("AWSIoT: CoAP notification not sent. NOT CONNECTED");
+                this.errorLogger().info("AWSIoT: CoAP notification not sent. NOT CONNECTED");
             }
         }
     }

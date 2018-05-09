@@ -396,6 +396,9 @@ public class Utils {
                 logger.info("AWS CLI: Response: " + response);
                 logger.info("AWS CLI: Error: " + error);
                 logger.info("AWS CLI: Exit Code: " + status);
+                
+                // nullify the response..
+                response = null;
             }
             else {
                 // successful exit status
@@ -405,7 +408,10 @@ public class Utils {
             }
         }
         catch (IOException | InterruptedException ex) {
+            // note the exception - it needs to be looked into...
             logger.warning("AWS CLI: Exception for command: " + cmd, ex);
+            
+            // nullify the response...
             response = null;
         }
 
@@ -1045,5 +1051,21 @@ public class Utils {
                 logger.info("waitForABit: sleep interrupted: " + ex.getMessage() + " callstack: ",ex);
             }
         }
+    }
+    
+    // extract the certificateId from the AWS principal ARN
+    public static String pullCertificateIdFromAWSPrincipal(String arn) {
+        if (arn != null && arn.length() > 0) {
+            // format: arn:aws:iot:us-east-1:<id>:cert/<certid>
+            String[] elements = arn.split(":");
+            
+            // pull the last element
+            int cert_id_index = elements.length - 1;
+            String cert_full = elements[cert_id_index];
+            
+            // remove the "cert/" from the rest of the cert ID
+            return cert_full.replace("cert/","");
+        }
+        return null;
     }
 }
