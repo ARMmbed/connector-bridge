@@ -55,6 +55,7 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     private boolean m_iot_event_hub_enable_device_id_prefix = false;
     private String m_iot_event_hub_device_id_prefix = null;
     private String m_iot_hub_version_tag = null;
+    private boolean m_in_process = false;
 
     // constructor (singleton)
     public IoTHubMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
@@ -67,6 +68,9 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
         // IoTHub Processor Announce
         this.errorLogger().info("MS IoTHub Processor ENABLED.");
+        
+        // device registration lock
+        this.m_in_process = false;
 
         // get the IoTHub version tag
         this.m_iot_hub_version_tag = this.orchestrator().preferences().valueOf("iot_event_hub_version_tag",this.m_suffix);
@@ -690,9 +694,17 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
 
     // IoTHub Specific: AsyncResponse response processor
     @Override
-    public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in MS IoTHub
-        this.completeNewDeviceRegistration(endpoint);
+    public synchronized boolean processAsyncResponse(Map endpoint) {
+        if (this.m_in_process == false) {
+            // lock
+            this.m_in_process = true;
+    
+            // with the attributes added, we finally create the device in MS IoTHub
+            this.completeNewDeviceRegistration(endpoint);
+
+            // unlock
+            this.m_in_process = false;
+        }
 
         // return our processing status
         return true;

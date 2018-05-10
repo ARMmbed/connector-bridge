@@ -55,6 +55,9 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     // AWSIoT Device Manager
     private AWSIoTDeviceManager m_device_manager = null;
     
+    // new registation mutex
+    private boolean m_in_process = false;
+    
     // constructor (singleton)
     public AWSIoTMQTTProcessor(Orchestrator manager, MQTTTransport mqtt, HttpTransport http) {
         this(manager, mqtt, null, http);
@@ -87,6 +90,9 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
         // AWSIoT Device Manager - will initialize and upsert our AWSIoT bindings/metadata
         this.m_device_manager = new AWSIoTDeviceManager(this.orchestrator().errorLogger(), this.orchestrator().preferences(), this.m_suffix, http, this.orchestrator());
 
+        // unlocked
+        this.m_in_process = false;
+        
         // initialize our MQTT transport list
         this.initMQTTTransportList();
     }
@@ -550,9 +556,17 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     
     // AsyncResponse response processor
     @Override
-    public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in AWS IOT
-        this.completeNewDeviceRegistration(endpoint);
+    public synchronized boolean processAsyncResponse(Map endpoint) {
+        if (this.m_in_process == false) {
+            // lock
+            this.m_in_process = true;
+            
+            // with the attributes added, we finally create the device in AWS IOT
+            this.completeNewDeviceRegistration(endpoint);
+            
+            // unlock
+            this.m_in_process = false;
+        }
 
         // return our processing status
         return true;

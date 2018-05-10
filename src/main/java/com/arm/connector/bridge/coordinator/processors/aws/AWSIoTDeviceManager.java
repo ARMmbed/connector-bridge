@@ -99,6 +99,9 @@ public class AWSIoTDeviceManager extends DeviceManager {
     public synchronized boolean registerNewDevice(Map message) {
         boolean status = false;
         
+        // DEBUG
+        //this.errorLogger().ping("registerNewDevice(AWSIoT)");
+        
         if (this.m_in_progress == false) {
             // we are now in progress
             this.m_in_progress = true;
@@ -112,15 +115,16 @@ public class AWSIoTDeviceManager extends DeviceManager {
             if (ep != null) {
                 // we already have this shadow. Complete the details... this will remove the existing certs/keys...
                 this.completeDeviceDetails(ep);
+                if (this.hasCompleteDeviceDetails(ep) == false) {
+                    // we now create new certificate and keys... we need them for our MQTT connection...
+                    this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
 
-                // we now create new certificate and keys... we need them for our MQTT connection...
-                this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
-
-                // save off this device 
-                this.saveDeviceDetails(device, ep);
+                    // save off this device 
+                    this.saveDeviceDetails(device, ep);
+                }
 
                 // DEBUG
-                this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + ep);
+                this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + message);
 
                 // we are good
                 status = true;
@@ -150,9 +154,12 @@ public class AWSIoTDeviceManager extends DeviceManager {
         // create the new device type
         String device_type = (String) message.get("ept");
         String device = (String) message.get("ep");
+        
+        // create the thing type first
+        this.createThingType(message);
 
         // invoke AWS CLI to create a new device
-        String args = "iot create-thing --thing-name=" + device;
+        String args = "iot create-thing --thing-name=" + device + " --thing-type-name=" + (String)message.get("ept");
         String result = Utils.awsCLI(this.errorLogger(), args);
 
         // DEBUG
@@ -256,18 +263,24 @@ public class AWSIoTDeviceManager extends DeviceManager {
 
             // delete the certificate
             this.deleteCertificate(ep);
+            
+            // remove locally as well
+            int index = this.getKeyAndCertIndex(device);
+            if (index >= 0) {
+                this.m_keys_cert_ids.remove(index);
+            }
         }
-
-        // remove locally as well
-        int index = this.getKeyAndCertIndex(device);
-        if (index >= 0) {
-            this.m_keys_cert_ids.remove(index);
+        else {
+            this.errorLogger().warning("removeCertificate(AWSIoT): Unable to find device details for: " + device + ". Unable to remove certs for it.");
         }
     }
 
     // process device deletion
     public boolean deleteDevice(String device) {
-         // first, unlink the certificate and deactivate it/remove it
+        // DEBUG
+        //this.errorLogger().ping("deleteDevice(AWSIoT): " + device);
+        
+        // first, unlink the certificate and deactivate it/remove it
         this.removeCertificate(device);
         
         // invoke AWS CLI to delete the current device shadow thing
@@ -288,6 +301,11 @@ public class AWSIoTDeviceManager extends DeviceManager {
     private void completeDeviceDetails(HashMap<String, Serializable> ep) {
         // DEBUG
         this.errorLogger().info("completeDeviceDetails(AWSIOT): EP: " + ep);
+        
+        // add the thing type details
+        if (ep.get("thingTypeArn") == null) {
+            this.createThingType(ep);
+        }
         
         // add the endpoint address details
         if (ep.get("endpointAddress") == null) {
@@ -443,6 +461,21 @@ public class AWSIoTDeviceManager extends DeviceManager {
         // DEBUG
         //this.errorLogger().info("createKeysAndCerts: EP: " + ep);
     }
+    
+    // has complete device details
+    private boolean hasCompleteDeviceDetails(HashMap<String, Serializable> ep) {        
+        if (ep != null) {
+            if (ep.get("PrivateKey") != null) {
+                // DEBUG
+                this.errorLogger().info("hasCompleteDeviceDetails: Device details already complete: " + ep);
+                
+                // complete!
+                return true;
+            }
+        }
+        
+        return false;
+    }
 
     // get our current defaulted policy
     private String getDefaultPolicy() {
@@ -487,7 +520,39 @@ public class AWSIoTDeviceManager extends DeviceManager {
         args = "iot attach-thing-principal --thing-name=" + (String) ep.get("thingName") + " --principal=" + (String) ep.get("certificateArn");
         Utils.awsCLI(this.errorLogger(), args);
     }
+    
+    // create the thing type
+    private void createThingType(Map ep) {
+        if (ep != null && this.thingTypeExists(ep) == false) {
+            // create the Thing Type...
+            String args = "iot create-thing-type --thing-type-name=" + (String) ep.get("ept");
+            String result = Utils.awsCLI(this.errorLogger(), args);
+            if (result != null && result.length() > 2) {
+                // parse it
+                Map parsed = this.m_orchestrator.getJSONParser().parseJson(result);
 
+                // put the thing type ARN into the ep
+                ep.put("thingTypeArn", (String) parsed.get("thingTypeArn"));
+            }
+        }
+    }
+
+    // check ifa thing type already exists
+    private boolean thingTypeExists(Map ep) {
+        if (ep != null) {
+            String args = "iot describe-thing-type --thing-type-name=" + (String) ep.get("ept");
+            String result = Utils.awsCLI(this.errorLogger(), args);
+            if (result != null && result.length() > 2) {
+                // parse it
+                Map parsed = this.m_orchestrator.getJSONParser().parseJson(result);
+
+                // resync - put the thing type ARN back into the ep
+                ep.put("thingTypeArn", (String) parsed.get("thingTypeArn"));
+                return true;
+            }
+        }
+        return false;
+    }
     // capture the endpoint address
     private void captureEndpointAddress(HashMap<String, Serializable> ep) {
         // AWS CLI invocation - get endpoint details

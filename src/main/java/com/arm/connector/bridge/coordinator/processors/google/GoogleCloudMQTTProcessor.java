@@ -135,6 +135,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // Login status
     private boolean m_google_cloud_logged_in = false;
     
+    // new device registration lock
+    private boolean m_in_process = false;
+    
     // default JWT expiration length (in seconds)
     private int m_jwt_refresh_interval = (5 * 60 * 60);    // JwT refresh interval: 5 hours
     private long m_jwt_expiration_secs = (23 * 60 * 60);   // JwT token max expiration : 23 hours
@@ -157,6 +160,9 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         // domain and suffix setup
         this.m_mds_domain = manager.getDomain();
         this.m_suffix = suffix;
+        
+        // new device registration lock
+        this.m_in_process = false;
         
         // keystore root directory
         this.m_keystore_rootdir = this.orchestrator().preferences().valueOf("mqtt_keystore_basedir",this.m_suffix);
@@ -981,9 +987,17 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     
     // AsyncResponse response processor
     @Override
-    public boolean processAsyncResponse(Map endpoint) {
-        // with the attributes added, we finally create the device in Google CloudIoT
-        this.completeNewDeviceRegistration(endpoint);
+    public synchronized boolean processAsyncResponse(Map endpoint) {
+        if (this.m_in_process == false) {
+            // lock
+            this.m_in_process = true;
+            
+            // with the attributes added, we finally create the device in Google CloudIoT
+            this.completeNewDeviceRegistration(endpoint);
+            
+            // unlock
+            this.m_in_process = false;
+        }       
 
         // return our processing status
         return true;
