@@ -600,7 +600,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         String def_client_id = this.prefValue("mqtt_default_client_id", this.m_suffix);
 
         // DEBUG
-        this.errorLogger().info("MQTTTransport: Connection URL: [" + url + "]");
+        this.errorLogger().info("MQTTTransport: connect() starting... URL: [" + url + "]");
         
         // loop until connected
         for (int i = 0; i < num_tries && this.m_connected == false; ++i) {
@@ -861,17 +861,32 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_connected = false;
         
         for(int i=0;i<this.m_max_connect_tries && this.m_connected == false;++i) {
+            // DEBUG
+            this.errorLogger().info("attemptConnection: Trying to connect()...");
+            
             // attempt connection
             this.m_connection.connect();
-                            
+            
+            // DEBUG
+            this.errorLogger().info("attemptConnection: waiting a bit...()...");
+            
             // wait a bit (2x)
             Utils.waitForABit(this.errorLogger(), 2*(this.m_sleep_time));
+            
+            // DEBUG
+            this.errorLogger().info("attemptConnection: Getting Connection status...");
             
             // get the connection status
             this.m_connected = this.m_connection.isConnected();
             
+            // DEBUG
+            this.errorLogger().info("attemptConnection: Connection status: " + this.m_connected);
+            
             // wait once more if not connected
-            if (!this.m_connected) {
+            if (this.m_connected == false) {
+                // DEBUG
+                this.errorLogger().info("attemptConnection: RETRY... connect did not succeed... waiting a bit...");
+            
                 // wait a bit (2x)
                 Utils.waitForABit(this.errorLogger(), 2*(this.m_sleep_time));
             }
@@ -883,6 +898,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         // if we have never connected before, just return
         if (this.m_has_connected == false) {
             // we've NEVER connected before... so just ignore... we may be in the middle of our first connection attempt...
+            this.errorLogger().warning("resetConnection: Never Connected before... so ignoring...");
             return;
         }
         

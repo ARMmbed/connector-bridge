@@ -40,7 +40,7 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
+public class AWSIoTDeviceManager extends DeviceManager {
     // Defaults
     private static int DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS = 120000;      // default: cleanup every 120 seconds
     
@@ -100,15 +100,18 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         // see if we already have a device...
         HashMap<String, Serializable> ep = this.getDeviceDetails(device);
         if (ep != null) {
-            // complete the details
+            // we already have this shadow. Complete the details... this will remove the existing certs/keys...
             this.completeDeviceDetails(ep);
-
+            
+            // we now create new certificate and keys... we need them for our MQTT connection...
+            this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
+            
             // save off this device 
             this.saveDeviceDetails(device, ep);
             
             // DEBUG
             this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + ep);
-
+            
             // we are good
             status = true;
         }
@@ -161,7 +164,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
 
     // unlink the certificate from the Thing Record
     private void unlinkCertificateFromThing(String ep_name, String arn) {
-        if (ep_name != null) {
+        if (ep_name != null && ep_name.length() > 0) {
             String ep_qual = "--thing-name=" + ep_name;
             String args = "iot detach-thing-principal " + ep_qual + " --principal=" + arn;
             Utils.awsCLI(this.errorLogger(), args);
@@ -284,7 +287,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
             this.capturePolicyDetails(ep);
         }
 
-        // get the certificate details
+        // get the certificate details (option)
         if (ep.get("certificateId") == null) {
             this.captureCertificateDetails(ep);
         }
@@ -315,7 +318,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
     // Help the JSON parser with null strings... ugh
     private String helpJSONParser(String json) {
         if (json != null && json.length() > 0) {
-            return json.replace(":null", ":\"none\"").replace(":\"\"", ":\"none\"").replace("\"attributes\": {},", "");
+            return json.replace(":null", ":\"none\"").replace(":\"\"", ":\"none\"").replace("\"attributes\": {},", "").replace("{}", "{\"empty\":0}");
         }
         return json;
     }
@@ -488,20 +491,55 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
     
     // capture the thing's certificate details
     private void captureCertificateDetails(HashMap<String, Serializable> ep) {
-        // AWS CLI invocation - get thing's certificate details
+        ArrayList<String> doomed_arn_list = new ArrayList<>();
+        
+        // AWS CLI invocation - get thing's certificate details... we are going to delete EVERYTHING...
         String args = "iot list-thing-principals --thing-name=" + (String)ep.get("thingName");
         String json = Utils.awsCLI(this.errorLogger(), args);
         if (json != null && json.length() > 0) {
             Map parsed = this.m_orchestrator.getJSONParser().parseJson(this.helpJSONParser(json));
-            List principals = (List)parsed.get("principals");
-            for (int i=0;principals != null && i<principals.size();++i) {
-                // pull the certificate ID for this thing
-                ep.put("certificateId_" + i,Utils.pullCertificateIdFromAWSPrincipal((String)principals.get(i)));
+            List arns = (List)parsed.get("principals");
+            for (int i=0;arns != null && i<arns.size();++i) {
+                // DEBUG
+                this.errorLogger().info("captureCertificateDetails: doomed ARN: " + (String)arns.get(i));
+
+                // put on the doomed list...
+                doomed_arn_list.add((String)arns.get(i));
             }
             
-            // set the default first certificate to the current one
-            if (principals != null && principals.size() > 0) {
-                ep.put("certificateId",(String)ep.get("certificateId_0"));
+            // for the doomed list, we have to iterate through all of the certs and get the Arns...
+            for(int i=0;i<doomed_arn_list.size();++i) {
+                String cert_arn = doomed_arn_list.get(i);
+                String cert_id = Utils.pullCertificateIdFromAWSPrincipal(cert_arn);
+
+                // DEBUG
+                this.errorLogger().info("captureCertificateDetails: unlinking: " + cert_arn);
+
+                // unlink the certificate from the thing record
+                this.unlinkCertificateFromThing((String)ep.get("thingName"), cert_arn);
+
+                // unlink the certificate from the thing record
+                this.unlinkCertificateFromPolicy(cert_arn);
+
+                // DEBUG
+                this.errorLogger().info("captureCertificateDetails: inactivating: " + cert_id);
+                
+                // inactivate
+                this.inactivateCertificate(cert_id);
+                
+                // DEBUG
+                this.errorLogger().info("captureCertificateDetails: deleting: " + cert_id);
+
+                // delete
+                this.deleteCertificate(cert_id);
+
+                // purge the certificate from the cache
+                try {
+                    this.m_keys_cert_ids.remove(this.getKeyAndCertIndex(cert_id));
+                }
+                catch (Exception ex) {
+                    // fail silently...
+                }
             }
         }
     }
@@ -515,7 +553,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
     }
 
     // create keys and certs and link to the device 
-    void createKeysAndCertsAndLinkToPolicyAndThing(HashMap<String, Serializable> ep) {
+    private void createKeysAndCertsAndLinkToPolicyAndThing(HashMap<String, Serializable> ep) {
         // add the certificates and keys
         this.createKeysAndCerts(ep);
 
@@ -547,7 +585,7 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
     }
 
     // save device details
-    public void saveDeviceDetails(String device, HashMap<String, Serializable> entry) {
+    private void saveDeviceDetails(String device, HashMap<String, Serializable> entry) {
         // don't overwrite an existing entry..
         if (this.getEndpointDetails(device) == null) {
             // save off the endpoint details
@@ -608,52 +646,5 @@ public class AWSIoTDeviceManager extends DeviceManager implements Runnable {
         
         // return the list
         return list;
-    }
-
-    // clear out any stale Keys and Certs
-    public void clearOrhpanedKeysAndCerts() {
-        ArrayList<HashMap<String, Serializable>> cert_list = this.getRegisteredCertificates();
-        for (int i = 0; i < cert_list.size(); ++i) {
-            // get the certificate ID
-            HashMap<String, Serializable> cert = cert_list.get(i);
-            String cert_id = (String)cert.get("certificateId");
-            String cert_arn = (String)cert.get("certificateArn");
-
-            // get the device
-            // if NOT present in any of the device entries... kill it
-            if (this.isUsedCert(cert_id) == false) {
-                // unlink the certificate from the thing record
-                this.unlinkCertificateFromThing(null, cert_arn);
-
-                // unlink the certificate from the thing record
-                this.unlinkCertificateFromPolicy(cert_arn);
-
-                // inactivate
-                this.inactivateCertificate(cert_id);
-
-                // delete
-                this.deleteCertificate(cert_id);
-
-                // purge the certificate from the cache
-                try {
-                    this.m_keys_cert_ids.remove(this.getKeyAndCertIndex(cert_id));
-                }
-                catch (Exception ex) {
-                    // fail silently...
-                }
-            }
-        }
-    }
-
-    // background thread to clear orphaned AWSIoT keys and certs
-    @Override
-    public void run() {
-        while (true) {
-            // wait for a bit...
-            Utils.waitForABit(this.errorLogger(),this.m_cleanup_thread_sleeptime_ms);
-            
-            // clear orphaned keys and certs
-            this.clearOrhpanedKeysAndCerts();
-        }
     }
 }
