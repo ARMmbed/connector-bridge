@@ -50,6 +50,9 @@ public class AWSIoTDeviceManager extends DeviceManager {
     private String m_policy_name = null;
     private String m_policy_document = null;
     
+    // lock to reconnection serial
+    private boolean m_in_progress = false;
+    
     // cleanup thread sleep time
     private int m_cleanup_thread_sleeptime_ms = DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS;   
 
@@ -64,6 +67,9 @@ public class AWSIoTDeviceManager extends DeviceManager {
 
         // initialize the keys/cert id cache
         this.m_keys_cert_ids = new ArrayList<>();
+        
+        // not in progress by default
+        this.m_in_progress = false;
 
         // get configuration params
         this.m_policy_name = this.orchestrator().preferences().valueOf("aws_iot_policy_name", this.m_suffix);
@@ -92,35 +98,47 @@ public class AWSIoTDeviceManager extends DeviceManager {
     // process new device registration
     public boolean registerNewDevice(Map message) {
         boolean status = false;
+        
+        if (this.m_in_progress == false) {
+            // we are now in progress
+            this.m_in_progress = true;
 
-        // get the device details
-        String device_type = (String)message.get("ept");
-        String device = (String) message.get("ep");
+            // get the device details
+            String device_type = (String)message.get("ept");
+            String device = (String) message.get("ep");
 
-        // see if we already have a device...
-        HashMap<String, Serializable> ep = this.getDeviceDetails(device);
-        if (ep != null) {
-            // we already have this shadow. Complete the details... this will remove the existing certs/keys...
-            this.completeDeviceDetails(ep);
+            // see if we already have a device...
+            HashMap<String, Serializable> ep = this.getDeviceDetails(device);
+            if (ep != null) {
+                // we already have this shadow. Complete the details... this will remove the existing certs/keys...
+                this.completeDeviceDetails(ep);
+
+                // we now create new certificate and keys... we need them for our MQTT connection...
+                this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
+
+                // save off this device 
+                this.saveDeviceDetails(device, ep);
+
+                // DEBUG
+                this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + ep);
+
+                // we are good
+                status = true;
+            }
+            else {
+                // DEBUG
+                this.errorLogger().info("AWSIoT: registerNewDevice: no device shadow found. Creating device shadow: " + message);
+
+                // device is not registered... so create/register it
+                status = this.createAndRegisterNewDevice(message);
+            }
             
-            // we now create new certificate and keys... we need them for our MQTT connection...
-            this.createKeysAndCertsAndLinkToPolicyAndThing(ep);
-            
-            // save off this device 
-            this.saveDeviceDetails(device, ep);
-            
-            // DEBUG
-            this.errorLogger().info("AWSIoT: registerNewDevice: device shadow already present (OK): " + ep);
-            
-            // we are good
-            status = true;
+            // no longer in progress
+            this.m_in_progress = false;
         }
         else {
-            // DEBUG
-            this.errorLogger().info("AWSIoT: registerNewDevice: no device shadow found. Creating device shadow: " + message);
-
-            // device is not registered... so create/register it
-            status = this.createAndRegisterNewDevice(message);
+            // already in progress
+            status = true;
         }
 
         // return our status
