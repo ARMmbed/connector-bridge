@@ -521,22 +521,6 @@ public class AWSIoTDeviceManager extends DeviceManager {
         Utils.awsCLI(this.errorLogger(), args);
     }
     
-    // create the thing type
-    private void createThingType(Map ep) {
-        if (ep != null && this.thingTypeExists(ep) == false) {
-            // create the Thing Type...
-            String args = "iot create-thing-type --thing-type-name=" + (String) ep.get("ept");
-            String result = Utils.awsCLI(this.errorLogger(), args);
-            if (result != null && result.length() > 2) {
-                // parse it
-                Map parsed = this.m_orchestrator.getJSONParser().parseJson(result);
-
-                // put the thing type ARN into the ep
-                ep.put("thingTypeArn", (String) parsed.get("thingTypeArn"));
-            }
-        }
-    }
-
     // check ifa thing type already exists
     private boolean thingTypeExists(Map ep) {
         if (ep != null) {
@@ -544,7 +528,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
             String result = Utils.awsCLI(this.errorLogger(), args);
             if (result != null && result.length() > 2) {
                 // parse it
-                Map parsed = this.m_orchestrator.getJSONParser().parseJson(result);
+                Map parsed = this.m_orchestrator.getJSONParser().parseJson(this.helpJSONParser(result));
 
                 // resync - put the thing type ARN back into the ep
                 ep.put("thingTypeArn", (String) parsed.get("thingTypeArn"));
@@ -553,6 +537,23 @@ public class AWSIoTDeviceManager extends DeviceManager {
         }
         return false;
     }
+    
+    // create the thing type
+    private void createThingType(Map ep) {
+        if (ep != null && this.thingTypeExists(ep) == false) {
+            // create the Thing Type...
+            String args = "iot create-thing-type --thing-type-name=" + (String) ep.get("ept");
+            String result = Utils.awsCLI(this.errorLogger(), args);
+            if (result != null && result.length() > 2) {
+                // parse it
+                Map parsed = this.m_orchestrator.getJSONParser().parseJson(this.helpJSONParser(result));
+
+                // put the thing type ARN into the ep
+                ep.put("thingTypeArn", (String) parsed.get("thingTypeArn"));
+            }
+        }
+    }
+
     // capture the endpoint address
     private void captureEndpointAddress(HashMap<String, Serializable> ep) {
         // AWS CLI invocation - get endpoint details
