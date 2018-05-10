@@ -633,7 +633,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
     }
 
     // complete processing of adding the new device
-    private void completeNewDeviceRegistration(Map endpoint) {
+    private synchronized void completeNewDeviceRegistration(Map endpoint) {
         try {
             // create the device in AWSIoT
             this.errorLogger().info("completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);

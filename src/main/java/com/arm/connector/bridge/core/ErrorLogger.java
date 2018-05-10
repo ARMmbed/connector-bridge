@@ -138,6 +138,15 @@ public class ErrorLogger extends BaseClass {
             this.m_log.add(entry);
         }
     }
+    
+    // Ping(): tracer for call path debugging
+    public void ping() {
+        this.ping("PING");
+    }
+    public void ping(String message) {
+        Exception ex = new Exception ("PingException");
+        this.warning(message + " Exception: " + ex.getMessage(),ex);
+    }
 
     /**
      * log entry - messages only

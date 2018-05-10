@@ -96,7 +96,7 @@ public class AWSIoTDeviceManager extends DeviceManager {
     }
 
     // process new device registration
-    public boolean registerNewDevice(Map message) {
+    public synchronized boolean registerNewDevice(Map message) {
         boolean status = false;
         
         if (this.m_in_progress == false) {
@@ -410,6 +410,9 @@ public class AWSIoTDeviceManager extends DeviceManager {
 
     // generate keys and certs
     private void createKeysAndCerts(HashMap<String, Serializable> ep) {
+        // DEBUG
+        //this.errorLogger().ping("createKeysAndCerts(AWS)");
+        
         // AWS IOT CLI to create the keys and certificates
         String args = "iot create-keys-and-certificate --set-as-active";
         String result = Utils.awsCLI(this.errorLogger(), args);
