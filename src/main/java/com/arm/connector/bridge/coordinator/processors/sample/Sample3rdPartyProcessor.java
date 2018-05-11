@@ -28,6 +28,7 @@ import com.arm.connector.bridge.coordinator.processors.interfaces.GenericSender;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
 import com.arm.connector.bridge.core.Utils;
 import com.arm.connector.bridge.transport.HttpTransport;
+import java.util.Map;
 
 /**
  * Sample 3rd Party peer processor (derived from PeerProcessor.. may want to switch to GenericMQTTProcessor)
@@ -103,5 +104,11 @@ public class Sample3rdPartyProcessor extends PeerProcessor implements PeerInterf
         this.errorLogger().info("sendMessage(Sample): Sending Message to: " + to + " message: " + message);
         
         // send this message to the peer
+    }
+
+    // complete new registration
+    @Override
+    public void completeNewDeviceRegistration(Map endpoint) {
+        // complete shadow device registration here...
     }
 }

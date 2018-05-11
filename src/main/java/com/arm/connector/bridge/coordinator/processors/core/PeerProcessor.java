@@ -121,22 +121,6 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
             // ensure we have the endpoint type
             this.setEndpointTypeFromEndpointName((String) endpoint.get("ep"), (String) endpoint.get("ept"));
 
-            // mimic the message that we get from direct discovery...
-            String message = "[{\"name\":\"" + endpoint.get("ep") + "\",\"type\":\"" + endpoint.get("ept") + "\",\"status\":\"ACTIVE\"}]";
-            String topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
-
-            // DEBUG
-            this.errorLogger().info("processNewRegistration(Peer) : Publishing new registration topic: " + topic + " message:" + message);
-            this.sendMessage(topic, message);
-
-            // send it also raw... over a subtopic
-            topic = this.createNewRegistrationTopic((String) endpoint.get("ept"), (String) endpoint.get("ep"));
-            message = this.jsonGenerator().generateJson(endpoint);
-
-            // DEBUG
-            this.errorLogger().info("processNewRegistration(Peer) : Publishing new registration topic: " + topic + " message:" + message);
-            this.sendMessage(topic, message);
-
             // re-subscribe if previously subscribed to observable resources
             List resources = (List) endpoint.get("resources");
             for (int j = 0; resources != null && j < resources.size(); ++j) {
@@ -145,10 +129,6 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                     if (this.m_re_subscribe == true) {
                         // re-subscribe to this resource
                         this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
-
-                        // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
-                        //this.subscriptionsManager().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
-                        //this.subscriptionsManager().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                     }
                     else {
                         // no re-processing of subscriptions
@@ -301,15 +281,12 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         // DEBUG
         this.errorLogger().info("onMessageReceive(Peer): Topic: " + topic + " message: " + message);
 
-        // Endpoint Discovery....
-        if (this.isEndpointDiscovery(topic)) {
-            Map options = (Map) this.parseJson(message);
-            String json = this.orchestrator().performDeviceDiscovery(options);
-            if (json != null && json.length() > 0) {
-                this.sendMessage(topic + "/mbed_endpoints", json);
-            }
+        // see if this is our SAMPLE request (i.e. PING)
+        if (this.isSAMPLERequest(topic)) {
+            // To DO
+            this.errorLogger().warning("onMessageReceive(Peer): SAMPLE request: Topic: " + topic + " Message: " + message + " Ignoring (OK).");
         }
-
+        
         // Get/Put/Post Endpoint Resource Value...
         else if (this.isEndpointResourceRequest(topic)) {
             String json = null;
@@ -365,15 +342,6 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
                     // not an AsyncResponse... so just emit it immediately... (GET only)
                     this.sendMessage(response_topic, json);
                 }
-            }
-        }
-
-        // Endpoint Resource Discovery...
-        else if (this.isEndpointResourcesDiscovery(topic)) {
-            String json = this.orchestrator().performDeviceResourceDiscovery(this.removeRequestTagFromTopic(topic));
-            if (json != null && json.length() > 0) {
-                String response_topic = this.removeRequestTagFromTopic(topic);
-                this.sendMessage(response_topic, json);
             }
         }
 
@@ -520,54 +488,31 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         return false;
     }
     
-    // test to check if a topic is requesting endpoint resource discovery
-    protected boolean isEndpointResourcesDiscovery(String topic) {
-        boolean is_discovery = false;
-
-        String request_topic = this.createEndpointResourceRequest();
-        if (topic != null && topic.contains(request_topic) == true) {
-            if (this.isNotObservationOrNewRegistration(topic) == true) {
-                is_discovery = true;
-            }
+    // test to check if a topic is SAMPLE request
+    protected boolean isSAMPLERequest(String topic) {
+        if (topic != null && topic.contains("SAMPLE")) {
+            return true;
         }
-
-        // DEBUG
-        this.errorLogger().info("isEndpointResourcesDiscovery: topic: " + topic + " is: " + is_discovery);
-        return is_discovery;
+        return false;
     }
     
     // test to check if a topic is requesting endpoint resource itself
     protected boolean isEndpointResourceRequest(String topic) {
         boolean is_endpoint_resource_request = false;
-        if (this.isEndpointResourcesDiscovery(topic) == true) {
-            // get the resource URI
-            String resource_uri = this.getResourceURIFromTopic(topic);
+        
+        // get the resource URI
+        String resource_uri = this.getResourceURIFromTopic(topic);
 
-            // see what we have
-            if (resource_uri != null && resource_uri.length() > 0) {
-                if (this.isNotObservationOrNewRegistration(topic) == true) {
-                    is_endpoint_resource_request = true;
-                }
+        // see what we have
+        if (resource_uri != null && resource_uri.length() > 0) {
+            if (this.isNotObservationOrNewRegistration(topic) == true) {
+                is_endpoint_resource_request = true;
             }
         }
 
         // DEBUG
         this.errorLogger().info("isEndpointResourceRequest: topic: " + topic + " is: " + is_endpoint_resource_request);
         return is_endpoint_resource_request;
-    }
-    
-    // test to check if a topic is requesting endpoint discovery
-    protected boolean isEndpointDiscovery(String topic) {
-        boolean is_discovery = false;
-
-        String request_topic = this.createEndpointDiscoveryRequest();
-        if (topic != null && topic.equalsIgnoreCase(request_topic) == true) {
-            is_discovery = true;
-        }
-
-        // DEBUG
-        this.errorLogger().info("isEndpointDiscovery: topic: " + topic + " is: " + is_discovery);
-        return is_discovery;
     }
 
     // test to check if a topic is requesting endpoint resource subscription actions

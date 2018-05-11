@@ -33,6 +33,9 @@ import javax.servlet.http.HttpServletResponse;
  * @author Doug Anson
  */
 public interface mbedDeviceServerInterface {
+    // start discovery of endpoints for device shadow setup...
+    public void startDeviceDiscovery();
+    
     // process observations/notifications incoming messages from device server
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response);
 
@@ -54,12 +57,6 @@ public interface mbedDeviceServerInterface {
 
     // process resource un-subscribe request
     public String unsubscribeFromEndpointResource(String uri, Map options);
-
-    // perform device discovery
-    public String performDeviceDiscovery(Map options);
-
-    // perform device resource discovery
-    public String performDeviceResourceDiscovery(String uri);
 
     // Webhook management
     public void setWebhook();

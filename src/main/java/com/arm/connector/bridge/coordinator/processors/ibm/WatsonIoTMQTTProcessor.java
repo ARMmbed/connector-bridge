@@ -673,7 +673,8 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     }
 
     // complete processing of adding the new device
-    private void completeNewDeviceRegistration(Map endpoint) {
+    @Override
+    public void completeNewDeviceRegistration(Map endpoint) {
         try {
             // create the device in WatsonIoT
             this.errorLogger().info("Watson IoT: completeNewDeviceRegistration: calling registerNewDevice(): " + endpoint);

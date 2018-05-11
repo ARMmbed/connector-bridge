@@ -44,12 +44,15 @@ import com.mbed.lwm2m.LWM2MResource;
  *
  * @author Doug Anson
  */
-public class mbedDeviceServerProcessor extends Processor implements mbedDeviceServerInterface, AsyncResponseProcessor {
+public class mbedDeviceServerProcessor extends Processor implements Runnable, mbedDeviceServerInterface, AsyncResponseProcessor {
     // defaulted number of webhook retries
-    private static final int MDS_WEBHOOK_RETRIES = 10;
+    private static final int MDS_WEBHOOK_RETRIES = 10;                          // 10 retries
     
     // webhook retry wait time in ms..
-    private static final int MDS_WEBHOOK_RETRY_WAIT_MS = 2500;
+    private static final int MDS_WEBHOOK_RETRY_WAIT_MS = 2500;                  // 2.5 seconds
+    
+    // amount of time to wait on boot before device discovery
+    private static final int MDS_BOOT_DEVICE_DISCOVERY_DELAY_MS = 15000;        // 15 seconds
     
     private HttpTransport m_http = null;
     private String m_mds_host = null;
@@ -69,6 +72,7 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private boolean m_using_callback_webhooks = false;
     private boolean m_disable_sync = false;
     private boolean m_skip_validation = false;
+    private long m_device_discovery_delay_ms = MDS_BOOT_DEVICE_DISCOVERY_DELAY_MS;
 
     // device metadata resource URI from configuration
     private String m_device_manufacturer_res = null;
@@ -841,52 +845,16 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         // return the endpoint resource request URL
         return url;
     }
-
-    // create the Endpoint Resource Discovery URL 
-    private String createEndpointResourceDiscoveryURL(String uri) {
-        // build out the URL for mDS Endpoint Resource discovery...
-        String url = this.createBaseURL() + uri;
-
-        // no options available...
-        // DEBUG
-        //this.errorLogger().info("createEndpointResourceDiscoveryURL: " + url);
-        // return the endpoint resource discovery URL
-        return url;
-    }
-
-    // create the Endpoint Discovery URL 
-    private String createEndpointDiscoveryURL(Map options) {
-        // build out the URL for mDS Endpoint Discovery...
-        String url = this.createBaseURL() + this.getDomain() + "/endpoints";
-
-        // add options if present
-        if (options != null) {
-            // valid options...
-            String type = (String) options.get("type");
-            String stale = (String) options.get("stale");
-
-            // construct the query string...
-            String qs = "";
-            qs = this.buildQueryString(qs, "type", type);
-            qs = this.buildQueryString(qs, "stale", stale);
-            if (qs != null && qs.length() > 0) {
-                url = url + "?" + qs;
-            }
-        }
-
-        // DEBUG
-        //this.errorLogger().info("createEndpointDiscoveryURL: " + url);
-        // return the discovery URL
-        return url;
-    }
     
     // process device-deletions of endpoints (mbed Cloud only)
     @Override
     public void processDeviceDeletions(String[] endpoints) {
-        for (int i = 0; i < endpoints.length; ++i) {
-            // remove from the validator - bookkeeping
-            if (this.m_webhook_validator != null) {
-                this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+        if (this.usingMbedCloud() == true) {
+            for (int i = 0; i < endpoints.length; ++i) {
+                // remove from the validator - bookkeeping
+                if (this.m_webhook_validator != null) {
+                    this.m_webhook_validator.removeSubscriptionsforEndpoint(endpoints[i]);
+                }
             }
         }
     }
@@ -1184,36 +1152,6 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         return json;
     }
 
-    // perform device discovery
-    @Override
-    public String performDeviceDiscovery(Map options) {
-        String url = this.createEndpointDiscoveryURL(options);
-        String json = null;
-
-        // mDS expects request to come as a http GET
-        if (this.requireSSL()) {
-            json = this.httpsGet(url);
-        }
-        else {
-            json = this.httpGet(url);
-        }
-        return json;
-    }
-
-    // perform device resource discovery
-    @Override
-    public String performDeviceResourceDiscovery(String uri) {
-        String url = this.createEndpointResourceDiscoveryURL(uri);
-        String json = null;
-        if (this.requireSSL()) {
-            json = this.httpsGet(url);
-        }
-        else {
-            json = this.httpGet(url);
-        }
-        return json;
-    }
-
     // initialize the endpoint's default attributes 
     private void initDeviceWithDefaultAttributes(Map endpoint) {
         this.pullDeviceManufacturer(endpoint);
@@ -1460,7 +1398,12 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
 
     // create the base URL for mDS operations
     private String createBaseURL() {
-        return this.m_default_mds_uri + this.m_mds_host + ":" + this.m_mds_port + this.connectorVersion();
+        return this.createBaseURL(this.connectorVersion());
+    }
+    
+    // create the base URL for mDS operations
+    private String createBaseURL(String version) {
+        return this.m_default_mds_uri + this.m_mds_host + ":" + this.m_mds_port + version;
     }
 
     // create the CoAP operation URL
@@ -1552,6 +1495,124 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
     private void pullDeviceTotalMemoryInfo(Map endpoint) {
         //this.m_device_descriptive_location_res
         endpoint.put("meta_total_mem", "128K");  // typical min: 128k
+    }
+    
+    // start device discovery for device shadow setup
+    @Override
+    public void startDeviceDiscovery() {
+        this.run();
+    }
+    
+    // setup initial Device Shadows (mbed Cloud only...)
+    private void setupExistingDeviceShadows() {
+        if (this.usingMbedCloud() == true) {
+            // query mbed Cloud for the current list of Registered devices
+            List devices = this.discoverRegisteredDevices();
+            
+            // loop through each device, get resource descriptions...
+            HashMap<String,Object> dev_map = new HashMap<>();
+            for(int i=0;devices != null && i<devices.size();++i) {
+                Map device = (Map)devices.get(i);
+                                
+                // copy over the relevant portions
+                dev_map.put("ep", (String)device.get("id"));
+                dev_map.put("ept", (String)device.get("endpoint_type"));
+                
+                // DEBUG
+                this.errorLogger().warning("mbedDeviceServerProcessor(BOOT): discovered mbed Cloud device ID: " + (String)device.get("id") + " Type: " + (String)device.get("endpoint_type"));
+                
+                // now, query mDS again for each device and get its resources
+                List resources = this.discoverDeviceResources((String)device.get("id"));
+                
+                // For now, we simply add to each resource JSON, a "path" that mimics the "uri" element... we need to use "uri" once done with Connector
+                for(int j=0;resources != null && j<resources.size();++j) {
+                    Map resource = (Map)resources.get(j);
+                    resource.put("path", (String)resource.get("uri"));
+                }
+                
+                // put the resource list into our payload...
+                dev_map.put("resources",resources);
+                
+                // process as new device registration...
+                this.orchestrator().completeNewDeviceRegistration(dev_map);
+            }
+        }
+        else {
+            // not using mbed Cloud
+            this.errorLogger().warning("setupExistingDeviceShadows: Not bound to mbed Cloud. Device discovery is by device registration/reg-updates only...");
+        }
+    }
+    
+    // create the registered devices retrieval URL
+    private String createRegisteredDeviceRetrievalURL() {
+        // create the url to capture all of the registered devices
+        String url = this.createBaseURL("/v3") + "/devices" + "?filter=state%3Dregistered" ;
+
+        // DEBUG
+        this.errorLogger().info("createRegisteredDeviceRetrievalURL: " + url);
+        
+        // return the device discovery URL
+        return url;
+    }
+    
+    // create the Device Resource Discovery URL 
+    private String createDeviceResourceDiscoveryURL(String device) {
+        // build out the URL for mDS Device Resource discovery...
+        String url = this.createBaseURL("/v2") + "/endpoints/" +  device;
+
+        // DEBUG
+        this.errorLogger().info("createDeviceResourceDiscoveryURL: " + url);
+        
+        // return the device resource discovery URL
+        return url;
+    }
+
+    // perform device discovery
+    private List discoverRegisteredDevices() {
+        return this.performDiscovery(this.createRegisteredDeviceRetrievalURL(),"data");
+    }
+
+    // discover the device resources
+    private List discoverDeviceResources(String device) {
+        return this.performDiscovery(this.createDeviceResourceDiscoveryURL(device),"root");
+    }
+    
+    // perform a discovery (JSON)
+    private List performDiscovery(String url,String key) {
+        if (key != null) {
+            String json = this.performDiscoveryToString(url);
+            if (json != null && json.length() > 0) {
+                try {
+                    Map base = this.jsonParser().parseJson(this.helpJSONParser(json));
+                    if (base != null) {
+                        this.errorLogger().info("performDiscovery: Response: " + base);
+                        return (List)base.get(key);
+                    }
+                }
+                catch (Exception ex) {
+                    this.errorLogger().warning("performDiscovery(mDS): Exception in JSON parse: " + ex.getMessage() + " URL: " + url);
+                }
+            }
+            else {
+                this.errorLogger().info("performDiscovery(mDS): No response given for URL: " + url);
+            }
+        }
+        else {
+            this.errorLogger().warning("performDiscovery(mDS): ERROR: No kev provided for Discovery. URL: " + url);
+        }
+        return null;
+    }
+    
+    // perform a discovery
+    private String performDiscoveryToString(String url) {
+        String json = null;
+        if (this.requireSSL()) {
+            json = this.httpsGet(url);
+        }
+        else {
+            json = this.httpGet(url);
+        }
+        return json;
     }
     
     // get the last response code
@@ -1737,5 +1798,23 @@ public class mbedDeviceServerProcessor extends Processor implements mbedDeviceSe
         }
         this.errorLogger().info("httpDelete: response: " + this.m_http.getLastResponseCode());
         return response;
+    }
+    
+    // Help the JSON parser with null strings... ugh
+    private String helpJSONParser(String json) {
+        if (json != null && json.length() > 0) {
+            return json.replace(":null", ":\"none\"").replace(":\"\"", ":\"none\"");
+        }
+        return json;
+    }
+    
+    // discovery thread 
+    @Override
+    public void run() {
+        // wait a bit
+        Utils.waitForABit(this.errorLogger(), this.m_device_discovery_delay_ms);
+        
+        // now discover our devices and setup shadows...
+        this.setupExistingDeviceShadows();
     }
 }

@@ -119,6 +119,13 @@ public class BasePeerProcessorFactory extends PeerProcessor implements Transport
             this.m_mqtt_list.get(i).processNewRegistration(message);
         }
     }
+    
+    @Override
+    public void completeNewDeviceRegistration(Map endpoint) {
+        for (int i = 0; i < this.m_mqtt_list.size(); ++i) {
+            this.m_mqtt_list.get(i).completeNewDeviceRegistration(endpoint);
+        }
+    }
 
     @Override
     public void processReRegistration(Map message) {

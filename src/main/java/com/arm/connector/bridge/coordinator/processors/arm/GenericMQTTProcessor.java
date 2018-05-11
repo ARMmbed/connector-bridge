@@ -288,6 +288,12 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         return null;
     }
     
+    // subscribe to new devices
+    @Override
+    public void completeNewDeviceRegistration(Map endpoint) {
+        // unused in base class
+    }
+    
     // subscribe MQTT Topics
     protected void subscribe_to_topics(String ep_name, Topic topics[]) {
         if (this.mqtt(ep_name) != null) {

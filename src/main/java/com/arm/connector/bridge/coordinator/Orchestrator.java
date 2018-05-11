@@ -184,6 +184,9 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
             this.errorLogger().info("Orchestrator: adding 3rd Party Sample REST Processor");
             this.m_peer_processor_list.add(Sample3rdPartyProcessor.createPeerProcessor(this, this.m_http));
         }
+        
+        // direct mDS processor to start device discovery...
+        this.startDeviceDiscovery();
     }
 
     // use IBM peer processor?
@@ -367,15 +370,10 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     public String unsubscribeFromEndpointResource(String uri, Map options) {
         return this.device_server_processor().unsubscribeFromEndpointResource(uri, options);
     }
-
+    
     @Override
-    public String performDeviceDiscovery(Map options) {
-        return this.device_server_processor().performDeviceDiscovery(options);
-    }
-
-    @Override
-    public String performDeviceResourceDiscovery(String uri) {
-        return this.device_server_processor().performDeviceResourceDiscovery(uri);
+    public void startDeviceDiscovery() {
+        this.device_server_processor().startDeviceDiscovery();
     }
 
     @Override
@@ -479,6 +477,14 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         
         String[] regexpired_str_array = new String[registrations_expired.size()];
         return registrations_expired.toArray(regexpired_str_array);
+    }
+    
+    // complete new device registration
+    @Override
+    public void completeNewDeviceRegistration(Map message) {
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            this.peerProcessor(i).completeNewDeviceRegistration(message);
+        }
     }
 
     @Override
