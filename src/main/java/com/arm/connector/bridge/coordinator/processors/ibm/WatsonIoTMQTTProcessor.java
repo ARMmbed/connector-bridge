@@ -661,9 +661,13 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         MQTTTransport mqtt = new MQTTTransport(this.errorLogger(), this.preferences(),null);
         this.setupDefaultMQTTTransport(mqtt);
         
-        // just reconnect...
+        // re-connect...
         if (this.connectMQTT() == true) {
-            this.subscribe(ep_name,ep_type,this.createEndpointTopicData(ep_name, ep_type),this);
+            // complete the device registration
+            HashMap<String,Serializable> endpoint = new HashMap<>();
+            endpoint.put("ep",ep_name);
+            endpoint.put("ept",ep_type);
+            this.completeNewDeviceRegistration(endpoint);
             return true;
         }
         return false;
