@@ -1609,7 +1609,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
                     }
                 }
                 catch (Exception ex) {
-                    this.errorLogger().warning("performDiscovery(mDS): Exception in JSON parse: " + ex.getMessage() + " URL: " + url);
+                    this.errorLogger().info("performDiscovery(mDS): Exception in JSON parse: " + ex.getMessage() + " URL: " + url);
                 }
             }
             else {
