@@ -38,6 +38,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
 import com.mbed.lwm2m.LWM2MResource;
+import javax.servlet.ServletException;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
@@ -894,12 +895,13 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         // build the response
         String response_header = "";
         String json = this.read(request);
-
-        // process and route the mDS message
-        this.processDeviceServerMessage(json, request);
-
+        if (json != null && json.length() > 0 && json.equalsIgnoreCase("{}") == false) {
+            // process and route the mDS message
+            this.processDeviceServerMessage(json, request);
+        }
+        
         // send the response back as an ACK to mDS
-        this.sendResponseToDeviceServer("text/html;charset=UTF-8", request, response, "", "");
+        this.sendResponseToDeviceServer("application/json;charset=utf-8", request, response, "", "{}");
     }
 
     // process and route the mDS message to the appropriate peer method (long poll method)
@@ -1353,8 +1355,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.getActualDeviceAttributes(endpoint, this);
     }
 
-    // read the request data
-    @SuppressWarnings("empty-statement")
+    // read the requested data from mDS
     private String read(HttpServletRequest request) {
         try {
             BufferedReader reader = request.getReader();
@@ -1367,8 +1368,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             return buf.toString();
         }
         catch (IOException ex) {
-            // do nothing
-            ;
+            // silent
         }
         return null;
     }
@@ -1387,8 +1387,8 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
                 }
             }
         }
-        catch (Exception ex) {
-            this.errorLogger().critical("Unable to send REST response", ex);
+        catch (IOException ex) {
+            this.errorLogger().critical("Unable to send response back to mDS...", ex);
         }
     }
 

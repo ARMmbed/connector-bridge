@@ -25,6 +25,7 @@ package com.arm.connector.bridge.servlet;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.preferences.PreferenceManager;
 import java.io.IOException;
+import java.io.PrintWriter;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -76,6 +77,17 @@ public class EventsProcessor extends HttpServlet {
         else {
             // error - no Manager instance
             this.m_error_logger.warning("EventsProcessor: ERROR: Manager instance is NULL. Ignoring the processing request...");
+            
+            // send a response
+            try {
+                response.setContentType("application/json;charset=utf-8");
+                response.setHeader("Pragma", "no-cache");
+                PrintWriter out = response.getWriter();
+                out.println("{}");
+            }
+            catch (IOException ex) {
+                this.m_error_logger.critical("Unable to send response back to mDS...", ex);
+            }
         }
     }
 
@@ -147,6 +159,6 @@ public class EventsProcessor extends HttpServlet {
      */
     @Override
     public String getServletInfo() {
-        return "mDS to MQTT Gateway";
+        return "Connector/mbed Cloud Bridge v1.0";
     }// </editor-fold>
 }

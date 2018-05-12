@@ -470,7 +470,7 @@ public class GoogleCloudDeviceManager extends DeviceManager implements Runnable 
         }
         catch (IOException ex) {
             // unable to delete the device
-            this.errorLogger().warning("Google: deleteDevice: WARNING:  Unable to delete device: " + ep_name + " Error: " + ex.getMessage(),ex);
+            this.errorLogger().warning("Google: deleteDevice: WARNING:  Unable to delete device: " + ep_name + " Error: " + ex.getMessage());
         }
         
         // error
