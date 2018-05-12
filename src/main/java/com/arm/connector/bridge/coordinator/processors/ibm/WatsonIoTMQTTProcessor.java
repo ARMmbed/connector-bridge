@@ -641,9 +641,6 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     // AsyncResponse response processor
     @Override
     public boolean processAsyncResponse(Map endpoint) {
-        // DEBUG
-        this.errorLogger().info("Watson IoT: Completing Creating New Device: " + endpoint);
-
         // with the attributes added, we finally create the device in Watson IoT
         this.completeNewDeviceRegistration(endpoint);
 

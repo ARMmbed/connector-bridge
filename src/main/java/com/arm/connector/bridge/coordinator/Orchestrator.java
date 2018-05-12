@@ -38,6 +38,7 @@ import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudPeerPro
 
 // Core
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
+import com.arm.connector.bridge.coordinator.processors.interfaces.SubscriptionManager;
 import com.arm.connector.bridge.core.ErrorLogger;
 import com.arm.connector.bridge.json.JSONGenerator;
 import com.arm.connector.bridge.json.JSONParser;
@@ -184,9 +185,6 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
             this.errorLogger().info("Orchestrator: adding 3rd Party Sample REST Processor");
             this.m_peer_processor_list.add(Sample3rdPartyProcessor.createPeerProcessor(this, this.m_http));
         }
-        
-        // direct mDS processor to start device discovery...
-        this.startDeviceDiscovery();
     }
 
     // use IBM peer processor?
@@ -370,11 +368,6 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     public String unsubscribeFromEndpointResource(String uri, Map options) {
         return this.device_server_processor().unsubscribeFromEndpointResource(uri, options);
     }
-    
-    @Override
-    public void startDeviceDiscovery() {
-        this.device_server_processor().startDeviceDiscovery();
-    }
 
     @Override
     public String processEndpointResourceOperation(String verb, String ep_name, String uri, String value, String options) {
@@ -500,6 +493,18 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
             this.peerProcessor(i).processNotification(message);
         }
     }
+    
+    public void removeSubscription(String domain, String endpoint, String ep_type, String uri) {
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            this.peerProcessor(i).subscriptionsManager().removeSubscription(domain,endpoint,ep_type,uri);
+        }
+    }
+    
+    public void addSubscription(String domain, String endpoint, String ep_type, String uri, boolean is_observable) {
+        for (int i = 0; this.m_peer_processor_list != null && i < this.m_peer_processor_list.size(); ++i) {
+            this.peerProcessor(i).subscriptionsManager().addSubscription(domain,endpoint,ep_type,uri,is_observable);
+        }
+    }
 
     @Override
     public void initListener() {
@@ -543,5 +548,11 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         
         // default is false
         return false;    
+    }
+
+    @Override
+    public SubscriptionManager subscriptionsManager() {
+        // unused
+        return null;
     }
 }

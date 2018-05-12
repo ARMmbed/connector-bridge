@@ -55,6 +55,9 @@ public interface PeerInterface {
     // process an endpoint resource notification message from mDS
     public void processNotification(Map message);
     
+    // acquire the subscriptions manager from the peer
+    public SubscriptionManager subscriptionsManager();
+    
     // process a new device registration (directly, mbed Cloud)
     public void completeNewDeviceRegistration(Map endpoint);
 

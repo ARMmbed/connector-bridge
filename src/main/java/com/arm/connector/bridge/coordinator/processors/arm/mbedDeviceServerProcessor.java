@@ -295,6 +295,10 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // start the long polling thread
     private void startLongPolling() {
+        // discover devices first
+        this.startDeviceDiscovery();
+        
+        // now long poll
         if (this.m_long_poll_processor == null) {
             this.m_long_poll_processor = new LongPollProcessor(this);
             this.m_long_poll_processor.startPolling();
@@ -623,6 +627,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
                 else if (ok) {
                     // webhook set but not using bulk subscriptions
                     this.errorLogger().warning("mbedDeviceServerProcessor: Webhook to mDS set (SUCCESS).");
+                    
+                    // start device discovery
+                    this.startDeviceDiscovery();
                 }
                 
                 // wait a bit if we have failed
@@ -1498,8 +1505,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     }
     
     // start device discovery for device shadow setup
-    @Override
-    public void startDeviceDiscovery() {
+    private void startDeviceDiscovery() {
         this.run();
     }
     
@@ -1510,13 +1516,13 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             List devices = this.discoverRegisteredDevices();
             
             // loop through each device, get resource descriptions...
-            HashMap<String,Object> dev_map = new HashMap<>();
+            HashMap<String,Object> endpoint = new HashMap<>();
             for(int i=0;devices != null && i<devices.size();++i) {
                 Map device = (Map)devices.get(i);
                                 
                 // copy over the relevant portions
-                dev_map.put("ep", (String)device.get("id"));
-                dev_map.put("ept", (String)device.get("endpoint_type"));
+                endpoint.put("ep", (String)device.get("id"));
+                endpoint.put("ept", (String)device.get("endpoint_type"));
                 
                 // DEBUG
                 this.errorLogger().warning("mbedDeviceServerProcessor(BOOT): discovered mbed Cloud device ID: " + (String)device.get("id") + " Type: " + (String)device.get("endpoint_type"));
@@ -1528,19 +1534,32 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
                 for(int j=0;resources != null && j<resources.size();++j) {
                     Map resource = (Map)resources.get(j);
                     resource.put("path", (String)resource.get("uri"));
+                    
+                    // auto-subscribe to observable resources... if enabled.
+                    this.orchestrator().subscribeToEndpointResource((String) endpoint.get("ep"), (String) resource.get("path"), false);
+
+                    // SYNC: here we dont have to worry about Sync options - we simply dispatch the subscription to mDS and setup for it...
+                    this.orchestrator().removeSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"));
+                    this.orchestrator().addSubscription(this.m_mds_domain, (String) endpoint.get("ep"), (String) endpoint.get("ept"), (String) resource.get("path"), this.isObservableResource(resource));
                 }
                 
                 // put the resource list into our payload...
-                dev_map.put("resources",resources);
+                endpoint.put("resources",resources);
                 
                 // process as new device registration...
-                this.orchestrator().completeNewDeviceRegistration(dev_map);
+                this.orchestrator().completeNewDeviceRegistration(endpoint);
             }
         }
         else {
             // not using mbed Cloud
             this.errorLogger().warning("setupExistingDeviceShadows: Not bound to mbed Cloud. Device discovery is by device registration/reg-updates only...");
         }
+    }
+    
+    // get the observability of a given resource
+    protected boolean isObservableResource(Map resource) {
+        String obs_str = (String) resource.get("obs");
+        return (obs_str != null && obs_str.equalsIgnoreCase("true"));
     }
     
     // create the registered devices retrieval URL

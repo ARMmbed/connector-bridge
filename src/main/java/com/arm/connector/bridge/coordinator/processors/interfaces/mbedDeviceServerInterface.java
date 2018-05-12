@@ -33,9 +33,6 @@ import javax.servlet.http.HttpServletResponse;
  * @author Doug Anson
  */
 public interface mbedDeviceServerInterface {
-    // start discovery of endpoints for device shadow setup...
-    public void startDeviceDiscovery();
-    
     // process observations/notifications incoming messages from device server
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response);
 

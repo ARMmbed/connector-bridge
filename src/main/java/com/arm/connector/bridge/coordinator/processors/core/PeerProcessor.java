@@ -461,7 +461,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     }
     
     // get the subscriptions manager
-    protected SubscriptionManager subscriptionsManager() {
+    public SubscriptionManager subscriptionsManager() {
         return this.m_subscriptions_manager;
     }
 
