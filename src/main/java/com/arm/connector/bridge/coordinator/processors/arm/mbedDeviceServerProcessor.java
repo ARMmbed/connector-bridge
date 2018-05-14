@@ -122,6 +122,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.m_http = http;
         this.m_mds_domain = orchestrator.getDomain();
         this.m_mds_host = orchestrator.preferences().valueOf("mds_address");
+        if (this.m_mds_host == null || this.m_mds_host.length() == 0) {
+            this.m_mds_host = orchestrator.preferences().valueOf("api_endpoint_address");
+        }
         this.m_mds_port = orchestrator.preferences().intValueOf("mds_port");
         this.m_mds_username = orchestrator.preferences().valueOf("mds_username");
         this.m_mds_password = orchestrator.preferences().valueOf("mds_password");
@@ -142,6 +145,10 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.m_rest_version = this.prefValueWithDefault("mds_rest_version", this.m_default_rest_version).replace("v", "").replace("//", "");
         if (this.m_use_api_token == true) {
             this.m_api_token = this.orchestrator().preferences().valueOf("mds_api_token");
+            if (this.m_api_token == null || this.m_api_token.length() == 0) {
+                // new key to use..
+                this.m_api_token = this.orchestrator().preferences().valueOf("api_key");
+            }
         }
         
         // display number of webhook setup retries allowed
