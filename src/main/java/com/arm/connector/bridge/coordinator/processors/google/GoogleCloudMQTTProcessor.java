@@ -616,13 +616,16 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             // DEBUG
             this.errorLogger().info("deleteDevice(GoogleCloud): deleting device: " + device);
 
+            // stop the refresher thread - this will kill the listener and MQTT connection
+            this.stopJwTRefresherThread(device);
+            
             // remove the device from GoogleCloud
             if (this.m_device_manager.deleteDevice(device) == false) {
                 this.errorLogger().warning("deleteDevice(GoogleCloud): unable to delete device from GoogleCloud...");
-            }
+            }            
             
-            // stop the refresher thread - this will kill the listener and MQTT connection
-            this.stopJwTRefresherThread(device);
+            // make sure the MQTT endpoint is GONE
+            this.remove(device);
         }
         return true;
     }
@@ -849,11 +852,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
             try {
                 // stop the event loop in the thread
                 doomed.haltThread();
-                
-                // re-join the thread to end it
-                doomed.join();
             }
-            catch (InterruptedException ex) {
+            catch (Exception ex) {
                 // silent
             }
         }

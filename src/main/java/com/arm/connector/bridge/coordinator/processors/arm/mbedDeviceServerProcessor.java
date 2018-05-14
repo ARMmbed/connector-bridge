@@ -38,7 +38,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.mbedDeviceServerInterface;
 import com.mbed.lwm2m.LWM2MResource;
-import javax.servlet.ServletException;
 
 /**
  * mDS/mDC Peer processor for the connector bridge
@@ -112,6 +111,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // Integrating with mbed Cloud? (default FALSE)
     private boolean m_mbed_cloud_integration = false;
+    
+    // XXX Last Message
+    private String m_mds_last_message = null;
 
     // constructor
     @SuppressWarnings("empty-statement")
@@ -126,6 +128,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.m_content_type = orchestrator.preferences().valueOf("mds_content_type");
         this.m_mds_gw_callback = orchestrator.preferences().valueOf("mds_gw_callback");
         this.m_use_https_dispatch = this.prefBoolValue("mds_use_https_dispatch");
+        this.m_mds_last_message = null;
         this.m_webook_num_retries = orchestrator.preferences().intValueOf("mds_webhook_num_retries");
         if (this.m_webook_num_retries <= 0) {
             this.m_webook_num_retries = MDS_WEBHOOK_RETRIES;
@@ -891,17 +894,62 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // process the notification
     @Override
-    public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {
-        // build the response
-        String response_header = "";
+    public synchronized void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {
+        // read the request...
         String json = this.read(request);
         if (json != null && json.length() > 0 && json.equalsIgnoreCase("{}") == false) {
-            // process and route the mDS message
-            this.processDeviceServerMessage(json, request);
+            // Check for message duplication... 
+            if (this.isDuplicateMessage(json) == false) {
+                // record the "last" message
+                this.m_mds_last_message = json;
+                
+                // process and route the mDS message
+                this.processDeviceServerMessage(json, request);
+            }
+            else {
+                // DUPLICATE!  So ignore it
+                this.errorLogger().info("processNotificationMessage(mDS): duplicate message discovered... ignoring...(OK).");
+            }
         }
         
-        // send the response back as an ACK to mDS
+        // ALWAYS send the response back as an ACK to mDS
         this.sendResponseToDeviceServer("application/json;charset=utf-8", request, response, "", "{}");
+    }
+    
+    // check for duplicated messages
+    private boolean isDuplicateMessage(String message) {
+        if (this.m_mds_last_message != null && message != null && message.length() > 0 && this.m_mds_last_message.equalsIgnoreCase(message) == true) {
+            // possible duplicate to previous message
+            
+            // check for duplicate de-registrations
+            if (message.contains("\"de-registrations\":") == true) {
+                // two identical de-registrations cannot happen
+                return true;
+            }
+          
+            // check for duplicate registrations-expired
+            if (message.contains("\"registrations-expired\":") == true) {
+                // two identical de-registrations cannot happen
+                return true;
+            }
+            
+            // check for duplicate registrations
+            if (message.contains("\"registrations\":") == true) {
+                // two identical de-registrations cannot happen
+                return true;
+            }
+            
+            // check for duplicate reg-updates
+            if (message.contains("\"reg-updates\":") == true) {
+                // two identical de-registrations cannot happen
+                return true;
+            }
+            
+            // we allow for duplicate "notifications" as they dont involve shadow lifecycle changes...
+        }
+        
+        // default is false
+        return false;
     }
 
     // process and route the mDS message to the appropriate peer method (long poll method)

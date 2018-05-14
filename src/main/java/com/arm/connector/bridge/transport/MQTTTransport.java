@@ -112,6 +112,9 @@ public class MQTTTransport extends Transport implements GenericSender {
     private boolean m_ssl_context_initialized = false;
     private boolean m_no_tls_certs_or_keys = false;
     
+    // reset mode
+    private boolean m_is_in_reset = false;
+    
     // X.509 Support
     private boolean m_use_x509_auth = false;
     private String m_pki_priv_key = null;
@@ -170,6 +173,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
         this.m_has_connected = false;
+        this.m_is_in_reset = false;
         
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -216,6 +220,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_keystore_filename = null;
         this.m_set_mqtt_version = true;
         this.m_has_connected = false;
+        this.m_is_in_reset = false;
 
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -894,7 +899,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     }
 
     // reset our MQTT connection... sometimes it goes wonky...
-    private void resetConnection() {
+    private synchronized void resetConnection() {
         // if we have never connected before, just return
         if (this.m_has_connected == false) {
             // we've NEVER connected before... so just ignore... we may be in the middle of our first connection attempt...
@@ -902,15 +907,21 @@ public class MQTTTransport extends Transport implements GenericSender {
             return;
         }
         
-        // DEBUG
-        this.errorLogger().warning("resetConnection(MQTT): resetting MQTT connection (was previously connected)...");
-        
+        // if we are already in reset mode, just ignore this reset request...
+        if (this.m_is_in_reset == true) {
+            // we are already in reset mode... so just ignore
+            this.errorLogger().warning("resetConnection: Already in reset... so ignoring this reset request...(OK).");
+            return;
+        }
+                       
         // reset the connection
         if (this.m_connection != null) {
-            // disconnect()...
-            this.errorLogger().warning("resetConnection(MQTT): disconnecting (clear_creds=true)...");
-            this.disconnect(true);
-
+            // we are in reset mode
+            this.m_is_in_reset = true;
+            
+            // DEBUG
+            this.errorLogger().warning("resetConnection(MQTT): resetting MQTT connection (was previously connected)...");
+        
             // ensure that we have a shadow device to reconnect to...
             if (this.m_reconnector != null) {
                 // DEBUG
