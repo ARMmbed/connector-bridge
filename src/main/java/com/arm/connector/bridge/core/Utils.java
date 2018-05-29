@@ -771,9 +771,9 @@ public class Utils {
     }
 
     // generate a keystore password
-    public static String generateKeystorePassword(String base_pw, String salt) {
-        // XXX TO DO
-        return base_pw;
+    public static String generateKeystorePassword(ErrorLogger logger,String base_pw, String id, String salt) {
+        // create hash for the password
+        return Utils.createHash(salt + base_pw + salt + id);
     }
 
     // remove the keystore from the filesystem

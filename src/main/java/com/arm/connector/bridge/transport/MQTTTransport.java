@@ -401,6 +401,14 @@ public class MQTTTransport extends Transport implements GenericSender {
         // return the filename
         return filename;
     }
+    
+    // convert a private key to a string form
+    private String privateKeyToString(PrivateKey key) {
+        if (key != null) {
+            return key.toString();
+        }
+        return null;
+    }
 
     // create keystore
     private String initializeKeyStore(String id) {
@@ -425,7 +433,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_pubkey = Utils.createPublicKeyFromPEM(this.errorLogger(), this.m_pki_pub_key, "RSA");
 
         // set our keystore PW
-        this.m_keystore_pw = Utils.generateKeystorePassword(this.m_keystore_pw, id);
+        this.m_keystore_pw = Utils.generateKeystorePassword(this.errorLogger(),this.m_keystore_pw, id, privateKeyToString(this.m_privkey));
 
         // create the keystore
         return Utils.createKeystore(this.errorLogger(), this.m_base_dir, id, this.m_keystore_basename, this.m_cert, this.m_privkey, this.m_pubkey, this.m_keystore_pw);
