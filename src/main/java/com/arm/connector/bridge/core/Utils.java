@@ -67,6 +67,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.UUID;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -770,10 +771,10 @@ public class Utils {
         return keystore_filename;
     }
 
-    // generate a keystore password
+    // generate a keystore password for the device shadow's keystore holding its creds... 
     public static String generateKeystorePassword(ErrorLogger logger,String base_pw, String id, String salt) {
-        // create hash for the password
-        return Utils.createHash(salt + base_pw + salt + id);
+        // create a long password for the keystore that holds the device shadow creds
+        return Utils.createHash(salt + base_pw + UUID.randomUUID() + id);
     }
 
     // remove the keystore from the filesystem

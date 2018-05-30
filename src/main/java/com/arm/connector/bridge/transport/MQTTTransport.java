@@ -49,6 +49,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Date;
+import java.util.UUID;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -73,8 +74,8 @@ import org.fusesource.mqtt.client.Topic;
  * @author Doug Anson
  */
 public class MQTTTransport extends Transport implements GenericSender {
-    // should never be used 
-    private static final String KEYSTORE_PW_DEFAULT = "Ub12u&hF83hf&t121dfjKr0";
+    // should never be used - should always be set in the configuration file
+    private static final String KEYSTORE_PW_DEFAULT = UUID.randomUUID().toString();
     
     // number of connection attempts before giving up...
     private static final int DEFAULT_NUM_CONNECT_TRIES = 5;
