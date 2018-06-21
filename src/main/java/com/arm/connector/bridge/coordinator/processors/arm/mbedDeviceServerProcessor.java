@@ -320,13 +320,13 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             else {
                 // verb is unknown - should never get called as verb is already sanitized...
                 this.errorLogger().warning("executeApiRequest(mDS): ERROR: HTTP verb[" + verb + "] is UNKNOWN. Unable to execute request...");
-                return "{\"status\":\"invalid coap verb\"}";
+                return "{\"api_execute_status\":\"invalid coap verb\"}";
             }
         }
         else {
             // invalid parameters
             this.errorLogger().warning("executeApiRequest(mDS): ERROR: invalid parameters in API request. Unable to execute request...");
-            return "{\"status\":\"invalid api parameters\"}";
+            return "{\"api_execute_status\":\"invalid api parameters\"}";
         }
         
         // return a sanitized response
@@ -342,7 +342,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     // sanitize the API response
     private String sanitizeResponse(String response) {
         if (response == null || response.length() <= 0) {
-            return "{\"status\":\"no response\"}";
+            return "{\"api_execute_status\":\"empty response\"}";
         }
         else {
             // help the JSON parser a bit... 
@@ -356,7 +356,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             }
             else {
                 // unparsable JSON... error
-                return "{\"status\":\"unparsable json\"}";
+                return "{\"api_execute_status\":\"unparsable json\"}";
             }
         }
     }
