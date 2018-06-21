@@ -451,7 +451,7 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     // send the API Response back through the topic
     private void sendApiResponse(String ep_name,String topic,ApiResponse response) {        
         // publish
-        this.mqtt(ep_name).sendMessage(topic, response.createResponseJSON());
+        this.mqtt(ep_name).sendMessage(topic, response.createResponseJSON(), GoogleCloudMQTTProcessor.GOOGLE_QoS);
     }
     
     // GoogleCloud Specific: CoAP command handler - processes CoAP commands coming over MQTT channel
@@ -469,8 +469,8 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         
         // process any API requests...
         if (this.isApiRequest(message)) {
-            // process the message
-            String reply_topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic, ep_name).replace(this.m_observation_key,this.m_api_response_key);
+            // GoogleCloud Specific: we publish this to the STATE change topic in Google... 
+            String reply_topic = this.customizeTopic(this.m_google_cloud_coap_state_topic,ep_name); 
             this.sendApiResponse(ep_name,reply_topic,this.processApiRequestOperation(message));
             
             // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
