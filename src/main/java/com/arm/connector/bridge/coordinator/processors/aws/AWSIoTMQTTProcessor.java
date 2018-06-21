@@ -24,6 +24,7 @@ package com.arm.connector.bridge.coordinator.processors.aws;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
@@ -310,19 +311,35 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
         }
         return cust_topic;
     }
+    
+    // send the API Response back through the topic
+    private void sendApiResponse(String ep_name,String topic,ApiResponse response) {        
+        // publish
+        this.mqtt(ep_name).sendMessage(topic, response.createResponseJSON());
+    }
 
     // CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
     public void onMessageReceive(String topic, String message) {
         // DEBUG
         this.errorLogger().info("AWSIoT(CoAP Command): Topic: " + topic + " message: " + message);
-
+        
         // parse the topic to get the endpoint
         // format: mbed/__DEVICE_TYPE__/__EPNAME__/coap/__COMMAND_TYPE__/#
         String ep_name = this.getEndpointNameFromTopic(topic);
-
+        
         // parse the topic to get the endpoint type
         String ep_type = this.getTypeFromEndpointName(ep_name);
+        
+        // process any API requests...
+        if (this.isApiRequest(message)) {
+            // process the message
+            String reply_topic = this.customizeTopic(this.m_aws_iot_observe_notification_topic, ep_name, ep_type).replace(this.m_observation_key,this.m_api_response_key);
+            this.sendApiResponse(ep_name,reply_topic,this.processApiRequestOperation(message));
+            
+            // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
+            return;
+        }
 
         // pull the CoAP Path URI from the message itself... its JSON... 
         // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
@@ -353,7 +370,7 @@ public class AWSIoTMQTTProcessor extends GenericMQTTProcessor implements Reconne
         // if there are mDC/mDS REST options... lets add them
         // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get", "options":"noResp=true" }
         String options = this.getRESTOptions(message);
-
+        
         // dispatch the coap resource operation request
         String response = this.orchestrator().processEndpointResourceOperation(coap_verb, ep_name, uri, value, options);
 

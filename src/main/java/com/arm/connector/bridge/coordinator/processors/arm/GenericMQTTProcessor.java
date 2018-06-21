@@ -23,6 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.coordinator.processors.core.PeerProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
@@ -50,6 +51,14 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     
     // default wait time
     private static int DEFAULT_RECONNNECT_SLEEP_TIME_MS = 15000;      // 15 seconds   
+    
+    // defaulted maximum api request ID
+    private static int MAX_API_REQUEST_ID = 32768;
+    
+    private int m_next_api_request_id = 0;
+    
+    // API Request Topic
+    private String m_api_request_topic = null;
     
     protected String m_mqtt_host = null;
     protected int m_mqtt_port = 0;
@@ -85,6 +94,12 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
         // MQTT transport list
         this.m_mqtt = new HashMap<>();
+        
+        // init our API Request ID
+        this.m_next_api_request_id = 0;
+        
+        // create the API Request Topic
+        this.m_api_request_topic = this.createApiRequestTopic();
         
         // initialize the endpoint map
         this.m_endpoints = new SerializableHashMap(orchestrator,"ENDPOINT_MAP");
@@ -126,6 +141,85 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
 
         // setup our defaulted MQTT transport if given one
         this.setupDefaultMQTTTransport(mqtt);
+    }
+    
+    // process the REST api request
+    protected ApiResponse processApiRequestOperation(String message) {
+        // pull the fields from the message and santize them as much as we can...
+        String uri = this.sanitizeURIStructure(this.getApiURIFromMessage(message));
+        String data = this.getApiDataFromMessage(message);
+        String options = this.sanitizeRESTOptions(this.getApiOptionsFromMessage(message));
+        String verb = this.sanitizeHTTPVerb(this.getApiRequestVerbFromMessage(message));
+        String api_key = this.sanitizeAPIKey(this.getApiRequestAPIKeyFromMessage(message));
+            
+        // call the orchestrator to route this API request for processing...
+        return this.orchestrator().processApiRequestOperation(uri,data,options,verb,this.getNextApiRequestId(),api_key);
+    }
+    
+    // get the api data from the request message
+    private String getApiDataFromMessage(String message) {
+        return this.getJSONStringValueFromJSONKey(message,"request_data");
+    }
+    
+    // get the api URI from the request message
+    private String getApiURIFromMessage(String message) {
+        return this.getJSONStringValueFromJSONKey(message,"api_uri");
+    }
+    
+    // get the api options from the request message
+    private String getApiOptionsFromMessage(String message) {
+        return this.getJSONStringValueFromJSONKey(message,"api_options");
+    }
+    
+    // get the api request verb from the request message
+    private String getApiRequestVerbFromMessage(String message) {
+        return this.getJSONStringValueFromJSONKey(message,"api_verb");
+    }
+    
+    // get the api APIKey from the request message
+    private String getApiRequestAPIKeyFromMessage(String message) {
+        return this.getJSONStringValueFromJSONKey(message,"api_key");
+    }
+    
+    // get the api request ID from the request message
+    private int getNextApiRequestId() {
+        ++this.m_next_api_request_id;
+        if (this.m_next_api_request_id >= MAX_API_REQUEST_ID) {
+            m_next_api_request_id = 1;
+        }
+        return this.m_next_api_request_id;
+    }
+    
+    // get the JSON value from the JSON key
+    private String getJSONStringValueFromJSONKey(String json,String key) {
+        Map parsed = this.tryJSONParse(json);
+        if (parsed != null) {
+            return (String)parsed.get(key);
+        }
+        return null;
+    }
+    
+    // send the API Response back through the topic
+    private void sendApiResponse(String topic,ApiResponse response) {        
+        // publish
+        this.mqtt().sendMessage(topic, response.createResponseJSON());
+    }
+    
+    // messages from MQTT come here and are processed...
+    @Override
+    public void onMessageReceive(String topic, String message) {
+        // process any API requests...
+        if (this.isApiRequest(message)) {
+            // process the message
+            String reply_topic = this.createBaseTopic(this.m_api_response_key);
+            this.sendApiResponse(reply_topic,this.processApiRequestOperation(message));
+            
+            // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
+            return;
+        }
+        
+        // just process via super class
+        super.onMessageReceive(topic, message);
     }
     
     // default MQTT Thread listener setup
@@ -294,11 +388,33 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         // unused in base class
     }
     
+    // create the API request topic
+    protected String createApiRequestTopic() {
+        return this.getTopicRoot() + "/api";
+    }
+    
+    // subscribe to the API request topic
+    protected void subscribe_to_api_request_topic(String ep_name) {
+        Topic[] api_topics = new Topic[1];
+        api_topics[0] = new Topic(this.m_api_request_topic,QoS.AT_LEAST_ONCE);
+        if (ep_name != null) {
+            this.mqtt(ep_name).subscribe(api_topics);
+        }
+        else {
+            this.mqtt().subscribe(api_topics);
+        }
+    }
+    
     // subscribe MQTT Topics
     protected void subscribe_to_topics(String ep_name, Topic topics[]) {
         if (this.mqtt(ep_name) != null) {
+            // subscribe to endpoint specific topics
             this.errorLogger().info("subscribe_to_topics(MQTT): subscribing to topics...");
             this.mqtt(ep_name).subscribe(topics);
+            
+            // subscribe to the API Request topic
+            this.errorLogger().info("subscribe_to_topics(MQTT): subscribing to API request topic...");
+            this.subscribe_to_api_request_topic(ep_name);
         }
     }
 

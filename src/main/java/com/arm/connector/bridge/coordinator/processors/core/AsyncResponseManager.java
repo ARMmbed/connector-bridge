@@ -182,7 +182,7 @@ public class AsyncResponseManager {
         }
         catch (Exception ex) {
             // CRITICAL: unable to parse the JSON... 
-            this.errorLogger().critical("recordAsyncResponse: Exception in parsing JSON: " + response + "... Unable to parse async message", ex);
+            this.errorLogger().warning("recordAsyncResponse: Exception in parsing JSON: " + response + "... Unable to parse async message", ex);
         }
     }
 
@@ -248,11 +248,8 @@ public class AsyncResponseManager {
             this.m_responses.remove(id);
         }
         else {
-            // processing something we have no record on...
-            ;
-
-            // DEBUG
-            //this.errorLogger().info("processAsyncResponse: No AsyncResponse record for ID: " + id + " Ignoring: " + response.toString());
+            // no record of this resposne... so just ignore it.. 
+            this.errorLogger().info("processAsyncResponse: No AsyncResponse record for ID: " + id + " Ignoring: " + response.toString());
         }
     }
 }

@@ -38,8 +38,12 @@ import java.util.HashMap;
  * @author Doug Anson
  */
 public class InMemorySubscriptionManager extends BaseClass implements SubscriptionManager {
+    // defaulted endpoint type
+    protected static String DEFAULT_ENDPOINT_TYPE="mbed-endpoint";
+    
     private Orchestrator m_orchestrator = null;
     private String m_non_domain = null;
+    private String m_default_ep_type = null;
     private SubscriptionProcessor m_subscription_processor = null;
 
     private SerializableArrayListOfHashMaps m_subscriptions = null;
@@ -53,6 +57,7 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
         this.m_orchestrator = orchestrator;
         this.m_subscriptions = new SerializableArrayListOfHashMaps(orchestrator,"SUBSCRIPTION_DETAILS");
         this.m_non_domain = this.preferences().valueOf("mds_def_domain");
+        this.m_default_ep_type = this.checkAndDefaultDomain(this.preferences().valueOf("mds_def_ep_type"));
         this.m_subscription_processor = null;
         
         // override for ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) subscriptions
@@ -103,6 +108,7 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
     @Override
     public void addSubscription(String domain, String endpoint, String ep_type, String uri, boolean is_observable) {
         domain = this.checkAndDefaultDomain(domain);
+        ep_type = this.checkAndDefaultEndpointType(ep_type);
         if (!this.containsSubscription(domain, endpoint, ep_type, uri)) {
             // adjust for ObjectID(1)/ObjectID(3)/ObjectID(5)/ObjectID(10255) avoidance...
             if (this.m_enable_1_3_5_10255_objectid_subscriptions == true) {
@@ -231,6 +237,20 @@ public class InMemorySubscriptionManager extends BaseClass implements Subscripti
             return this.m_non_domain;
         }
         return domain;
+    }
+    
+    // defaulted endpoint type
+    private String checkAndDefaultEndpointType(String ep_type) {
+        if (ep_type == null || ep_type.length() <= 0) {
+            // return the defaulted EP type
+            if (this.m_default_ep_type == null) {
+                return DEFAULT_ENDPOINT_TYPE;
+            }
+            else {
+                return this.m_default_ep_type;
+            }
+        }
+        return ep_type;
     }
 
     // get the endpoint type for a given endpoint

@@ -55,7 +55,8 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     
     // keys used to differentiate between data from CoAP observations and responses from CoAP commands 
     protected String m_observation_key = "observation";             // legacy: "observation", unified: "notify"
-    protected String m_cmd_response_key = "cmd-response";           // common for both legacy and unified 
+    protected String m_cmd_response_key = "cmd-response";           // common for both legacy and unified
+    protected String m_api_response_key = "api-response";           // API response tag key
     
     private SerializableHashMap m_endpoint_type_list = null;
     
@@ -514,13 +515,79 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         this.errorLogger().info("isEndpointResourceRequest: topic: " + topic + " is: " + is_endpoint_resource_request);
         return is_endpoint_resource_request;
     }
+    
+    // determine if the received MQTT message is REST api request
+    protected boolean isApiRequest(String message) {
+        // simply check for "request/subscriptions"
+        if(message != null) {
+            Map parsed = this.tryJSONParse(message);
+            if (parsed != null) {
+                String uri = (String)parsed.get("api_uri");
+                String verb = (String)parsed.get("api_verb");
+                if (uri != null && uri.length() > 0 && verb != null && verb.length() > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // sanitize the HTTP Verb
+    protected String sanitizeHTTPVerb(String verb) {
+        // non-zero length and null
+        if (verb != null && verb.length() > 0) {
+            if (verb.equalsIgnoreCase("get") || verb.equalsIgnoreCase("put") || verb.equalsIgnoreCase("post") || verb.equalsIgnoreCase("delete")) {
+                return verb;
+            }
+        }
+        return null;
+    }
+    
+    // sanitize the REST Options
+    protected String sanitizeRESTOptions(String options) {
+        // non-zero length and null
+        if (options != null && options.length() > 0) {
+            if (options.charAt(0) != '?') {
+                return "?" + options;
+            }
+            return options;
+        }
+        return "";
+    }
+    
+    // sanitize the REST API Key
+    protected String sanitizeAPIKey(String api_key) {
+        // non-zero length and null
+        if (api_key != null && api_key.length() > 0 && api_key.contains("ak_")) {
+            return api_key;
+        }
+        return null;
+    }
+    
+    // sanitize the basic validation of the structure of the URI
+    protected String sanitizeURIStructure(String uri) {
+        // non-zero length and nulls...
+        if (uri != null && uri.length() > 0) {
+            // make sure it contains slashes
+            if (uri.contains("/")) {
+                // if we dont have a leading slash... put one there. 
+                if (uri.charAt(0) != '/') {
+                    uri = "/" + uri;
+                }
+                
+                // return the uri
+                return uri;
+            }
+        }
+        return null;
+    }
 
     // test to check if a topic is requesting endpoint resource subscription actions
     protected boolean isEndpointNotificationSubscriptionRequest(String topic) {
         boolean is_endpoint_notification_subscription = false;
 
         // simply check for "request/subscriptions"
-        if (topic.contains("request/subscriptions")) {
+        if (topic != null && topic.contains("request/subscriptions")) {
             is_endpoint_notification_subscription = true;
         }
 

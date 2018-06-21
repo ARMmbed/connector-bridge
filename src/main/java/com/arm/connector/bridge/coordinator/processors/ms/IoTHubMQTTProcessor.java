@@ -24,6 +24,7 @@ package com.arm.connector.bridge.coordinator.processors.ms;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
@@ -288,8 +289,11 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
     @Override
     public void subscribe_to_topics(String ep_name, Topic topics[]) {
         // IOTHUB DeviceID Prefix
+        this.errorLogger().info("subscribe_to_topics(IoTHub): subscribing to topics...");
         String iothub_ep_name = this.addDeviceIDPrefix(ep_name);
         this.mqtt(iothub_ep_name).subscribe(topics);
+        
+        // for IoTHub, we dont have to subscribe to any special topics for API requests... 
     }
 
     // IoTHub Specific: does this endpoint already have registered subscriptions?
@@ -432,6 +436,12 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         // return the value
         return value;
     }
+    
+    // send the API Response back through the topic
+    private void sendApiResponse(String iothub_ep_name,String topic,ApiResponse response) {        
+        // publish
+        this.mqtt(iothub_ep_name).sendMessage(topic, response.createResponseJSON());
+    }
 
     // CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
@@ -443,6 +453,17 @@ public class IoTHubMQTTProcessor extends GenericMQTTProcessor implements Reconne
         // format: devices/__EPNAME__/messages/devicebound/#
         // IOTHUB DevicIDPrefix
         String iothub_ep_name = this.addDeviceIDPrefix(this.getEndpointNameFromTopic(topic));
+        
+        // process any API requests...
+        if (this.isApiRequest(message)) {
+            // process the message
+            String reply_topic = this.customizeTopic(this.m_iot_hub_observe_notification_topic, iothub_ep_name, null);
+            reply_topic = reply_topic.replace(this.m_observation_key,this.m_api_response_key);
+            this.sendApiResponse(iothub_ep_name,reply_topic,this.processApiRequestOperation(message));
+            
+            // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
+            return;
+        }
 
         // pull the CoAP Path URI from the message itself... its JSON... 
         // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }

@@ -39,6 +39,9 @@ import java.util.Map;
  * @author Doug Anson
  */
 public class WatsonIoTDeviceManager extends DeviceManager {
+    // defaulted endpoint type
+    protected static String DEFAULT_ENDPOINT_TYPE="mbed-endpoint";
+    
     private String m_watson_iot_rest_uri_template = null;
     private String m_watson_iot_add_device_template = null;
     private String m_watson_iot_add_gw_type_template = null;
@@ -92,7 +95,10 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         this.m_watson_iot_gw_auth_token = Utils.createURLSafeToken(this.m_watson_iot_auth_token);
 
         // default device type in case we need it
-        this.m_watson_iot_def_type = this.preferences().valueOf("iotf_device_type", this.m_suffix);
+        this.m_watson_iot_def_type = this.preferences().valueOf("mds_def_ep_type", this.m_suffix);
+        if (this.m_watson_iot_def_type == null || this.m_watson_iot_def_type.length() <= 0) {
+            this.m_watson_iot_def_type = DEFAULT_ENDPOINT_TYPE;
+        }
     }
 
     // upsert the OrgID and APIKey
@@ -241,9 +247,13 @@ public class WatsonIoTDeviceManager extends DeviceManager {
             this.errorLogger().info("Watson IoT: installGatewayDeviceType: SUCCESS. RESULT: " + result);
             status = true;
         }
-        else {
+        else if (this.m_http.getLastResponseCode() != 409) {
             // DEBUG
             this.errorLogger().warning("Watson IoT: installGatewayDeviceType: FAILURE: " + this.m_http.getLastResponseCode() + " RESULT: " + result);
+        }
+        else {
+            // DEBUG
+            this.errorLogger().info("Watson IoT: installGatewayDeviceType: gateway already exists (OK).");
         }
 
         return status;
@@ -445,6 +455,10 @@ public class WatsonIoTDeviceManager extends DeviceManager {
 
     // build out the ADD Gateway Device Type JSON
     private String createAddGatewayDeviceTypeJSON(String device_type) {
+        if (device_type == null) {
+            this.errorLogger().info("createAddGatewayDeviceTypeJSON: ERROR device type is NULL. Defaulting to: mbed-endpoint");
+            device_type = this.getDeviceType(device_type);
+        }
         return this.m_watson_iot_add_gw_dev_type_template.replace("__TYPE_ID__", device_type);
     }
 
@@ -481,6 +495,11 @@ public class WatsonIoTDeviceManager extends DeviceManager {
         // create the new device type
         String device_type = (String) message.get("ept");
         String device = (String) message.get("ep");
+        
+        // DEBUG
+        this.errorLogger().info("registerNewDevice(WatsonIoT): creating gateway device type: EP: " + device + " EPT: " + device_type + " MSG: " + message);
+       
+        // now create the gateway device type
         this.createGatewayDeviceType(device_type);
         
         // create the URL

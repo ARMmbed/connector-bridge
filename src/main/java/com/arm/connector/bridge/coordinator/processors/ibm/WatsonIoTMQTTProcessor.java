@@ -24,6 +24,7 @@ package com.arm.connector.bridge.coordinator.processors.ibm;
 
 import com.arm.connector.bridge.coordinator.processors.arm.GenericMQTTProcessor;
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
 import com.arm.connector.bridge.coordinator.processors.interfaces.PeerInterface;
@@ -51,6 +52,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
     private String m_watson_iot_coap_cmd_topic_put = null;
     private String m_watson_iot_coap_cmd_topic_post = null;
     private String m_watson_iot_coap_cmd_topic_delete = null;
+    private String m_watson_iot_coap_cmd_topic_api = null;
     private String m_watson_iot_org_id = null;
     private String m_watson_iot_org_key = null;
     private String m_client_id_template = null;
@@ -117,6 +119,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
             this.m_watson_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "put");
             this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "post");
             this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "delete");
+            this.m_watson_iot_coap_cmd_topic_api = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "api");
         }
         else {
             // upper-case for the topics
@@ -124,6 +127,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
             this.m_watson_iot_coap_cmd_topic_put = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "PUT");
             this.m_watson_iot_coap_cmd_topic_post = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "POST");
             this.m_watson_iot_coap_cmd_topic_delete = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "DELETE");
+            this.m_watson_iot_coap_cmd_topic_api = this.orchestrator().preferences().valueOf("iotf_coap_cmd_topic", this.m_suffix).replace("__COMMAND_TYPE__", "API");
         }
 
         // establish default bindings
@@ -468,16 +472,26 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         }
         return cust_topic;
     }
+    
+    // Watson IoT: subscribe to the API Request topic for each device
+    @Override
+    protected void subscribe_to_api_request_topic(String ep_name) {
+        Topic[] api_topics = new Topic[1];
+        String topic_str = this.customizeTopic(this.m_watson_iot_coap_cmd_topic_api, ep_name, this.getEndpointTypeFromEndpointName(ep_name));
+        api_topics[0] = new Topic(topic_str,QoS.AT_LEAST_ONCE);
+        this.mqtt().subscribe(api_topics);
+    }
 
     // subscribe to the WatsonIoT MQTT topics
     @Override
     public void subscribe_to_topics(String ep_name, Topic topics[]) {
-        // subscribe to each topic individually
-        for (int i = 0; i < topics.length; ++i) {
-            Topic[] single_topic = new Topic[1];
-            single_topic[0] = topics[i];
-            this.mqtt().subscribe(single_topic);
-        }
+        // subscribe to the device topics
+        this.errorLogger().info("subscribe_to_topics(WatsonIoT): subscribing to topics...");
+        this.mqtt().subscribe(topics);
+        
+        // now subscribe to the API topic
+        this.errorLogger().info("subscribe_to_topics(WatsonIoT): subscribing to API request topic...");
+        this.subscribe_to_api_request_topic(ep_name);
     }
 
     // Watson IoT Specific: un-register topics for CoAP commands
@@ -516,15 +530,32 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         return do_register;
     }
     
+    // send the API Response back through the topic
+    private void sendApiResponse(String topic,ApiResponse response) {        
+        // publish
+        this.mqtt().sendMessage(topic, response.createResponseJSON());
+    }
+    
     // CoAP command handler - processes CoAP commands coming over MQTT channel
     @Override
     public void onMessageReceive(String topic, String message) {
         // DEBUG
         this.errorLogger().info("Watson IoT(CoAP Command): Topic: " + topic + " message: " + message);
-
+        
         // parse the topic to get the endpoint and CoAP verb
         // format: iot-2/type/mbed/id/mbed-eth-observe/cmd/put/fmt/json
         String ep_name = this.getEndpointNameFromTopic(topic);
+                    
+        // process any API requests...
+        if (this.isApiRequest(message)) {
+            // process the message
+            String reply_topic = this.customizeTopic(this.m_watson_iot_observe_notification_topic, ep_name, this.m_device_manager.getDeviceType(ep_name));
+            reply_topic = reply_topic.replace(this.m_observation_key,this.m_api_response_key);
+            this.sendApiResponse(reply_topic,this.processApiRequestOperation(message));
+            
+            // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
+            return;
+        }
 
         // pull the CoAP URI and Payload from the message itself... its JSON... 
         // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }

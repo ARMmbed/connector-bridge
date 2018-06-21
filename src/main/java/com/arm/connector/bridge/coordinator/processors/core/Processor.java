@@ -96,7 +96,7 @@ public class Processor extends BaseClass {
     // jsonParser is broken with empty strings... so we have to fill them in with spaces.. 
     private String replaceEmptyStrings(String data) {
         if (data != null) {
-            return data.replaceAll("\"\"", "\"" + this.m_empty_string + "\"");
+            return data.replaceAll("\"\"", "\"" + this.m_empty_string + "\"").replace("[]", "null");
         }
         return data;
     }
@@ -112,7 +112,7 @@ public class Processor extends BaseClass {
             }
         }
         catch (Exception ex) {
-            this.orchestrator().errorLogger().critical("JSON parsing exception for: " + modified_json + " message: " + ex.getMessage(), ex);
+            this.orchestrator().errorLogger().warning("JSON parsing exception for: " + json + " MODIFED: " + modified_json +  " Message: " + ex.getMessage(), ex);
             parsed = null;
         }
         return parsed;
@@ -127,11 +127,12 @@ public class Processor extends BaseClass {
     protected Map tryJSONParse(String payload) {
         HashMap<String, Object> result = new HashMap<>();
         try {
-            result = (HashMap<String, Object>) this.orchestrator().getJSONParser().parseJson(payload);
+            result = (HashMap<String, Object>) this.orchestrator().getJSONParser().parseJson(this.replaceEmptyStrings(payload));
             return result;
         }
         catch (Exception ex) {
-            // silent
+            // parse error
+            this.errorLogger().info("tryJSONParse: caught exception. JSON: " + payload + " Exception: "+ ex.getMessage());
         }
         return result;
     }

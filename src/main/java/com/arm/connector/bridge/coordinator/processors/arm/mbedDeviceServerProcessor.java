@@ -23,6 +23,7 @@
 package com.arm.connector.bridge.coordinator.processors.arm;
 
 import com.arm.connector.bridge.coordinator.Orchestrator;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.servlet.Manager;
 import com.arm.connector.bridge.coordinator.processors.core.Processor;
 import com.arm.connector.bridge.coordinator.processors.interfaces.AsyncResponseProcessor;
@@ -53,6 +54,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // amount of time to wait on boot before device discovery
     private static final int MDS_BOOT_DEVICE_DISCOVERY_DELAY_MS = 15000;        // 15 seconds
+    
+    // default endpoint type
+    private static String DEFAULT_ENDPOINT_TYPE = "mbed-endpoint";              // default endpoint type
     
     private HttpTransport m_http = null;
     private String m_mds_host = null;
@@ -102,6 +106,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // Webhook establishment retries
     private int m_webook_num_retries = MDS_WEBHOOK_RETRIES;
+    
+    // defaulted endpoint type
+    private String m_def_ep_type = DEFAULT_ENDPOINT_TYPE;
     
     // Webhook establishment retry wait time in ms
     private int m_webhook_retry_wait_ms = MDS_WEBHOOK_RETRY_WAIT_MS;
@@ -221,6 +228,12 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         if (this.longPollEnabled() == false) {
             this.setupWebhookType();
         }
+        
+        // default device type in case we need it
+        this.m_def_ep_type = orchestrator.preferences().valueOf("mds_def_ep_type");
+        if (this.m_def_ep_type == null || this.m_def_ep_type.length() <= 0) {
+            this.m_def_ep_type = DEFAULT_ENDPOINT_TYPE;
+        }
 
         // sanity check the configured mDS AUTH type
         this.sanityCheckAuthType();
@@ -250,6 +263,101 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         }
         else {
             orchestrator.errorLogger().warning("mbedDeviceServerProcessor: device removal on deregistration DISABLED");
+        }
+    }
+    
+    // sanitize the endpoint type
+    private String sanitizeEndpointType(String ept) {
+        if (ept == null || ept.length() <= 0 || ept.equalsIgnoreCase("none")) {
+            return this.m_def_ep_type;
+        }
+        return ept;
+    }
+    
+    // process an API request operation
+    @Override
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key) {
+        ApiResponse response = new ApiResponse(this.orchestrator(),this.m_suffix,uri,data,options,verb,request_id);
+        
+        // execute the API Request
+        response.setReplyData(this.executeApiRequest(uri,data,options,verb,api_key));
+        
+        // set the http result code
+        response.setHttpCode(this.getLastResponseCode());
+        
+        // return the response
+        return response;
+    }
+    
+    // execute an API request and return the response
+    private String executeApiRequest(String uri,String data,String options,String verb,String api_key) {
+        String response = "";
+        
+        // execute if we have valid parameters
+        if (uri != null && verb != null) {
+            // create our API Request URL (blank version)
+            String url = this.createBaseURL("") + uri + options;
+
+            // DEBUG
+            this.errorLogger().warning("executeApiRequest(mDS): URL: " + url);
+
+            // GET
+            if (verb.equalsIgnoreCase("get")) {
+                response = this.httpsGet(url, this.m_content_type, api_key);
+            }   
+            // PUT
+            else if (verb.equalsIgnoreCase("put")) {
+                response = this.httpsPut(url, data, this.m_content_type, api_key);
+            }   
+            // POST
+            else if (verb.equalsIgnoreCase("post")) {
+                response = this.httpsPost(url,data, this.m_content_type, api_key);
+            }   
+            // DELETE
+            else if (verb.equalsIgnoreCase("delete")) {
+                response = this.httpsDelete(url, data, api_key);
+            } 
+            else {
+                // verb is unknown - should never get called as verb is already sanitized...
+                this.errorLogger().warning("executeApiRequest(mDS): ERROR: HTTP verb[" + verb + "] is UNKNOWN. Unable to execute request...");
+                return "{\"status\":\"invalid coap verb\"}";
+            }
+        }
+        else {
+            // invalid parameters
+            this.errorLogger().warning("executeApiRequest(mDS): ERROR: invalid parameters in API request. Unable to execute request...");
+            return "{\"status\":\"invalid api parameters\"}";
+        }
+        
+        // return a sanitized response
+        String sanitized = this.sanitizeResponse(response);
+        
+        // DEBUG
+        this.errorLogger().info("executeApiRequest(mDS):Sanitized API Response: " + sanitized);
+        
+        // return the sanitized response
+        return sanitized;
+    }
+    
+    // sanitize the API response
+    private String sanitizeResponse(String response) {
+        if (response == null || response.length() <= 0) {
+            return "{\"status\":\"no response\"}";
+        }
+        else {
+            // help the JSON parser a bit... 
+            String fixed = this.helpJSONParser(response);
+            
+            // response should be parsable JSON
+            Map parsed = this.tryJSONParse(fixed);
+            if (parsed != null && parsed.isEmpty() == false) {
+                // parsable! just return the (patched) JSON string
+                return fixed;
+            }
+            else {
+                // unparsable JSON... error
+                return "{\"status\":\"unparsable json\"}";
+            }
         }
     }
     
@@ -668,7 +776,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.errorLogger().info("setupBulkSubscriptions: URL: " + url + " JSON: " + json);
         
         // send PUT to establish the bulk subscriptions
-        String result = this.httpsPut(url, json, "application/json");
+        String result = this.httpsPut(url, json, "application/json", this.m_api_token);
         int error_code = this.getLastResponseCode();
         
         // DEBUG
@@ -1145,28 +1253,28 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             if (verb.equalsIgnoreCase(("post"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking POST: " + url + " DATA: " + value);
                 if (this.requireSSL()) {
-                    json = this.httpsPost(url, value, "plain/text");  // nail content_type to "plain/text"
+                    json = this.httpsPost(url, value, "plain/text", this.m_api_token);  // nail content_type to "plain/text"
                 }
                 else {
-                    json = this.httpPost(url, value, "plain/text");   // nail content_type to "plain/text"
+                    json = this.httpPost(url, value, "plain/text", this.m_api_token);   // nail content_type to "plain/text"
                 }
             }
             if (verb.equalsIgnoreCase(("delete"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
                 if (this.requireSSL()) {
-                    json = this.httpsDelete(url, "plain/text");      // nail content_type to "plain/text"
+                    json = this.httpsDelete(url, "plain/text", this.m_api_token);      // nail content_type to "plain/text"
                 }
                 else {
-                    json = this.httpDelete(url, "plain/text");       // nail content_type to "plain/text"
+                    json = this.httpDelete(url, "plain/text", this.m_api_token);       // nail content_type to "plain/text"
                 }
             }
             if (verb.equalsIgnoreCase(("del"))) {
                 this.errorLogger().info("processEndpointResourceOperation: Invoking DELETE: " + url);
                 if (this.requireSSL()) {
-                    json = this.httpsDelete(url, "plain/text");      // nail content_type to "plain/text"
+                    json = this.httpsDelete(url, "plain/text", this.m_api_token);      // nail content_type to "plain/text"
                 }
                 else {
-                    json = this.httpDelete(url, "plain/text");       // nail content_type to "plain/text"
+                    json = this.httpDelete(url, "plain/text", this.m_api_token);       // nail content_type to "plain/text"
                 }
             }
         }
@@ -1280,7 +1388,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         //this.errorLogger().info("ATTRIBUTES: Calling GET to receive: " + url);
         
         // Dispatch and get the response (an AsyncId)
-        String json_response = this.httpsGet(url, this.m_device_attributes_content_type);
+        String json_response = this.httpsGet(url, this.m_device_attributes_content_type, this.m_api_token);
 
         // record the response to get processed later
         if (json_response != null) {
@@ -1575,9 +1683,12 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             for(int i=0;devices != null && i<devices.size();++i) {
                 Map device = (Map)devices.get(i);
                                 
+                // sanitize the endpoint type
+                device.put("endpoint_type",this.sanitizeEndpointType((String)device.get("endpoint_type")));
+                
                 // copy over the relevant portions
                 endpoint.put("ep", (String)device.get("id"));
-                endpoint.put("ept", (String)device.get("endpoint_type"));
+                endpoint.put("ept",(String)device.get("endpoint_type"));
                 
                 // DEBUG
                 this.errorLogger().warning("mbedDeviceServerProcessor(BOOT): discovered mbed Cloud device ID: " + (String)device.get("id") + " Type: " + (String)device.get("endpoint_type"));
@@ -1732,14 +1843,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP GET request (SSL)
     private String httpsGet(String url) {
-        return this.httpsGet(url, this.m_content_type);
+        return this.httpsGet(url,this.m_content_type,this.m_api_token);
     }
 
     // invoke HTTP GET request (SSL)
-    private String httpsGet(String url, String content_type) {
+    private String httpsGet(String url, String content_type,String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpsGetApiTokenAuth(url, api_key, null, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpsGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
@@ -1750,14 +1861,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP GET request
     private String httpGet(String url) {
-        return this.httpGet(url, this.m_content_type);
+        return this.httpGet(url, this.m_content_type, this.m_api_token);
     }
 
     // invoke HTTP GET request
-    private String httpGet(String url, String content_type) {
+    private String httpGet(String url, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpGetApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpGetApiTokenAuth(url, api_key, null, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpGet(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
@@ -1773,14 +1884,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP PUT request (SSL)
     private String httpsPut(String url, String data) {
-        return this.httpsPut(url, data, this.m_content_type);
+        return this.httpsPut(url, data, this.m_content_type, this.m_api_token);
     }
 
     // invoke HTTP PUT request (SSL)
-    private String httpsPut(String url, String data, String content_type) {
+    private String httpsPut(String url, String data, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+            response = this.m_http.httpsPutApiTokenAuth(url, api_key, data, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpsPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
@@ -1796,14 +1907,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP PUT request
     private String httpPut(String url, String data) {
-        return this.httpPut(url, data, this.m_content_type);
+        return this.httpPut(url, data, this.m_content_type, this.m_api_token);
     }
 
     // invoke HTTP PUT request
-    private String httpPut(String url, String data, String content_type) {
+    private String httpPut(String url, String data, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpPutApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+            response = this.m_http.httpPutApiTokenAuth(url, api_key, data, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpPut(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
@@ -1813,10 +1924,15 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     }
 
     // invoke HTTP POST request (SSL)
-    private String httpsPost(String url, String data, String content_type) {
+    private String httpsPost(String url, String data) {
+        return this.httpsPost(url, data, this.m_content_type, this.m_api_token);
+    }
+    
+    // invoke HTTP POST request (SSL)
+    private String httpsPost(String url, String data, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+            response = this.m_http.httpsPostApiTokenAuth(url, api_key, data, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpsPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
@@ -1826,10 +1942,10 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     }
 
     // invoke HTTP POST request - set the content_type to "plain/text" forcefully...
-    private String httpPost(String url, String data, String content_type) {
+    private String httpPost(String url, String data, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpPostApiTokenAuth(url, this.m_api_token, data, content_type, this.m_mds_domain);
+            response = this.m_http.httpPostApiTokenAuth(url, api_key, data, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpPost(url, this.m_mds_username, this.m_mds_password, data, content_type, this.m_mds_domain);
@@ -1840,14 +1956,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP DELETE request
     private String httpsDelete(String url) {
-        return this.httpsDelete(url, this.m_content_type);
+        return this.httpsDelete(url, this.m_content_type, this.m_api_token);
     }
 
     // invoke HTTP DELETE request
-    private String httpsDelete(String url, String content_type) {
+    private String httpsDelete(String url, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpsDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpsDeleteApiTokenAuth(url, api_key, null, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpsDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
@@ -1858,14 +1974,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // invoke HTTP DELETE request
     private String httpDelete(String url) {
-        return this.httpDelete(url, this.m_content_type);
+        return this.httpDelete(url, this.m_content_type, this.m_api_token);
     }
 
     // invoke HTTP DELETE request
-    private String httpDelete(String url, String content_type) {
+    private String httpDelete(String url, String content_type, String api_key) {
         String response = null;
         if (this.useAPITokenAuth()) {
-            response = this.m_http.httpDeleteApiTokenAuth(url, this.m_api_token, null, content_type, this.m_mds_domain);
+            response = this.m_http.httpDeleteApiTokenAuth(url, api_key, null, content_type, this.m_mds_domain);
         }
         else {
             response = this.m_http.httpDelete(url, this.m_mds_username, this.m_mds_password, null, content_type, this.m_mds_domain);
@@ -1877,7 +1993,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     // Help the JSON parser with null strings... ugh
     private String helpJSONParser(String json) {
         if (json != null && json.length() > 0) {
-            return json.replace(":null", ":\"none\"").replace(":\"\"", ":\"none\"");
+            return json.replace(":null", ":\"none\"").replace(":\"\"", ":\"none\"").replace("{}","\"none\"");
         }
         return json;
     }

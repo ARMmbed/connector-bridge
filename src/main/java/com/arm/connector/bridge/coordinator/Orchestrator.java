@@ -34,6 +34,7 @@ import com.arm.connector.bridge.coordinator.processors.sample.Sample3rdPartyProc
 import com.arm.connector.bridge.coordinator.processors.ibm.WatsonIoTPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.ms.MSIoTHubPeerProcessorFactory;
 import com.arm.connector.bridge.coordinator.processors.aws.AWSIoTPeerProcessorFactory;
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import com.arm.connector.bridge.coordinator.processors.google.GoogleCloudPeerProcessorFactory;
 
 // Core
@@ -330,6 +331,12 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
         return null;
     }
 
+    // Message: API Request
+    @Override
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key) {
+        return this.device_server_processor().processApiRequestOperation(uri, data, options, verb, request_id, api_key);
+    }
+    
     // Message: notifications
     @Override
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response) {

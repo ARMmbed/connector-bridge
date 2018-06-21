@@ -22,6 +22,7 @@
  */
 package com.arm.connector.bridge.coordinator.processors.interfaces;
 
+import com.arm.connector.bridge.coordinator.processors.core.ApiResponse;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -33,6 +34,9 @@ import javax.servlet.http.HttpServletResponse;
  * @author Doug Anson
  */
 public interface mbedDeviceServerInterface {
+    // process an API request 
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key);
+    
     // process observations/notifications incoming messages from device server
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response);
 
