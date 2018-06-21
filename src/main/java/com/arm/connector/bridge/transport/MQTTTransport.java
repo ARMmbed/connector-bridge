@@ -1132,7 +1132,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         }
         catch (Exception ex) {
             // unable to receiveMessage - final
-            this.errorLogger().warning("receiveAndProcessMessage(MQTT): Exception caught while connected: " + ex.getMessage());
+            this.errorLogger().warning("receiveAndProcessMessage(MQTT): Exception caught while connected: " + ex.getMessage(),ex);
             
             // reset the connection
             this.resetConnection();

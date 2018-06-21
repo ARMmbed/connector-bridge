@@ -151,7 +151,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
         String options = this.sanitizeRESTOptions(this.getApiOptionsFromMessage(message));
         String verb = this.sanitizeHTTPVerb(this.getApiRequestVerbFromMessage(message));
         String api_key = this.sanitizeAPIKey(this.getApiRequestAPIKeyFromMessage(message));
-            
+
         // call the orchestrator to route this API request for processing...
         return this.orchestrator().processApiRequestOperation(uri,data,options,verb,this.getNextApiRequestId(),api_key);
     }

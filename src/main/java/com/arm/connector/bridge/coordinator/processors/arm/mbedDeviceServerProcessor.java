@@ -299,7 +299,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             String url = this.createBaseURL("") + uri + options;
 
             // DEBUG
-            this.errorLogger().warning("executeApiRequest(mDS): URL: " + url);
+            this.errorLogger().info("executeApiRequest(mDS): invoking API Request URL: " + url);
 
             // GET
             if (verb.equalsIgnoreCase("get")) {

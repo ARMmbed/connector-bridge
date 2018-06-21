@@ -449,9 +449,21 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
     }
     
     // send the API Response back through the topic
-    private void sendApiResponse(String ep_name,String topic,ApiResponse response) {        
+    private void sendApiResponse(String ep_name,String topic,ApiResponse response) {  
+        String reply = response.createResponseJSON();
+        
         // publish
-        this.mqtt(ep_name).sendMessage(topic, response.createResponseJSON(), GoogleCloudMQTTProcessor.GOOGLE_QoS);
+        if(this.mqtt(ep_name) != null) {
+            // DEBUG
+            this.errorLogger().info("sendApiResponse(GOOGLE): sending API response. TOPIC: " + topic + " EPNAME: " + ep_name + " REPLY: " + reply);
+            
+            // send the response
+            this.mqtt(ep_name).sendMessage(topic, reply, GoogleCloudMQTTProcessor.GOOGLE_QoS);
+        }
+        else {
+            // no MQTT handle
+            this.errorLogger().warning("sendApiResponse(GOOGLE): unable to send API response. MQTT(" + ep_name +") is NULL");
+        }
     }
     
     // GoogleCloud Specific: CoAP command handler - processes CoAP commands coming over MQTT channel
@@ -469,13 +481,19 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         
         // process any API requests...
         if (this.isApiRequest(message)) {
-            // GoogleCloud Specific: we publish this to the STATE change topic in Google... 
-            String reply_topic = this.customizeTopic(this.m_google_cloud_coap_state_topic,ep_name); 
+            // DEBUG
+            this.errorLogger().info("onMessageReceive(Google): processing API Request...EPNAME: " + ep_name + " EPTYPE: " + ep_type + " TOPIC: " + topic);
+            
+            // GoogleCloud Specific: we publish this to the EVENT change topic in Google... 
+            String reply_topic = this.customizeTopic(this.m_google_cloud_observe_notification_topic,ep_name); 
             this.sendApiResponse(ep_name,reply_topic,this.processApiRequestOperation(message));
             
             // return as we are done with the API request... no AsyncResponses necessary for raw API requests...
             return;
         }
+        
+        // DEBUG
+        this.errorLogger().info("onMessageReceive(Google): NOT an API request... continuing...");
 
         // pull the CoAP Path URI from the message itself... its JSON... 
         // format: { "path":"/303/0/5850", "new_value":"0", "ep":"mbed-eth-observe", "coap_verb": "get" }
@@ -1018,11 +1036,26 @@ public class GoogleCloudMQTTProcessor extends GenericMQTTProcessor implements Re
         return Utils.createHash(this.prefValue("google_cloud_gw_sas_token", this.m_suffix));
     }
     
+    // mbed endpoint ID to google device ID
+    private String mbedDeviceIDToGoogleDeviceID(String ep_name) {
+        return this.m_device_manager.mbedDeviceIDToGoogleDeviceID(ep_name);
+    }
+    
+    // google device ID to mbed endpoint ID
+    private String googleDeviceIDToMbedDeviceID(String device_id) {
+        return this.m_device_manager.googleDeviceIDToMbedDeviceID(device_id);
+    }
     // get the endpoint name from the MQTT topic
     @Override
     public String getEndpointNameFromTopic(String topic) {
-        // format: mbed/__COMMAND_TYPE__/__DEVICE_TYPE__/__EPNAME__/<uri path>
-        return null;                                   // unused
+        // format: /devices/<Google_Cloud_IOT_endpoint_name>/config
+        if (topic != null) {
+            String[] parts = topic.split("/");
+            if (parts != null && parts.length > 1) {
+                return this.googleDeviceIDToMbedDeviceID(parts[2]);
+            }
+        }
+        return null;
     }
 
     // get the CoAP verb from the MQTT topic
