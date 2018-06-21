@@ -101,16 +101,16 @@ public class ApiResponse extends Processor {
             json.put("api_uri","none");
         }
         if (this.m_request_options != null && this.m_request_options.length() > 0) {
-            json.put("request_options",this.m_request_options);
+            json.put("api_options",this.m_request_options);
         }
         else {
-            json.put("request_options","none");
+            json.put("api_options","none");
         }
         if (this.m_request_data != null && this.m_request_data.length() > 0) {
-            json.put("request_data",this.m_request_data);
+            json.put("api_request_data",this.m_request_data);
         }
         else {
-            json.put("request_data","none");
+            json.put("api_request_data","none");
         }
         if (this.m_request_verb != null && this.m_request_verb.length() > 0) {
             json.put("api_verb",this.m_request_verb);
