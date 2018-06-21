@@ -535,7 +535,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // sanitize the HTTP Verb
     protected String sanitizeHTTPVerb(String verb) {
         // non-zero length and null
-        if (verb != null && verb.length() > 0) {
+        if (verb != null && verb.length() > 1) {
             if (verb.equalsIgnoreCase("get") || verb.equalsIgnoreCase("put") || verb.equalsIgnoreCase("post") || verb.equalsIgnoreCase("delete")) {
                 return verb;
             }
@@ -546,7 +546,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // sanitize the REST Options
     protected String sanitizeRESTOptions(String options) {
         // non-zero length and null
-        if (options != null && options.length() > 0) {
+        if (options != null && options.length() > 1) {
             if (options.charAt(0) != '?') {
                 return "?" + options;
             }
@@ -567,7 +567,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // sanitize the basic validation of the structure of the URI
     protected String sanitizeURIStructure(String uri) {
         // non-zero length and nulls...
-        if (uri != null && uri.length() > 0) {
+        if (uri != null && uri.length() > 1) {
             // make sure it contains slashes
             if (uri.contains("/")) {
                 // if we dont have a leading slash... put one there. 
