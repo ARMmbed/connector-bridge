@@ -40,10 +40,7 @@ import java.util.Map;
  *
  * @author Doug Anson
  */
-public class AWSIoTDeviceManager extends DeviceManager {
-    // Defaults
-    private static int DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS = 120000;      // default: cleanup every 120 seconds
-    
+public class AWSIoTDeviceManager extends DeviceManager {    
     private ArrayList<String> m_keys_cert_ids = null;
 
     // XXX make configurable
@@ -53,9 +50,6 @@ public class AWSIoTDeviceManager extends DeviceManager {
     // lock to reconnection serial
     private boolean m_in_progress = false;
     
-    // cleanup thread sleep time
-    private int m_cleanup_thread_sleeptime_ms = DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS;   
-
     // constructor
     public AWSIoTDeviceManager(ErrorLogger logger, PreferenceManager preferences, HttpTransport http, Orchestrator orchestrator) {
         this(logger, preferences, null, http, orchestrator);
@@ -75,14 +69,6 @@ public class AWSIoTDeviceManager extends DeviceManager {
         this.m_policy_name = this.orchestrator().preferences().valueOf("aws_iot_policy_name", this.m_suffix);
         this.m_policy_document = this.orchestrator().preferences().valueOf("aws_iot_policy_document", this.m_suffix);
         
-        // cleanup thread sleep time
-        this.m_cleanup_thread_sleeptime_ms = this.orchestrator().preferences().intValueOf("aws_cleanup_thread_sleeptime_ms");
-        if (this.m_cleanup_thread_sleeptime_ms <= 0) {
-            this.m_cleanup_thread_sleeptime_ms = DEFAULT_CLEANUP_THREAD_SLEEPTIME_MS;
-        }
-        
-        // DEBUG - announce sleep time
-        this.errorLogger().info("AWSIoTDeviceManager: Orphaned Key/Cert cleanup thread sleep time: " + this.m_cleanup_thread_sleeptime_ms + "ms");
     }
 
     // get the orchestrator
