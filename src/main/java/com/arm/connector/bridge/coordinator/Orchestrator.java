@@ -132,12 +132,15 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
         // REQUIRED: We always create the mDS REST processor
         this.m_mbed_device_server_processor = new mbedDeviceServerProcessor(this, this.m_http);
-
+      
         // initialize our peer processor list
         this.initPeerProcessorList();
 
         // create the console manager
         this.m_console_manager = new ConsoleManager(this);
+        
+        // start any needed device discovery
+        this.initDeviceDiscovery();
     }
     
     // get the tablename delimiter
@@ -561,5 +564,10 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
     public SubscriptionManager subscriptionsManager() {
         // unused
         return null;
+    }
+
+    @Override
+    public void initDeviceDiscovery() {
+        this.device_server_processor().initDeviceDiscovery();
     }
 }

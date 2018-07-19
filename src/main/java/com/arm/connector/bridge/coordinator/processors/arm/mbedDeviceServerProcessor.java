@@ -201,9 +201,6 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         // initialize the default type of URI for contacting mDS
         this.setupDeviceServerURI();
 
-        // OVEERRIDE - long polling vs. Webhook
-        this.longPollOverrideSetup();
-
         // if using webhooks, we can optionally validate the webhook setting periodically in case it gets reset to nothing...
         if (this.m_webhook_validator_enable == true) {
             // enabling webhook/subscription validation
@@ -247,7 +244,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         // init the device metadata resource URI's
         this.initDeviceMetadataResourceURIs();
         
-         // remove on deregistration - mbed Cloud Override
+        // remove on deregistration - mbed Cloud Override
         if (this.m_mds_host != null && this.m_mds_host.contains("mbedcloud.com")) {
             // override - disable remove on deregistration
             orchestrator.errorLogger().warning("mbedDeviceServerProcessor: mbed Cloud Integration ");
@@ -264,6 +261,9 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         else {
             orchestrator.errorLogger().warning("mbedDeviceServerProcessor: device removal on deregistration DISABLED");
         }
+
+        // OVEERRIDE - long polling vs. Webhook
+        this.longPollOverrideSetup();
     }
     
     // sanitize the endpoint type
@@ -414,9 +414,6 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // start the long polling thread
     private void startLongPolling() {
-        // discover devices first
-        this.startDeviceDiscovery();
-        
         // now long poll
         if (this.m_long_poll_processor == null) {
             this.m_long_poll_processor = new LongPollProcessor(this);
@@ -1665,6 +1662,14 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     private void pullDeviceTotalMemoryInfo(Map endpoint) {
         //this.m_device_descriptive_location_res
         endpoint.put("meta_total_mem", "128K");  // typical min: 128k
+    }
+    
+    // init any device discovery
+    @Override
+    public void initDeviceDiscovery() {
+        if (this.longPollEnabled() == true) {
+            this.startDeviceDiscovery();
+        }
     }
     
     // start device discovery for device shadow setup
