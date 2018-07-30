@@ -158,7 +158,7 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     
     // get the api data from the request message
     private String getApiDataFromMessage(String message) {
-        return this.getJSONStringValueFromJSONKey(message,"request_data");
+        return this.getJSONStringValueFromJSONKey(message,"api_request_data");
     }
     
     // get the api URI from the request message
