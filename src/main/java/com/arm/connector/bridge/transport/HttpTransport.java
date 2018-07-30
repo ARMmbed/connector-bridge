@@ -638,8 +638,11 @@ public class HttpTransport extends BaseClass {
             //    this.errorLogger().info("HTTP: Headers: " + ((HttpURLConnection)connection).getRequestProperties()); 
             // specify data if requested - assumes it properly escaped if necessary
             if (doOutput && data != null && data.length() > 0) {
-                try (OutputStreamWriter out = new OutputStreamWriter(connection.getOutputStream())) {
+                try (OutputStreamWriter out = new OutputStreamWriter(connection.getOutputStream(),"UTF-8")) {
+                    this.errorLogger().info("HTTP(" + verb + "): DATA: " + data + " CONTENT_TYPE: " + content_type);
                     out.write(data);
+                    out.flush();
+                    out.close();
                 }
             }
 

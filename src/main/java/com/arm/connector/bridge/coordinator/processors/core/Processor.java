@@ -74,6 +74,18 @@ public class Processor extends BaseClass {
         this.operationStop();
     }
     
+    // create a short JSON message
+    protected String createJSONMessage(String key,String value) {
+        HashMap<String,String> map = new HashMap<>();
+        map.put(key,value);
+        return this.createJSONMessage(map);
+    }
+    
+    // create a short JSON message
+    protected String createJSONMessage(Map map) {
+        return this.jsonGenerator().generateJson(map);
+    }
+    
     // Lock 
     public synchronized boolean operationStart() {
         if (this.m_operation_pending == false) {

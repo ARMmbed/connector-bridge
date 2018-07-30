@@ -34,6 +34,13 @@ public class JSONGenerator {
 
     // create JSON
     public String generateJson(Object json) {
-        return com.codesnippets4all.json.generators.JsonGeneratorFactory.getInstance().newJsonGenerator().generateJson(json);
+        String str_json = com.codesnippets4all.json.generators.JsonGeneratorFactory.getInstance().newJsonGenerator().generateJson(json);
+        if (str_json != null && str_json.length() > 0) {
+            int last_index = str_json.length() - 1;
+            if (str_json.charAt(0) == '[' && str_json.charAt(last_index) == ']') {
+                return str_json.substring(1, last_index);
+            }
+        }
+        return str_json;
     }
 }

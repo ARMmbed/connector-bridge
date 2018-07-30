@@ -320,13 +320,13 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             else {
                 // verb is unknown - should never get called as verb is already sanitized...
                 this.errorLogger().warning("executeApiRequest(mDS): ERROR: HTTP verb[" + verb + "] is UNKNOWN. Unable to execute request...");
-                return "{\"api_execute_status\":\"invalid coap verb\"}";
+                return this.createJSONMessage("api_execute_status","invalid coap verb");
             }
         }
         else {
             // invalid parameters
             this.errorLogger().warning("executeApiRequest(mDS): ERROR: invalid parameters in API request. Unable to execute request...");
-            return "{\"api_execute_status\":\"invalid api parameters\"}";
+            return this.createJSONMessage("api_execute_status","iinvalid api parameters");
         }
         
         // return a sanitized response
@@ -342,7 +342,11 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     // sanitize the API response
     private String sanitizeResponse(String response) {
         if (response == null || response.length() <= 0) {
-            return "{\"api_execute_status\":\"empty response\"}";
+            // DEBUG
+            this.errorLogger().info("APIResponse: Response was EMPTY (OK).");
+            
+            // empty response
+            return this.createJSONMessage("api_execute_status","empty response");
         }
         else {
             // help the JSON parser a bit... 
@@ -351,12 +355,18 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             // response should be parsable JSON
             Map parsed = this.tryJSONParse(fixed);
             if (parsed != null && parsed.isEmpty() == false) {
+                // DEBUG
+                this.errorLogger().info("APIResponse: Parsable RESPONSE: " + fixed);
+                
                 // parsable! just return the (patched) JSON string
                 return fixed;
             }
             else {
+                // DEBUG
+                this.errorLogger().warning("APIResponse: Response parsing FAILED");
+                
                 // unparsable JSON... error
-                return "{\"api_execute_status\":\"unparsable json\"}";
+                return this.createJSONMessage("api_execute_status","unparsable json");
             }
         }
     }
@@ -570,7 +580,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
 
     // create any authentication header JSON that may be necessary
     @SuppressWarnings("empty-statement")
-    private String createWebhookHeaderAuthJSON() {
+    private Map createWebhookHeaderAuthJSON() {
         String hash = this.orchestrator().createAuthenticationHash();
 
         try {
@@ -584,9 +594,11 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             // parsing error of mds_version... just use the default hash (likely "none")
             ;
         }
-
-        // return the authentication header
-        return "{\"Authentication\":\"" + hash + "\"}";
+        
+        // Create a hashmap and fill it
+        HashMap<String,String> map = new HashMap<>();
+        map.put("Authentication",hash);
+        return map;
     }
 
     // create our webhook URL that we will get called back on...
@@ -764,7 +776,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         this.errorLogger().info("setupBulkSubscriptions: setting bulk subscriptions (EXPERIMENTAL)...");
         
         // JSON for the bulk subscription
-        String json = "[{\"endpoint-name\":\"*\"}]";
+        String json = this.createJSONMessage("endpoint-name","*");
         
         // Create the URI for the bulk subscription PUT
         String url = this.createBaseURL() + "/subscriptions";
@@ -798,17 +810,20 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
         // proceed to set the URL if its not already set.. 
         if (!webhook_set_ok) {
             String dispatch_url = this.createWebhookDispatchURL();
-            String auth_header_json = this.createWebhookHeaderAuthJSON();
+            Map auth_header_json = this.createWebhookHeaderAuthJSON();
             String json = null;
 
             // build out the callback JSON
             if (this.m_mds_gw_callback.equalsIgnoreCase("callback")) {
                 // use the Callback API
                 if (auth_header_json == null) {
-                    json = "{ \"url\" :\"" + target_url + "\" }";
+                    json = this.createJSONMessage("url", target_url);
                 }
                 else {
-                    json = "{ \"url\" :\"" + target_url + "\", \"headers\":" + auth_header_json + "}";
+                    HashMap<String,Object> map = new HashMap<>();
+                    map.put("url",target_url);
+                    map.put("headers",auth_header_json);
+                    json = this.createJSONMessage(map);
                 }
 
                 // DEBUG

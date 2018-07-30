@@ -93,40 +93,40 @@ public class ApiResponse extends Processor {
     
     // create the response JSON
     public String createResponseJSON() {
-        HashMap<String,Object> json = new HashMap<>();
+        HashMap<String,Object> map = new HashMap<>();
         if (this.m_request_uri != null && this.m_request_uri.length() > 0) {
-            json.put("api_uri",this.m_request_uri);
+            map.put("api_uri",this.m_request_uri);
         }
         else {
-            json.put("api_uri","none");
+            map.put("api_uri","none");
         }
-        if (this.m_request_options != null && this.m_request_options.length() > 0) {
-            json.put("api_options",this.m_request_options);
+        if (this.m_request_options != null && this.m_request_options.length() > 2) {
+            map.put("api_options",this.m_request_options);
         }
         else {
-            json.put("api_options","none");
+            map.put("api_options","none");
         }
         if (this.m_request_data != null && this.m_request_data.length() > 0) {
-            json.put("api_request_data",this.m_request_data);
+            map.put("api_request_data",this.parseJson(this.m_request_data));
         }
         else {
-            json.put("api_request_data","none");
+            map.put("api_request_data","none");
         }
         if (this.m_request_verb != null && this.m_request_verb.length() > 0) {
-            json.put("api_verb",this.m_request_verb);
+            map.put("api_verb",this.m_request_verb);
         }
         else {
-            json.put("api_verb","none");
+            map.put("api_verb","none");
         }
         if (this.m_response_data != null && this.m_response_data.length() > 0) {
-            json.put("api_response",this.parseResponseData(this.m_response_data));
+            map.put("api_response",this.parseResponseData(this.m_response_data));
         }
         else {
-            json.put("api_response","none");
+            map.put("api_response","none");
         }
-        json.put("api_http_code",this.m_response_http_code);
-        json.put("api_request_id",this.m_request_id);
-        return this.jsonGenerator().generateJson(json);
+        map.put("api_http_code",this.m_response_http_code);
+        map.put("api_request_id",this.m_request_id);
+        return this.jsonGenerator().generateJson(map);
     }
     
     // create the parsed JSON response as a Map

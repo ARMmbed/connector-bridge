@@ -39,6 +39,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.fusesource.mqtt.client.QoS;
 import org.fusesource.mqtt.client.Topic;
 import com.arm.connector.bridge.coordinator.processors.interfaces.ConnectionCreator;
+import java.util.List;
 
 /**
  * Generic MQTT peer processor
@@ -194,7 +195,97 @@ public class GenericMQTTProcessor extends PeerProcessor implements Transport.Rec
     private String getJSONStringValueFromJSONKey(String json,String key) {
         Map parsed = this.tryJSONParse(json);
         if (parsed != null) {
-            return (String)parsed.get(key);
+            try {
+                // if empty.. return NULL
+                if (parsed.get(key) == null) {
+                    this.errorLogger().info("MQTTProcessor(Generic): EMPTY. Key: " + key);
+                    return null;
+                }
+                
+                // if instance of String, keep formatting
+                if (parsed.get(key) instanceof String) {
+                    // convert to string
+                    String s_val = (String)parsed.get(key);
+                    
+                    // handle empty strings
+                    if (s_val == null || s_val.length() == 0) {
+                        s_val = null;
+                    }
+                    
+                    // DEBUG
+                    this.errorLogger().info("MQTTProcessor(Generic): STRING. Key: " + key + " DATA: " + s_val);
+                    
+                    // return the string
+                    return s_val;
+                }
+                
+                // if instance of Integer, convert to String
+                if (parsed.get(key) instanceof Integer) {
+                    // convert to Integer
+                    Integer i_val = (Integer)parsed.get(key);
+                    
+                    // DEBUG
+                    this.errorLogger().info("MQTTProcessor(Generic): INTEGER. Key: " + key + " DATA: " + i_val);
+                    
+                    // convert to String
+                    return "" + i_val;
+                }
+                
+                // if instance of Float, convert to String
+                if (parsed.get(key) instanceof Float) {                    
+                    // convert to Float
+                    Float f_val = (Float)parsed.get(key);
+
+                    // DEBUG
+                    this.errorLogger().info("MQTTProcessor(Generic): FLOAT. Key: " + key + " DATA: " + f_val);
+
+                    // convert to String
+                    return "" + f_val;
+                }
+                
+                // if instance of Map, then its JSON
+                if (parsed.get(key) instanceof Map) {                    
+                    // convert to Map
+                    Map map = (Map)parsed.get(key);
+                   
+                    // DEBUG
+                    this.errorLogger().info("MQTTProcessor(Generic): MAP. Key: " + key + " DATA: " + map);
+                    
+                    // create String with JSON generator
+                    return this.jsonGenerator().generateJson(map);
+                }
+                
+                // if instance of List, then its JSON
+                if (parsed.get(key) instanceof List) {
+                    // convert to Map
+                    List list = (List)parsed.get(key);
+                    
+                    // DEBUG
+                    this.errorLogger().info("MQTTProcessor(Generic): LIST. Key: " + key + " DATA: " + list);
+                    
+                    // create String with JSON generator
+                    return this.jsonGenerator().generateJson(list);
+                }
+                
+                // unknown type
+                HashMap<String,String> error = new HashMap<>();
+                String error_type = parsed.get(key).getClass().getTypeName();
+                
+                // create the Map
+                error.put("type", error_type);
+                
+                // DEBUG
+                this.errorLogger().warning("MQTTProcessor(Generic): UNEXPECTED TYPE. Key: " + key + " TYPE: " + error_type + " Location: ");
+                new Exception().printStackTrace();
+                
+                // create String with JSON generator
+                return this.jsonGenerator().generateJson(error);
+                
+            }
+            catch(Exception ex) {
+                // exception caught
+                this.errorLogger().critical("MQTTProcessor(Generic): ERROR Exception: " + ex.getMessage() + " Key: " + key, ex);
+            }
         }
         return null;
     }

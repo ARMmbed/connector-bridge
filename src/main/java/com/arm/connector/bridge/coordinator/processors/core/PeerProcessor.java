@@ -522,9 +522,10 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         if(message != null) {
             Map parsed = this.tryJSONParse(message);
             if (parsed != null) {
-                String uri = (String)parsed.get("api_uri");
-                String verb = (String)parsed.get("api_verb");
-                if (uri != null && uri.length() > 0 && verb != null && verb.length() > 0) {
+                String uri = (String)parsed.get("api_uri");             // req
+                String verb = (String)parsed.get("api_verb");           // req
+                String api_key = (String)parsed.get("api_key");         // req
+                if (uri != null && uri.length() > 0 && verb != null && verb.length() > 0 && api_key != null && api_key.length() > 0) {
                     return true;
                 }
             }
@@ -546,7 +547,7 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
     // sanitize the REST Options
     protected String sanitizeRESTOptions(String options) {
         // non-zero length and null
-        if (options != null && options.length() > 1) {
+        if (options != null && options.length() > 2) {
             if (options.charAt(0) != '?') {
                 return "?" + options;
             }
