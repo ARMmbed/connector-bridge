@@ -276,8 +276,8 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // process an API request operation
     @Override
-    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key) {
-        ApiResponse response = new ApiResponse(this.orchestrator(),this.m_suffix,uri,data,options,verb,request_id);
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key,String caller_id) {
+        ApiResponse response = new ApiResponse(this.orchestrator(),this.m_suffix,uri,data,options,verb,caller_id,request_id);
         
         // execute the API Request
         response.setReplyData(this.executeApiRequest(uri,data,options,verb,api_key));

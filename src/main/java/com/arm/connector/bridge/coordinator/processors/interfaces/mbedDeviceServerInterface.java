@@ -35,7 +35,7 @@ import javax.servlet.http.HttpServletResponse;
  */
 public interface mbedDeviceServerInterface {
     // process an API request 
-    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key);
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key,String caller_id);
     
     // process observations/notifications incoming messages from device server
     public void processNotificationMessage(HttpServletRequest request, HttpServletResponse response);

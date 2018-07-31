@@ -556,6 +556,15 @@ public class PeerProcessor extends Processor implements GenericSender, TopicPars
         return "";
     }
     
+    // sanitize the REST caller ID
+    protected String sanitizeCallerID(String caller_id) {
+         // non-zero length and null
+        if (caller_id != null && caller_id.length() > 0) {
+            return caller_id;
+        }
+        return null;
+    }
+    
     // sanitize the REST API Key
     protected String sanitizeAPIKey(String api_key) {
         // non-zero length and null

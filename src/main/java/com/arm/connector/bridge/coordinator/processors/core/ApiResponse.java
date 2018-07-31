@@ -36,17 +36,19 @@ public class ApiResponse extends Processor {
     private String m_request_data;
     private String m_request_options;
     private String m_request_verb;
+    private String m_request_caller_id;
     private int m_response_http_code;
     private String m_response_data;
     
     // default constructor
-    public ApiResponse(Orchestrator orchestrator,String suffix,String uri,String data,String options,String verb,int request_id) {
+    public ApiResponse(Orchestrator orchestrator,String suffix,String uri,String data,String options,String verb,String caller_id,int request_id) {
         super(orchestrator,suffix);
         this.m_request_id = request_id;
         this.m_request_uri = uri;
         this.m_request_data = data;
         this.m_request_options = options;
         this.m_request_verb = verb;
+        this.m_request_caller_id = caller_id;
         this.m_response_http_code = 900;
         this.m_response_data = "";
     }
@@ -91,6 +93,11 @@ public class ApiResponse extends Processor {
         return this.m_request_verb;
     }
     
+    // get the request caller ID
+    public String getRequestCallerID() {
+        return this.m_request_caller_id;
+    }
+    
     // create the response JSON
     public String createResponseJSON() {
         HashMap<String,Object> map = new HashMap<>();
@@ -117,6 +124,12 @@ public class ApiResponse extends Processor {
         }
         else {
             map.put("api_verb","none");
+        }
+        if (this.m_request_caller_id != null && this.m_request_caller_id.length() > 0) {
+            map.put("api_caller_id",this.m_request_caller_id);
+        }
+        else {
+            map.put("api_caller_id","none");
         }
         if (this.m_response_data != null && this.m_response_data.length() > 0) {
             map.put("api_response",this.parseResponseData(this.m_response_data));

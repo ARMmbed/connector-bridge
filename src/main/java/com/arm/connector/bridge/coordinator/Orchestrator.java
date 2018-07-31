@@ -336,8 +336,8 @@ public class Orchestrator implements mbedDeviceServerInterface, PeerInterface {
 
     // Message: API Request
     @Override
-    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key) {
-        return this.device_server_processor().processApiRequestOperation(uri, data, options, verb, request_id, api_key);
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key,String caller_id) {
+        return this.device_server_processor().processApiRequestOperation(uri, data, options, verb, request_id, api_key, caller_id);
     }
     
     // Message: notifications
