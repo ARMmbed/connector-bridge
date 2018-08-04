@@ -31,17 +31,19 @@ import java.util.Map;
  * @author Doug Anson
  */
 public class ApiResponse extends Processor {
+    private static final String DEFAULT_CONTENT_TYPE = "application/json";  // default content type
     private int m_request_id;
     private String m_request_uri;
     private String m_request_data;
     private String m_request_options;
     private String m_request_verb;
     private String m_request_caller_id;
+    private String m_content_type;
     private int m_response_http_code;
     private String m_response_data;
     
     // default constructor
-    public ApiResponse(Orchestrator orchestrator,String suffix,String uri,String data,String options,String verb,String caller_id,int request_id) {
+    public ApiResponse(Orchestrator orchestrator,String suffix,String uri,String data,String options,String verb,String caller_id,String content_type,int request_id) {
         super(orchestrator,suffix);
         this.m_request_id = request_id;
         this.m_request_uri = uri;
@@ -49,6 +51,7 @@ public class ApiResponse extends Processor {
         this.m_request_options = options;
         this.m_request_verb = verb;
         this.m_request_caller_id = caller_id;
+        this.m_content_type = content_type;
         this.m_response_http_code = 900;
         this.m_response_data = "";
     }
@@ -71,6 +74,11 @@ public class ApiResponse extends Processor {
     // get the response data
     public String getReplyData() {
         return this.m_response_data;
+    }
+    
+    // get the content type
+    public String getContentType() {
+        return this.m_content_type;
     }
     
     // get the request URI
@@ -130,6 +138,12 @@ public class ApiResponse extends Processor {
         }
         else {
             map.put("api_caller_id","none");
+        }
+        if (this.m_content_type != null && this.m_content_type.length() > 0) {
+            map.put("api_content_type",this.m_content_type);
+        }
+        else {
+            map.put("api_content_type",DEFAULT_CONTENT_TYPE);     // defaulted
         }
         if (this.m_response_data != null && this.m_response_data.length() > 0) {
             map.put("api_response",this.parseResponseData(this.m_response_data));

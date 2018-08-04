@@ -276,11 +276,11 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     
     // process an API request operation
     @Override
-    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key,String caller_id) {
-        ApiResponse response = new ApiResponse(this.orchestrator(),this.m_suffix,uri,data,options,verb,caller_id,request_id);
+    public ApiResponse processApiRequestOperation(String uri,String data,String options,String verb,int request_id,String api_key,String caller_id,String content_type) {
+        ApiResponse response = new ApiResponse(this.orchestrator(),this.m_suffix,uri,data,options,verb,caller_id,content_type,request_id);
         
         // execute the API Request
-        response.setReplyData(this.executeApiRequest(uri,data,options,verb,api_key));
+        response.setReplyData(this.executeApiRequest(uri,data,options,verb,api_key,content_type));
         
         // set the http result code
         response.setHttpCode(this.getLastResponseCode());
@@ -290,7 +290,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
     }
     
     // execute an API request and return the response
-    private String executeApiRequest(String uri,String data,String options,String verb,String api_key) {
+    private String executeApiRequest(String uri,String data,String options,String verb,String api_key,String content_type) {
         String response = "";
         
         // execute if we have valid parameters
@@ -299,19 +299,19 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             String url = this.createBaseURL("") + uri + options;
 
             // DEBUG
-            this.errorLogger().info("executeApiRequest(mDS): invoking API Request URL: " + url);
+            this.errorLogger().info("executeApiRequest(mDS): invoking API Request ContentType: " + content_type + " URL: " + url);
 
             // GET
             if (verb.equalsIgnoreCase("get")) {
-                response = this.httpsGet(url, this.m_content_type, api_key);
+                response = this.httpsGet(url, content_type, api_key);
             }   
             // PUT
             else if (verb.equalsIgnoreCase("put")) {
-                response = this.httpsPut(url, data, this.m_content_type, api_key);
+                response = this.httpsPut(url, data, content_type, api_key);
             }   
             // POST
             else if (verb.equalsIgnoreCase("post")) {
-                response = this.httpsPost(url,data, this.m_content_type, api_key);
+                response = this.httpsPost(url,data, content_type, api_key);
             }   
             // DELETE
             else if (verb.equalsIgnoreCase("delete")) {
@@ -319,7 +319,7 @@ public class mbedDeviceServerProcessor extends Processor implements Runnable, mb
             } 
             else {
                 // verb is unknown - should never get called as verb is already sanitized...
-                this.errorLogger().warning("executeApiRequest(mDS): ERROR: HTTP verb[" + verb + "] is UNKNOWN. Unable to execute request...");
+                this.errorLogger().warning("executeApiRequest(mDS): ERROR: HTTP verb[" + verb + "] ContentType: [" + content_type + "] is UNKNOWN. Unable to execute request...");
                 return this.createJSONMessage("api_execute_status","invalid coap verb");
             }
         }
