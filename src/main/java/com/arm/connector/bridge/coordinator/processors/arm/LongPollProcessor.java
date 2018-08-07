@@ -72,17 +72,41 @@ public class LongPollProcessor extends Thread {
             this.m_mds.errorLogger().info("poll: using HTTP persistent get...");
             response = this.m_mds.persistentHTTPGet(this.m_mds.longPollURL());
         }
-
-        // DEBUG
-        if (response != null && response.length() > 0) {
-            this.errorLogger().info("poll: recevied message: " + response);
+        
+        // note the response code
+        int last_code = this.m_mds.getLastResponseCode();
+        if (last_code == 400) {
+            // API key already has a callback webhook setup
+            this.errorLogger().warning("poll: using API Key that has already setup a callback webhook... please use another key!");
+        }
+        else if (last_code == 401) {
+            // API Key might be wrong?
+            this.errorLogger().warning("poll: API Key does not appear to be valid (401 - Unauthorized). Please check the key.");
+        }
+        else if (last_code == 410) {
+            // Pull channel is borked - reset API Key
+            this.errorLogger().critical("poll: polling error code 410 seen. Pull channel is not functioning properly. Please create and use another API Key");
         }
         else {
-            this.errorLogger().info("poll: received message: <empty>");
+            // OK
+            this.errorLogger().info("poll: (OK).");
+            
+            // make sure we have a message to process...
+            if (response != null && response.length() > 0) {
+                // DEBUG
+                this.errorLogger().info("poll: processing recevied message: " + response);
+                
+                // send whatever we get back as if we have received it via the webhook...
+                this.m_mds.processDeviceServerMessage(response);
+            }
+            else {
+                // DEBUG
+                this.errorLogger().info("poll: received message: <empty>");
+                
+                // nothing to process
+                this.errorLogger().info("poll: Nothing to process (OK)");
+            }
         }
-
-        // send whatever we get back as if we have received it via the webhook...
-        this.m_mds.processDeviceServerMessage(response);
     }
 
     /**
