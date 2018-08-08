@@ -361,7 +361,7 @@ public class WatsonIoTMQTTProcessor extends GenericMQTTProcessor implements Reco
         return val;
     }
     
-    // ConnectionCreator
+    // add a MQTT transport for a given endpoint - this is how MS AWSIoT MQTT integration works... 
     @Override 
     public boolean createAndStartMQTTForEndpoint(String ep_name, String ep_type, Topic topics[]) {
         // Watson IoT uses a shared MQTT connection for all endpoints... its already setup... so just return true
