@@ -90,6 +90,7 @@ public class MQTTTransport extends Transport implements GenericSender {
     private int m_sleep_time = 0;
     private String m_client_id = null;
     private String m_mqtt_version = null;
+    private boolean m_retain = false;
 
     private String m_connect_host = null;
     private int m_connect_port = 0;
@@ -175,6 +176,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_set_mqtt_version = true;
         this.m_has_connected = false;
         this.m_is_in_reset = false;
+        this.m_retain = false;
         
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -222,6 +224,7 @@ public class MQTTTransport extends Transport implements GenericSender {
         this.m_set_mqtt_version = true;
         this.m_has_connected = false;
         this.m_is_in_reset = false;
+        this.m_retain = false;
 
         this.m_mqtt_use_ssl = this.prefBoolValue("mqtt_use_ssl", this.m_suffix);
         this.m_debug_creds = this.prefBoolValue("mqtt_debug_creds", this.m_suffix);
@@ -1024,6 +1027,16 @@ public class MQTTTransport extends Transport implements GenericSender {
             this.resetConnection();
         }
     }
+    
+    // set the retain option
+    public void setRetain(boolean retain) {
+        this.m_retain = retain;
+    }
+    
+    // get the retaion option
+    private boolean getRetain() {
+        return this.m_retain;
+    }
 
     /**
      * Publish a MQTT message
@@ -1050,7 +1063,7 @@ public class MQTTTransport extends Transport implements GenericSender {
             try {
                 // DEBUG
                 this.errorLogger().info("sendMessage: message: " + message + " Topic: " + topic);
-                this.m_connection.publish(topic, message.getBytes(), qos, false);
+                this.m_connection.publish(topic, message.getBytes(), qos, this.getRetain());
 
                 // DEBUG
                 this.errorLogger().info("sendMessage(MQTT): message sent. SUCCESS");
