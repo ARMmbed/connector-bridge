@@ -427,7 +427,7 @@ public class IoTHubDeviceManager extends DeviceManager {
         
         // returning empty map
         this.errorLogger().warning("IoTHub: parseDeviceDetails: returning empty map!"); 
-        return new HashMap<>();
+        return null;
     }
 
     // Parse the AddDevice result and capture key elements 
